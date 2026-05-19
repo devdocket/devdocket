@@ -2,7 +2,7 @@
 
 Thanks for your interest in contributing! This guide covers setting up a dev environment, the day-to-day build/test loop, and the conventions DevDocket follows for branches, commits, and pull requests.
 
-For exhaustive agent-targeted conventions (testing patterns, storage contract, view conventions, etc.), see [AGENTS.md](AGENTS.md). For the maintainer-side release pipeline, see [RELEASING.md](RELEASING.md).
+For the comprehensive list of code conventions used throughout the codebase (testing patterns, storage contract, view conventions, etc.), see [AGENTS.md](AGENTS.md). For the maintainer-side release pipeline, see [RELEASING.md](RELEASING.md).
 
 ## Prerequisites
 
@@ -68,7 +68,7 @@ npx vitest run src/test/workGraph.test.ts
 
 ## Branching and pull request conventions
 
-- **Default branch is `dev`.** All feature branches branch *from* `dev` and PR back *to* `dev`. The `main` branch is bot-owned and tracks the latest release — do not push to it directly.
+- **Default branch is `dev`.** All feature branches branch *from* `dev` and PR back *to* `dev`. The `main` branch is managed by the release pipeline and tracks the latest released state — do not push to it directly.
 - **Use git worktrees** for feature branches instead of `git checkout`-ing in your main clone. This keeps the main working tree on `dev` and avoids disrupting other in-flight work.
 
   ```bash
@@ -119,7 +119,7 @@ DevDocket has a substantial set of repository-specific conventions covering stor
    gh pr create --base dev
    ```
 
-5. Request review from `copilot-pull-request-reviewer` (or wait for a maintainer to add it).
+5. Wait for a maintainer to review.
 6. Address feedback. Each round of review feedback should be addressed in its own commit (no force-pushes) so reviewers can see what changed.
 
 ## For maintainers
