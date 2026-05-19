@@ -2,7 +2,7 @@
   "name": "devdocket-ado",
   "displayName": "DevDocket — Azure DevOps",
   "description": "Azure DevOps provider for DevDocket — discovers assigned work items and PR reviews.",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "publisher": "devdocket",
   "license": "MIT",
   "engines": {
@@ -23,25 +23,25 @@
       {
         "title": "DevDocket Azure DevOps",
         "properties": {
-        "devDocketAdo.projects": {
-          "type": "array",
-          "items": {
-            "type": "string"
+          "devDocketAdo.projects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [],
+            "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations."
           },
-          "default": [],
-          "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations."
-        },
-        "devDocketAdo.refreshIntervalSeconds": {
-          "type": "number",
-          "default": 300,
-          "description": "How often to refresh Azure DevOps data (in seconds). Minimum 60 seconds for periodic refresh; positive values below 60 are clamped to 60. Set to 0 or a negative value to disable periodic refresh."
-        },
-        "devDocketAdo.resurfaceOnNewVersion": {
-          "type": "boolean",
-          "default": true,
-          "description": "Resurface PR reviews when new iterations are pushed."
+          "devDocketAdo.refreshIntervalSeconds": {
+            "type": "number",
+            "default": 300,
+            "description": "How often to refresh Azure DevOps data (in seconds). Minimum 60 seconds for periodic refresh; positive values below 60 are clamped to 60. Set to 0 or a negative value to disable periodic refresh."
+          },
+          "devDocketAdo.resurfaceOnNewVersion": {
+            "type": "boolean",
+            "default": true,
+            "description": "Resurface PR reviews when new iterations are pushed."
+          }
         }
-      }
       }
     ]
   },
