@@ -2,7 +2,7 @@
   "name": "devdocket-ai-reviewer",
   "displayName": "DevDocket — AI Actions",
   "description": "AI-powered code review and PR walkthrough actions for DevDocket",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "publisher": "devdocket",
   "license": "MIT",
   "engines": {

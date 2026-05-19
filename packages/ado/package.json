@@ -2,7 +2,7 @@
   "name": "devdocket-ado",
   "displayName": "DevDocket — Azure DevOps",
   "description": "Azure DevOps provider for DevDocket — discovers assigned work items and PR reviews.",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "publisher": "devdocket",
   "license": "MIT",
   "engines": {
