@@ -1,0 +1,22 @@
+name: Publish DevDocket Azure DevOps
+
+on:
+  push:
+    tags:
+      - "ado-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/_publish-vscode-extension.yml
+    with:
+      package-directory: packages/ado
+      package-title: DevDocket Azure DevOps
+      tag-prefix: ado-v

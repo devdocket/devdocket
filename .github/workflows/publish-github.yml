@@ -1,0 +1,22 @@
+name: Publish DevDocket GitHub
+
+on:
+  push:
+    tags:
+      - "github-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/_publish-vscode-extension.yml
+    with:
+      package-directory: packages/github
+      package-title: DevDocket GitHub
+      tag-prefix: github-v

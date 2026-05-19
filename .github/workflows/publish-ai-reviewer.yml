@@ -1,0 +1,22 @@
+name: Publish DevDocket AI Reviewer
+
+on:
+  push:
+    tags:
+      - "ai-reviewer-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/_publish-vscode-extension.yml
+    with:
+      package-directory: packages/ai-reviewer
+      package-title: DevDocket AI Reviewer
+      tag-prefix: ai-reviewer-v

@@ -1,0 +1,22 @@
+name: Publish DevDocket Start Git Work
+
+on:
+  push:
+    tags:
+      - "start-git-work-v*"
+
+permissions:
+  contents: write
+  id-token: write
+
+concurrency:
+  group: publish-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    uses: ./.github/workflows/_publish-vscode-extension.yml
+    with:
+      package-directory: packages/start-git-work
+      package-title: DevDocket Start Git Work
+      tag-prefix: start-git-work-v
