@@ -201,6 +201,8 @@ Key rules:
 
 This repo uses [Changesets](https://github.com/changesets/changesets) for per-package versioning, changelog generation, and automated VS Code Marketplace / GitHub Packages publishing. **Every PR that changes user-facing behavior of a publishable package MUST include a `.changeset/*.md` file** describing the change.
 
+> Maintainers operating the release pipeline (reviewing/merging Version Packages PRs, approving publish runs, recovering from failures, setting up infrastructure) should refer to [RELEASING.md](RELEASING.md). This section covers only the contributor/agent task of producing the `.changeset/*.md` file.
+
 ### When a changeset is required
 
 **Required** for any change to one of the following packages that is user-facing — a new feature, bug fix, behavior change, performance improvement, deprecation, or API change:

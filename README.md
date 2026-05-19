@@ -42,34 +42,7 @@ For detailed view behavior, keyboard shortcuts, and configuration options, see t
 
 DevDocket's core, provider, and git-worktree extensions require VS Code 1.92.0 or later. The AI reviewer extension requires VS Code 1.96.0 or later.
 
-DevDocket is not yet available on the VS Code Marketplace. To run it, build from source:
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/devdocket/devdocket.git
-   cd devdocket
-   ```
-
-2. **Install dependencies and build:**
-   ```bash
-   npm install
-   npm run build
-   ```
-
-3. **Run in VS Code** — open the repo in VS Code and press **F5** to launch the Extension Development Host with DevDocket loaded.
-
-4. **Package for local install** (optional):
-   ```bash
-   cd packages/core
-   npx @vscode/vsce package
-   ```
-   Run this from each extension folder you want to package (e.g., `packages/core`, `packages/github`). This produces a `.vsix` file you can install via **Extensions → ⋯ → Install from VSIX…** in VS Code.
-
-5. **Regenerate the status-bar icon font** (only when the logomark changes):
-   ```bash
-   npm run build:icons -w devdocket
-   ```
-   This converts `packages/core/resources/devdocket-logo-mono.svg` into the checked-in `packages/core/resources/devdocket-icons.woff` glyph used by VS Code status bar icons.
+> ⚠️ **Pre-release:** DevDocket is not yet available on the VS Code Marketplace. To run it today, build from source — see [CONTRIBUTING.md](CONTRIBUTING.md#quick-start).
 
 ## Plugin Ecosystem
 
@@ -91,20 +64,6 @@ DevDocket is extensible with two types of plugins:
 
 To build your own provider or action, see the [Extension API documentation](docs/extension-api.md).
 
-## Architecture
-
-DevDocket is a monorepo with five VS Code extensions and a shared library:
-
-```
-packages/
-├── core/              # The hub extension (UI, lifecycle, plugin API)
-├── github/            # GitHub issues, mentions, PR reviews, my-PRs + Actions and PR watcher
-├── ado/               # Azure DevOps work items, PR reviews, my-PRs + Pipelines and PR watcher
-├── start-git-work/    # Branch + worktree action
-├── ai-reviewer/       # AI code review action
-└── shared/            # Shared library (BaseProvider, utilities)
-```
-
 ## Documentation
 
 | Document | Description |
@@ -112,16 +71,8 @@ packages/
 | [UX Guide](docs/ux-guide.md) | Views, data flow, configuration, keyboard shortcuts |
 | [Extension API](docs/extension-api.md) | Provider and action contracts, interfaces, examples |
 | [Provider Discovery](docs/provider-discovery.md) | What causes items to appear in each provider |
-
-## Contributing
-
-1. Fork the repository and create a branch from `dev`.
-2. Install dependencies: `npm install`
-3. Build all packages: `npm run build`
-4. Run tests: `npm run test`
-5. Open a pull request targeting the `dev` branch.
-
-The default branch is **`dev`** — all work should be based from and merged back to `dev`.
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Dev environment setup, build/test, branching conventions, PR workflow |
+| [RELEASING.md](RELEASING.md) | Maintainer guide for the Changesets workflow and publish pipeline |
 
 ## License
 
