@@ -16,8 +16,8 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@v1
         with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.CHANGESETS_APP_ID }}
+          private-key: ${{ secrets.CHANGESETS_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
       - uses: actions/checkout@v4
@@ -28,7 +28,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install dependencies
         run: npm ci
