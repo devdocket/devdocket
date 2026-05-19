@@ -193,6 +193,7 @@ Symptom: `changesets.yml` succeeds, but no `publish-*.yml` workflows fire. Verif
 - The Changesets App is installed on `devdocket/devdocket`.
 - The App has `contents: write`, `pull-requests: write`, `workflows: write` repository permissions.
 - The App is in the `main` branch protection bypass list.
+- `scripts/create-release-tags.mjs` is still creating tags via the REST API (`gh api repos/.../git/refs --method POST ...`) rather than `git push`. Tags pushed via `git push` from inside an Actions run do NOT trigger downstream tag-triggered workflows, even when the push is authenticated as a GitHub App. The REST API path is the only reliable trigger.
 
 ## Recovery
 

@@ -116,7 +116,40 @@ try {
   throw new Error('Cannot fast-forward main to dev. Ensure main has not diverged from dev.');
 }
 
-const newTags = [];
+const mainCommitSha = git('rev-parse', 'HEAD');
+
+try {
+  git('push', 'origin', 'main');
+} catch (error) {
+  console.error('Failed to push main. Ensure the GitHub App has bypass permissions for main branch protection.');
+  throw error;
+}
+
+const repository = process.env.GITHUB_REPOSITORY;
+if (!repository) {
+  throw new Error('GITHUB_REPOSITORY env var is required (expected to be set by GitHub Actions).');
+}
+
+// Tags MUST be created via the REST API rather than `git push`. A tag pushed via `git push`
+// (regardless of token type) does NOT trigger downstream tag-triggered workflows from within
+// an Actions run. Creating the ref via POST /repos/{owner}/{repo}/git/refs is a documented
+// path that does trigger them. See https://github.com/changesets/action/pull/391 for the
+// precedent and https://github.com/h3rmanj/changesets-triggers for the empirical matrix.
+function createTagViaApi(tagName, commitSha) {
+  execFileSync('gh', [
+    'api',
+    `repos/${repository}/git/refs`,
+    '--method', 'POST',
+    '-f', `ref=refs/tags/${tagName}`,
+    '-f', `sha=${commitSha}`,
+  ], {
+    cwd: repoRoot,
+    stdio: ['ignore', 'pipe', 'inherit'],
+    encoding: 'utf8',
+  });
+}
+
+let createdTagCount = 0;
 
 for (const releaseCandidate of releaseCandidates) {
   if (tagExists(releaseCandidate.tagName)) {
@@ -124,25 +157,25 @@ for (const releaseCandidate of releaseCandidates) {
     continue;
   }
 
-  git('tag', releaseCandidate.tagName);
-  newTags.push(releaseCandidate.tagName);
+  try {
+    createTagViaApi(releaseCandidate.tagName, mainCommitSha);
+  } catch (error) {
+    console.error(`Failed to create tag ${releaseCandidate.tagName} via REST API.`);
+    throw error;
+  }
+
+  createdTagCount++;
 
   if (releaseCandidate.hasPublishWorkflow) {
-    console.log(`Created tag ${releaseCandidate.tagName}; ${getPublishWorkflowName(releaseCandidate.packageDirectory)} is present and can publish it.`);
+    console.log(`Created tag ${releaseCandidate.tagName} via REST API; ${getPublishWorkflowName(releaseCandidate.packageDirectory)} is present and can publish it.`);
   } else {
-    console.log(`Created tag ${releaseCandidate.tagName}; no ${getPublishWorkflowName(releaseCandidate.packageDirectory)} workflow exists yet, so publishing must be added separately.`);
+    console.log(`Created tag ${releaseCandidate.tagName} via REST API; no ${getPublishWorkflowName(releaseCandidate.packageDirectory)} workflow exists yet, so publishing must be added separately.`);
   }
 }
 
-if (newTags.length === 0) {
-  console.log('No new release tags to create. Skipping push.');
+if (createdTagCount === 0) {
+  console.log('No new release tags created.');
   process.exit(0);
 }
 
-try {
-  git('push', 'origin', 'main', ...newTags);
-  console.log(`Pushed main and ${newTags.length} tag(s)`);
-} catch (error) {
-  console.error('Failed to push to main. Ensure the GitHub App has bypass permissions for main branch protection.');
-  throw error;
-}
+console.log(`Pushed main and created ${createdTagCount} tag(s) via REST API.`);
