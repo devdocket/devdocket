@@ -2,7 +2,7 @@
   "name": "devdocket-ai-reviewer",
   "displayName": "DevDocket — AI Actions",
   "description": "AI-powered code review and PR walkthrough actions for DevDocket",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "publisher": "devdocket",
   "license": "MIT",
   "engines": {
@@ -37,10 +37,19 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
-            "filePath": { "type": "string", "description": "Path relative to worktree root" }
+            "worktreePath": {
+              "type": "string",
+              "description": "Absolute path to the git worktree"
+            },
+            "filePath": {
+              "type": "string",
+              "description": "Path relative to worktree root"
+            }
           },
-          "required": ["worktreePath", "filePath"]
+          "required": [
+            "worktreePath",
+            "filePath"
+          ]
         }
       },
       {
@@ -51,10 +60,18 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
-            "dirPath": { "type": "string", "description": "Directory path relative to worktree root (default: root)" }
+            "worktreePath": {
+              "type": "string",
+              "description": "Absolute path to the git worktree"
+            },
+            "dirPath": {
+              "type": "string",
+              "description": "Directory path relative to worktree root (default: root)"
+            }
           },
-          "required": ["worktreePath"]
+          "required": [
+            "worktreePath"
+          ]
         }
       },
       {
@@ -65,11 +82,24 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
-            "baseRef": { "type": "string", "description": "Base branch or commit ref" },
-            "headRef": { "type": "string", "description": "Head branch or commit ref" }
+            "worktreePath": {
+              "type": "string",
+              "description": "Absolute path to the git worktree"
+            },
+            "baseRef": {
+              "type": "string",
+              "description": "Base branch or commit ref"
+            },
+            "headRef": {
+              "type": "string",
+              "description": "Head branch or commit ref"
+            }
           },
-          "required": ["worktreePath", "baseRef", "headRef"]
+          "required": [
+            "worktreePath",
+            "baseRef",
+            "headRef"
+          ]
         }
       },
       {
@@ -80,12 +110,29 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
-            "baseRef": { "type": "string", "description": "Base branch or commit ref" },
-            "headRef": { "type": "string", "description": "Head branch or commit ref" },
-            "filePath": { "type": "string", "description": "Path to the file relative to worktree root" }
+            "worktreePath": {
+              "type": "string",
+              "description": "Absolute path to the git worktree"
+            },
+            "baseRef": {
+              "type": "string",
+              "description": "Base branch or commit ref"
+            },
+            "headRef": {
+              "type": "string",
+              "description": "Head branch or commit ref"
+            },
+            "filePath": {
+              "type": "string",
+              "description": "Path to the file relative to worktree root"
+            }
           },
-          "required": ["worktreePath", "baseRef", "headRef", "filePath"]
+          "required": [
+            "worktreePath",
+            "baseRef",
+            "headRef",
+            "filePath"
+          ]
         }
       },
       {
@@ -96,11 +143,22 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
-            "filePath": { "type": "string", "description": "Optional file path to scope history" },
-            "maxCount": { "type": "number", "description": "Maximum commits to return (default: 20)" }
+            "worktreePath": {
+              "type": "string",
+              "description": "Absolute path to the git worktree"
+            },
+            "filePath": {
+              "type": "string",
+              "description": "Optional file path to scope history"
+            },
+            "maxCount": {
+              "type": "number",
+              "description": "Maximum commits to return (default: 20)"
+            }
           },
-          "required": ["worktreePath"]
+          "required": [
+            "worktreePath"
+          ]
         }
       },
       {
@@ -111,12 +169,27 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
-            "pattern": { "type": "string", "description": "Search pattern" },
-            "fileGlob": { "type": "string", "description": "Optional file glob to restrict search" },
-            "maxResults": { "type": "number", "description": "Maximum results (default: 50)" }
+            "worktreePath": {
+              "type": "string",
+              "description": "Absolute path to the git worktree"
+            },
+            "pattern": {
+              "type": "string",
+              "description": "Search pattern"
+            },
+            "fileGlob": {
+              "type": "string",
+              "description": "Optional file glob to restrict search"
+            },
+            "maxResults": {
+              "type": "number",
+              "description": "Maximum results (default: 50)"
+            }
           },
-          "required": ["worktreePath", "pattern"]
+          "required": [
+            "worktreePath",
+            "pattern"
+          ]
         }
       },
       {
@@ -127,9 +200,14 @@
         "inputSchema": {
           "type": "object",
           "properties": {
-            "filePath": { "type": "string", "description": "Relative file path as shown in the diff (e.g. 'src/index.ts')" }
+            "filePath": {
+              "type": "string",
+              "description": "Relative file path as shown in the diff (e.g. 'src/index.ts')"
+            }
           },
-          "required": ["filePath"]
+          "required": [
+            "filePath"
+          ]
         }
       }
     ],
@@ -137,12 +215,12 @@
       {
         "title": "DevDocket AI Actions",
         "properties": {
-        "devDocketAiReview.customPromptPath": {
-          "type": "string",
-          "default": "",
-          "description": "Path to a custom code review prompt file. The file content replaces the built-in review instructions sent to the language model. The PR diff is always appended automatically. Supports absolute paths and paths relative to the workspace folder (single-root workspaces only)."
+          "devDocketAiReview.customPromptPath": {
+            "type": "string",
+            "default": "",
+            "description": "Path to a custom code review prompt file. The file content replaces the built-in review instructions sent to the language model. The PR diff is always appended automatically. Supports absolute paths and paths relative to the workspace folder (single-root workspaces only)."
+          }
         }
-      }
       }
     ]
   },
