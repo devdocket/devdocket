@@ -9,8 +9,33 @@
     "vscode": "^1.92.0"
   },
   "categories": [
+    "SCM Providers",
+    "Azure",
     "Other"
   ],
+  "keywords": [
+    "azure devops",
+    "ado",
+    "work items",
+    "pull requests",
+    "pipelines",
+    "devdocket",
+    "provider"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdocket/devdocket.git",
+    "directory": "packages/ado"
+  },
+  "bugs": {
+    "url": "https://github.com/devdocket/devdocket/issues"
+  },
+  "homepage": "https://github.com/devdocket/devdocket#readme",
+  "galleryBanner": {
+    "color": "#1F2937",
+    "theme": "dark"
+  },
+  "preview": true,
   "extensionDependencies": [
     "devdocket.devdocket"
   ],
