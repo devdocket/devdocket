@@ -37,7 +37,16 @@ export class ProviderLabelCache {
   async set(providerId: string, label: string): Promise<void> {
     if (this.labels.get(providerId) === label) { return; }
     this.labels.set(providerId, label);
+    // Re-read from globalState and merge (remote additions preserved, local wins on conflict)
+    const remote = this.globalState.get<Record<string, unknown>>(STORAGE_KEY);
     const obj = Object.create(null) as Record<string, string>;
+    if (remote && typeof remote === 'object' && !Array.isArray(remote)) {
+      for (const [key, value] of Object.entries(remote)) {
+        if (typeof value === 'string') {
+          obj[key] = value;
+        }
+      }
+    }
     for (const [key, value] of this.labels) {
       obj[key] = value;
     }

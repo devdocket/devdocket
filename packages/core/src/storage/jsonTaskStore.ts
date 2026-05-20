@@ -66,11 +66,14 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
  * Persists {@link WorkItem} objects in VS Code globalState.
  *
  * An in-memory cache is populated on first load and kept in sync with
- * every mutation.
+ * every mutation. On persist, the store re-reads from globalState and
+ * merges to avoid clobbering changes made by other VS Code windows.
  */
 export class JsonTaskStore implements ITaskStore {
   private readonly globalState: Memento;
   private cache: Map<string, WorkItem> | null = null;
+  /** IDs known at load time — used to distinguish "deleted locally" from "added remotely". */
+  private loadedIds = new Set<string>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -80,9 +83,57 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache !== null) {
       return Array.from(this.cache.values());
     }
+    const items = this.parseFromGlobalState();
+    this.cache = new Map(items.map(item => [item.id, item]));
+    this.loadedIds = new Set(this.cache.keys());
+    return items;
+  }
+
+  private getCache(): Map<string, WorkItem> {
+    if (this.cache === null) {
+      throw new Error('Cache not initialized — call loadAll() first');
+    }
+    return this.cache;
+  }
+
+  /**
+   * Re-reads from globalState, merges remote items with the local cache,
+   * and writes the merged result. Items modified locally (by `updatedAt`)
+   * take precedence. Items added remotely (not in loadedIds) are preserved.
+   * Items deleted locally (in loadedIds but not in cache) stay deleted.
+   */
+  private async persist(): Promise<void> {
+    const local = this.getCache();
+    const remoteItems = this.parseFromGlobalState();
+    const merged = new Map(local);
+
+    for (const remote of remoteItems) {
+      if (merged.has(remote.id)) {
+        // Both windows have this item — keep the one with the later updatedAt
+        const localItem = merged.get(remote.id)!;
+        if (remote.updatedAt > localItem.updatedAt) {
+          merged.set(remote.id, remote);
+        }
+      } else if (!this.loadedIds.has(remote.id)) {
+        // Remote has an item we never saw — added by another window
+        merged.set(remote.id, remote);
+      }
+      // else: item was in loadedIds but deleted from local cache — locally deleted
+    }
+
+    this.cache = merged;
+    // Track newly discovered remote IDs so future persists can distinguish
+    // "deleted locally" from "never seen"
+    for (const id of merged.keys()) {
+      this.loadedIds.add(id);
+    }
+    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+  }
+
+  /** Parse and validate work items from globalState. */
+  private parseFromGlobalState(): WorkItem[] {
     const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
     if (!Array.isArray(parsed)) {
-      this.cache = new Map();
       return [];
     }
     const items: WorkItem[] = [];
@@ -94,19 +145,7 @@ export class JsonTaskStore implements ITaskStore {
         items.push(parsed[i] as WorkItem);
       }
     }
-    this.cache = new Map(items.map(item => [item.id, item]));
     return items;
-  }
-
-  private getCache(): Map<string, WorkItem> {
-    if (this.cache === null) {
-      throw new Error('Cache not initialized — call loadAll() first');
-    }
-    return this.cache;
-  }
-
-  private async persist(): Promise<void> {
-    await this.globalState.update(STORAGE_KEY, Array.from(this.getCache().values()));
   }
 
   async save(item: WorkItem): Promise<void> {
@@ -127,5 +166,14 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache === null) { await this.loadAll(); }
     this.getCache().delete(id);
     await this.persist();
+  }
+
+  /**
+   * Invalidates the in-memory cache so the next access re-reads from
+   * globalState. Used for cross-window change propagation.
+   */
+  invalidateCache(): void {
+    this.cache = null;
+    this.loadedIds.clear();
   }
 }

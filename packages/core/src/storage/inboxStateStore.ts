@@ -58,6 +58,8 @@ export class InboxStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private loaded = false;
+  /** Keys known at load time — used to distinguish "pruned locally" from "added remotely". */
+  private loadedKeys = new Set<string>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -88,8 +90,47 @@ export class InboxStateStore {
     return this.cache.get(this.key(providerId, externalId))?.resurfaceVersion;
   }
 
+  /**
+   * Re-reads from globalState, merges remote records with the local cache,
+   * and writes the merged result. Local changes take precedence for the same key.
+   * Remote additions (keys not known at load time) are preserved.
+   */
   private async persist(): Promise<void> {
-    await this.globalState.update(STORAGE_KEY, Array.from(this.cache.values()));
+    const remoteRecords = this.parseFromGlobalState();
+    const merged = new Map(this.cache);
+
+    for (const remote of remoteRecords) {
+      const k = this.key(remote.providerId, remote.externalId);
+      if (!merged.has(k) && !this.loadedKeys.has(k)) {
+        // Remote has a record we never saw — added by another window
+        merged.set(k, remote);
+      }
+      // else: local cache has it (local wins) or we pruned it (stay pruned)
+    }
+
+    // Update cache and tracking
+    this.cache.clear();
+    for (const [k, record] of merged) {
+      this.cache.set(k, record);
+    }
+    this.loadedKeys = new Set(merged.keys());
+    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+  }
+
+  /** Parse and validate inbox state records from globalState. */
+  private parseFromGlobalState(): InboxStateRecord[] {
+    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+    if (!Array.isArray(parsed)) { return []; }
+    const records: InboxStateRecord[] = [];
+    for (let i = 0; i < parsed.length; i++) {
+      const error = validateInboxStateRecord(parsed[i], i);
+      if (error) {
+        logger.warn(`Skipping invalid inbox state record: ${error}`);
+        continue;
+      }
+      records.push(parsed[i] as InboxStateRecord);
+    }
+    return records;
   }
 
   /**
@@ -155,18 +196,13 @@ export class InboxStateStore {
    */
   async load(): Promise<void> {
     if (this.loaded) { return; }
-    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
     this.cache.clear();
-    if (Array.isArray(parsed)) {
-      for (let i = 0; i < parsed.length; i++) {
-        const error = validateInboxStateRecord(parsed[i], i);
-        if (error) {
-          logger.warn(`Skipping invalid inbox state record: ${error}`);
-          continue;
-        }
-        const record = parsed[i] as InboxStateRecord;
-        this.cache.set(this.key(record.providerId, record.externalId), record);
-      }
+    const records = this.parseFromGlobalState();
+    for (const record of records) {
+      this.cache.set(this.key(record.providerId, record.externalId), record);
+    }
+    this.loadedKeys = new Set(this.cache.keys());
+    if (records.length > 0) {
       logger.debug(`Loaded inbox state: ${this.cache.size} entries`);
     }
     this.loaded = true;
@@ -218,5 +254,15 @@ export class InboxStateStore {
   /** Disposes the change event emitter. */
   dispose(): void {
     this._onDidChange.dispose();
+  }
+
+  /**
+   * Invalidates the in-memory cache so the next mutation re-reads from
+   * globalState. Used for cross-window change propagation.
+   */
+  invalidateCache(): void {
+    this.cache.clear();
+    this.loadedKeys.clear();
+    this.loaded = false;
   }
 }

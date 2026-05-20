@@ -648,6 +648,22 @@ export class WorkGraph {
     this._onDidChange.dispose();
     this._onDidTransitionState.dispose();
   }
+
+  /**
+   * Invalidates the store's cache and reloads all items from globalState.
+   * Used for cross-window change propagation — when another window writes
+   * new data, this window invalidates its stale cache and re-reads.
+   */
+  invalidateAndReload(): void {
+    if ('invalidateCache' in this.store && typeof (this.store as any).invalidateCache === 'function') {
+      (this.store as any).invalidateCache();
+    }
+    void this.load().then(() => {
+      this._onDidChange.fire();
+    }).catch(err => {
+      logger.error('WorkGraph: failed to reload after cache invalidation', err);
+    });
+  }
 }
 
 function generateId(): string {

@@ -19,6 +19,8 @@ export class ReadStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
   readonly onDidChange = this._onDidChange.event;
+  /** Keys removed locally since last load — prevents re-adding from stale remote data. */
+  private readonly removedSinceLoad = new Set<string>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -28,8 +30,26 @@ export class ReadStateStore {
     return this.items.has(key);
   }
 
+  /**
+   * Re-reads from globalState, unions with local set, excludes locally
+   * removed keys, and writes the merged result.
+   */
   private async persist(): Promise<void> {
-    await this.globalState.update(STORAGE_KEY, [...this.items]);
+    const remoteParsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+    const merged = new Set(this.items);
+    if (Array.isArray(remoteParsed)) {
+      for (const item of remoteParsed) {
+        if (typeof item === 'string' && !this.removedSinceLoad.has(item)) {
+          merged.add(item);
+        }
+      }
+    }
+    // Update local state to match merged
+    this.items.clear();
+    for (const key of merged) {
+      this.items.add(key);
+    }
+    await this.globalState.update(STORAGE_KEY, [...merged]);
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */
@@ -68,7 +88,10 @@ export class ReadStateStore {
     if (!this.loaded) { await this.load(); }
     let changed = false;
     for (const key of keys) {
-      if (this.items.delete(key)) { changed = true; }
+      if (this.items.delete(key)) {
+        changed = true;
+        this.removedSinceLoad.add(key);
+      }
     }
     if (changed) {
       await this.persist();
@@ -112,6 +135,7 @@ export class ReadStateStore {
 
     for (const key of staleKeys) {
       this.items.delete(key);
+      this.removedSinceLoad.add(key);
     }
 
     await this.persist();
@@ -142,5 +166,15 @@ export class ReadStateStore {
 
   dispose(): void {
     this._onDidChange.dispose();
+  }
+
+  /**
+   * Invalidates the in-memory cache so the next access re-reads from
+   * globalState. Used for cross-window change propagation.
+   */
+  invalidateCache(): void {
+    this.items.clear();
+    this.removedSinceLoad.clear();
+    this.loaded = false;
   }
 }

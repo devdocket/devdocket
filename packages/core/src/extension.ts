@@ -16,6 +16,7 @@ import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
 import { WatchStore } from './storage/watchStore';
+import { StateVersionService } from './services/stateVersionService';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
@@ -483,6 +484,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
+  // Cross-window state propagation: bump version on mutations, invalidate on external changes
+  const stateVersion = new StateVersionService(context.globalStorageUri);
+  wg.onDidChange(safeHandler('sv:workGraph', () => stateVersion.bump()));
+  ss.onDidChange(safeHandler('sv:stateStore', () => stateVersion.bump()));
+  readStateStore.onDidChange(safeHandler('sv:readState', () => stateVersion.bump()));
+  ws.onDidChangeWatchedRuns(safeHandler('sv:watchedRuns', () => stateVersion.bump()));
+  ws.onDidChangePRWatches(safeHandler('sv:watchedPRs', () => stateVersion.bump()));
+  stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
+    logger.debug('External state change detected — invalidating caches');
+    wg.invalidateAndReload();
+    ss.invalidateCache();
+    await ss.load();
+    readStateStore.invalidateCache();
+    await readStateStore.load();
+  }));
+
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
 
   const eventWiringStart = performance.now();
@@ -588,6 +605,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
     { dispose: () => adrr.dispose() },
+    { dispose: () => stateVersion.dispose() },
   );
 
   const commandRegStart = performance.now();
