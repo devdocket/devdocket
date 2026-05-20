@@ -1,8 +1,8 @@
-# DevDocket — AI Actions
+# DevDocket AI Reviewer
 
 AI-powered code review and PR walkthrough actions for DevDocket
 
-DevDocket — AI Actions adds two AI-assisted workflows to DevDocket: code review over GitHub pull request diffs, and an `@walkthrough` chat participant for guided codebase tours. It uses VS Code's Language Model API and Copilot Chat so the experience stays inside VS Code.
+DevDocket AI Reviewer adds two AI-assisted workflows to DevDocket: code review over GitHub pull request diffs, and an `@walkthrough` chat participant for guided codebase tours. It uses VS Code's Language Model API and Copilot Chat so the experience stays inside VS Code.
 
 ## Features
 
@@ -21,7 +21,7 @@ DevDocket — AI Actions adds two AI-assisted workflows to DevDocket: code revie
 
 ## Getting Started
 
-1. Install **DevDocket — AI Actions**. VS Code will also install **DevDocket** if it is not already present.
+1. Install **DevDocket AI Reviewer**. VS Code will also install **DevDocket** if it is not already present.
 2. Install and configure **DevDocket GitHub** so pull request work items appear in the DevDocket sidebar.
 3. Make sure Copilot Chat is installed and you are signed in with access to language models.
 4. Open a GitHub pull request work item in DevDocket.
@@ -37,7 +37,7 @@ DevDocket — AI Actions adds two AI-assisted workflows to DevDocket: code revie
 
 - [DevDocket](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket) is the core sidebar and work-item hub.
 - [DevDocket GitHub](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-github) connects GitHub issues, PRs, and Actions.
-- [DevDocket — Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) connects Azure DevOps work items, PRs, and Pipelines.
+- [DevDocket Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) connects Azure DevOps work items, PRs, and Pipelines.
 - [DevDocket Start Git Work](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-start-git-work) creates branches and worktrees from DevDocket items.
 - [UX guide](https://github.com/devdocket/devdocket/blob/dev/docs/ux-guide.md)
 - [GitHub repository](https://github.com/devdocket/devdocket)

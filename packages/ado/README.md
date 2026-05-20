@@ -1,8 +1,8 @@
-# DevDocket — Azure DevOps
+# DevDocket Azure DevOps
 
 Azure DevOps provider for DevDocket — discovers assigned work items and PR reviews.
 
-DevDocket — Azure DevOps connects Azure DevOps to the DevDocket sidebar. It surfaces assigned work items, pull request reviews, and authored pull requests, then keeps Azure DevOps Pipelines and pull request status visible from VS Code.
+DevDocket Azure DevOps connects Azure DevOps to the DevDocket sidebar. It surfaces assigned work items, pull request reviews, and authored pull requests, then keeps Azure DevOps Pipelines and pull request status visible from VS Code.
 
 ## Features
 
@@ -22,7 +22,7 @@ DevDocket — Azure DevOps connects Azure DevOps to the DevDocket sidebar. It su
 
 ## Getting Started
 
-1. Install **DevDocket — Azure DevOps**. VS Code will also install **DevDocket** if it is not already present.
+1. Install **DevDocket Azure DevOps**. VS Code will also install **DevDocket** if it is not already present.
 2. Sign in to your Microsoft account when VS Code prompts you.
 3. Add one or more organizations or projects to `devDocketAdo.projects`.
 4. Open the DevDocket sidebar.
@@ -53,7 +53,7 @@ Example:
 - [DevDocket](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket) is the core sidebar and work-item hub.
 - [DevDocket GitHub](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-github) connects GitHub issues, PRs, and Actions.
 - [DevDocket Start Git Work](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-start-git-work) creates branches and worktrees from DevDocket items.
-- [DevDocket — AI Actions](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) adds AI code review and guided walkthrough actions.
+- [DevDocket AI Reviewer](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) adds AI code review and guided walkthrough actions.
 - [Provider discovery guide](https://github.com/devdocket/devdocket/blob/dev/docs/provider-discovery.md)
 - [GitHub repository](https://github.com/devdocket/devdocket)
 - [Issue tracker](https://github.com/devdocket/devdocket/issues)

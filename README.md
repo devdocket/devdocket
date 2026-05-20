@@ -46,9 +46,9 @@ Install the extensions you need from the VS Code Marketplace:
 
 - [DevDocket](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket) — core sidebar and work-item hub.
 - [DevDocket GitHub](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-github) — GitHub provider and watcher.
-- [DevDocket — Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) — Azure DevOps provider and watcher.
+- [DevDocket Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) — Azure DevOps provider and watcher.
 - [DevDocket Start Git Work](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-start-git-work) — branch and worktree action.
-- [DevDocket — AI Actions](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) — AI review and walkthrough actions.
+- [DevDocket AI Reviewer](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) — AI review and walkthrough actions.
 
 To build from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md#quick-start).
 
@@ -66,9 +66,9 @@ DevDocket is extensible with two types of plugins:
 | Extension | Type | What It Does |
 |-----------|------|--------------|
 | DevDocket GitHub | Provider + Watcher | Discovers GitHub issues, mentions, PR review requests, and pull requests you authored or are assigned to; watches GitHub Actions runs and PR status |
-| DevDocket — Azure DevOps | Provider + Watcher | Discovers Azure DevOps work items, PR review requests, and authored PRs; watches ADO Pipelines and PR status |
+| DevDocket Azure DevOps | Provider + Watcher | Discovers Azure DevOps work items, PR review requests, and authored PRs; watches ADO Pipelines and PR status |
 | DevDocket Start Git Work | Action | Creates a feature branch and a sibling git worktree for a work item, optionally running follow-up commands |
-| DevDocket — AI Actions | Action | AI-powered code review against GitHub and Azure DevOps PR diffs plus a `@walkthrough` chat participant for guided codebase tours |
+| DevDocket AI Reviewer | Action | AI-powered code review against GitHub and Azure DevOps PR diffs plus a `@walkthrough` chat participant for guided codebase tours |
 
 To build your own provider or action, see the [Extension API documentation](docs/extension-api.md).
 

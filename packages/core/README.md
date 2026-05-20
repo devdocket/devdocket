@@ -17,7 +17,7 @@ DevDocket adds a unified work-item sidebar to VS Code. It ingests work from prov
 ## Requirements
 
 - VS Code 1.92.0 or later.
-- Provider extensions are installed separately. Install DevDocket GitHub, DevDocket — Azure DevOps, or another provider to automatically discover work from external systems.
+- Provider extensions are installed separately. Install DevDocket GitHub, DevDocket Azure DevOps, or another provider to automatically discover work from external systems.
 
 ## Getting Started
 
@@ -42,9 +42,9 @@ DevDocket adds a unified work-item sidebar to VS Code. It ingests work from prov
 ## Related
 
 - [DevDocket GitHub](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-github) discovers GitHub issues, mentions, pull requests, review requests, and GitHub Actions status.
-- [DevDocket — Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) discovers Azure DevOps work items, pull requests, reviews, and Pipelines status.
+- [DevDocket Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) discovers Azure DevOps work items, pull requests, reviews, and Pipelines status.
 - [DevDocket Start Git Work](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-start-git-work) creates branches and worktrees from DevDocket items.
-- [DevDocket — AI Actions](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) adds AI code review and guided walkthrough actions.
+- [DevDocket AI Reviewer](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) adds AI code review and guided walkthrough actions.
 - [UX guide](https://github.com/devdocket/devdocket/blob/dev/docs/ux-guide.md)
 - [Extension API](https://github.com/devdocket/devdocket/blob/dev/docs/extension-api.md)
 - [GitHub repository](https://github.com/devdocket/devdocket)
