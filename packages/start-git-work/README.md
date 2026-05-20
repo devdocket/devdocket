@@ -30,23 +30,19 @@ DevDocket Start Git Work turns an accepted issue or pull request into a local de
 
 ## Configuration
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `devDocketStartGitWork.commands` | `[]` | Application-level list of commands to run after creating a worktree. Use `{path}` in arguments as a placeholder for the new worktree path. |
-| `devdocket.startGitWork.promptForNames` | `true` | Prompt for issue branch names, PR local branch names, and worktree paths. Set to `false` to use auto-derived names without prompting. |
+The Start Git Work action runs with sensible defaults — no setup required. The full list of settings is auto-documented on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket Start Git Work**.
 
-Example:
+The most useful setting is `devDocketStartGitWork.commands`, which lets you run follow-up commands after the worktree is created — for example, opening the new worktree in a fresh VS Code window:
 
 ```jsonc
 {
   "devDocketStartGitWork.commands": [
     { "command": "code.cmd", "args": ["{path}"] }
-  ],
-  "devdocket.startGitWork.promptForNames": true
+  ]
 }
 ```
 
-On Windows, use the explicit `.cmd` extension for batch-file executables such as `code.cmd`.
+`{path}` is replaced with the absolute path of the new worktree. On Windows, use the explicit `.cmd` extension for batch-file executables such as `code.cmd`.
 
 ## Related
 

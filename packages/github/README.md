@@ -30,12 +30,9 @@ DevDocket GitHub connects GitHub to the DevDocket sidebar. It surfaces the GitHu
 
 ## Configuration
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `devDocketGithub.filteredRepos` | `""` | Newline-separated repository patterns to exclude from discovery, matched against `owner/repo`. Supports wildcards, comments, and `!` re-include entries. Leave empty to include all repositories you can access. |
-| `devDocketGithub.refreshIntervalSeconds` | `300` | How often to refresh GitHub data, in seconds. Values below 60 are clamped. |
-| `devDocketGithub.resurfaceOnNewVersion` | `true` | Resurface accepted PR review items when new commits are pushed. |
-| `devDocketGithub.resurfaceOnReRequestedReview` | `true` | Resurface accepted PR review items when review is explicitly re-requested. |
+No setup is required — the GitHub provider runs against the signed-in account on first launch. The full list of settings, with defaults and descriptions, is auto-generated on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket GitHub**.
+
+Most users will reach for `devDocketGithub.filteredRepos` to exclude noisy repositories from discovery (gitignore-style patterns, one per line; supports wildcards, negation with `!`, and comments).
 
 ## Related
 

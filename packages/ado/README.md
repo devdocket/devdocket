@@ -31,13 +31,7 @@ DevDocket Azure DevOps connects Azure DevOps to the DevDocket sidebar. It surfac
 
 ## Configuration
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `devDocketAdo.projects` | `[]` | Required. Azure DevOps organizations and projects to monitor. Each entry is either `<org>` for an entire organization or `<org>/<project>` for a specific project. |
-| `devDocketAdo.refreshIntervalSeconds` | `300` | How often to refresh Azure DevOps data, in seconds. Values below 60 are clamped; set to 0 or a negative value to disable periodic refresh. |
-| `devDocketAdo.resurfaceOnNewVersion` | `true` | Resurface accepted PR review items when new iterations are pushed. |
-
-Example:
+This extension requires one setting before it can discover work:
 
 ```jsonc
 {
@@ -47,6 +41,10 @@ Example:
   ]
 }
 ```
+
+Each entry is either `<org>` to monitor an entire Azure DevOps organization or `<org>/<project>` to scope to a single project. Multiple entries are supported.
+
+The remaining settings (refresh interval, PR review resurfacing, etc.) are auto-documented on the **Feature Contributions** tab of this Marketplace listing and are also browseable from VS Code under **Settings → Extensions → DevDocket Azure DevOps**.
 
 ## Related
 

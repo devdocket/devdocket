@@ -30,14 +30,13 @@ DevDocket adds a unified work-item sidebar to VS Code. It ingests work from prov
 
 ## Configuration
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `devDocket.showInboxNotifications` | `true` | Show a notification when new items arrive in the Incoming tier. |
-| `devDocket.autoCompleteOnClose` | `true` | Automatically mark linked work items as Done when their issue or pull request closes or merges externally. |
-| `devDocket.historyClearDays` | `30` | Age threshold, in days, for clearing old Done items. |
-| `devDocket.watches.autoWatchAuthoredPRs` | `true` | Automatically watch authored pull requests when a provider discovers them. |
-| `devDocket.watches.pollingIntervalSeconds` | `60` | Polling interval, in seconds, for active CI and PR watches. |
-| `devDocket.watches.notifyOnJobFailure` | `true` | Show a notification when an individual job fails while a run is still in progress. |
+DevDocket works with sensible defaults — no setup required. The full list of settings, with defaults and descriptions, is auto-generated on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket**.
+
+Common settings worth knowing:
+
+- `devDocket.autoCompleteOnClose` — automatically marks linked work items Done when their issue or PR closes or merges externally.
+- `devDocket.showInboxNotifications` — toggles notifications when new items arrive in the Incoming tier.
+- `devDocket.watches.pollingIntervalSeconds` — how often CI Watches refreshes PR and pipeline status.
 
 ## Related
 

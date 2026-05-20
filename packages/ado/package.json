@@ -29,7 +29,7 @@
               "type": "string"
             },
             "default": [],
-            "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations."
+            "markdownDescription": "Azure DevOps organizations and projects to monitor. Each entry is either `<org>` (monitor the entire organization) or `<org>/<project>` (monitor a specific project). Supports multiple organizations.\n\nExample:\n\n```jsonc\n[\n  \"contoso\",\n  \"fabrikam/web-platform\"\n]\n```"
           },
           "devDocketAdo.refreshIntervalSeconds": {
             "type": "number",

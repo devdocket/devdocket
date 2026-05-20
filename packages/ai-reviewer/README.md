@@ -29,9 +29,9 @@ DevDocket AI Reviewer adds two AI-assisted workflows to DevDocket: code review o
 
 ## Configuration
 
-| Setting | Default | Description |
-| --- | --- | --- |
-| `devDocketAiReview.customPromptPath` | `""` | Optional path to a custom code review prompt file. The file content replaces the built-in review instructions; the PR diff is always appended automatically. Supports absolute paths and workspace-relative paths in single-root workspaces. |
+No setup is required — the AI Code Review action and `@walkthrough` chat participant work out of the box. The full list of settings is auto-documented on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket AI Reviewer**.
+
+Set `devDocketAiReview.customPromptPath` if you want to replace the built-in review instructions with your own prompt file. The PR diff is appended automatically.
 
 ## Related
 
