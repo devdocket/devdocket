@@ -415,6 +415,11 @@
         "category": "DevDocket"
       },
       {
+        "command": "devdocket.browseProviderExtensions",
+        "title": "Browse Provider Extensions",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.toggleSearch",
         "title": "Toggle Search",
         "category": "DevDocket",

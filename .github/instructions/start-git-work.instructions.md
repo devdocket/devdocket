@@ -56,4 +56,4 @@ Cleanup operations log `'cleanup'` or `'cleanup-dismissed'` entries with plain-t
 
 ### Bumping the schema
 
-If the payload shape needs to change, introduce a new `WorkStartedDetailV2` interface, update the encoder to write `v: 2`, and update the decoder to recognise both versions. Update `renderWorkStartedActivityDetail` to render the new fields. All of this lives inside `workStartedDetail.ts`; the core extension does not need to be touched. Renaming or removing existing fields without a version bump silently breaks cleanup for every pre-existing activity entry.
+If the payload shape needs to change, introduce a new `WorkStartedDetailV2` interface, update the encoder to write `v: 2`, and update the decoder to recognize both versions. Update `renderWorkStartedActivityDetail` to render the new fields. All of this lives inside `workStartedDetail.ts`; the core extension does not need to be touched. Renaming or removing existing fields without a version bump silently breaks cleanup for every pre-existing activity entry.

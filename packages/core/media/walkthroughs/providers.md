@@ -13,7 +13,7 @@ Discovers:
 Each item shows badges in the editor for upstream state (Open / Closed) and PR review status (Approved / Changes requested / etc.) so you can prioritize at a glance.
 
 **Setup:**
-1. Install the **DevDocket GitHub** extension (if not already installed)
+1. Install the **DevDocket GitHub** extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-github)
 2. Authenticate with GitHub when prompted
 3. Configure which repositories to watch via settings
 
@@ -24,7 +24,7 @@ Discovers:
 - Pull requests you authored
 
 **Setup:**
-1. Install the **DevDocket Azure DevOps** extension
+1. Install the **DevDocket Azure DevOps** extension from the [VS Code Marketplace](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado)
 2. Configure your organization and project
 3. Authenticate when prompted
 
@@ -32,4 +32,4 @@ Discovers:
 
 **Tip:** Once a provider is connected, browse everything it knows about under the **Sources** tab of the DevDocket sidebar — even items that haven't surfaced in your Incoming tier yet.
 
-[Open Extensions](command:workbench.view.extensions)
+[Browse DevDocket Extensions](command:devdocket.browseProviderExtensions)

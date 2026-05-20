@@ -352,7 +352,7 @@ class JiraProvider implements DevDocketProvider {
 - **`refresh()` is called by DevDocket** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. DevDocket passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Sources tab and surfaced as a small annotation below the title on each item card.
-- **`resolveUrl()` is optional** — Implement it to let users create work items by pasting a URL (e.g. from a browser). When the user runs the "Create Item from URL" command, DevDocket asks each registered provider to resolve the URL. The first provider that returns a `ResolvedItem` wins. If your provider doesn't recognise the URL, return `undefined`.
+- **`resolveUrl()` is optional** — Implement it to let users create work items by pasting a URL (e.g. from a browser). When the user runs the "Create Item from URL" command, DevDocket asks each registered provider to resolve the URL. The first provider that returns a `ResolvedItem` wins. If your provider doesn't recognize the URL, return `undefined`.
 - **`getClosedItems()` is optional** — Implement it to enable auto-completion of work items when their linked external item is closed or merged. After each provider refresh, DevDocket collects all work items in the WorkGraph linked to your provider (including manually-imported items) and calls `getClosedItems()` with their external IDs. Return the subset that are closed, merged, or completed. Providers without this method fall back to **disappearance detection** — if a previously-discovered item is absent from the next refresh, it is assumed closed. The disappearance fallback cannot cover manually-imported items since the provider never discovered them. Auto-completion is controlled by the `devDocket.autoCompleteOnClose` setting (default: `true`).
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
@@ -695,7 +695,7 @@ interface DevDocketProvider {
   /**
    * Attempt to resolve a URL into an item this provider can manage.
    * Return a ResolvedItem if the URL matches a pattern your provider
-   * owns (e.g. a GitHub issue URL), or undefined if not recognised.
+   * owns (e.g. a GitHub issue URL), or undefined if not recognized.
    * Optional — providers that don't support URL import omit this.
    *
    * @param url - The raw URL entered by the user.
@@ -721,7 +721,7 @@ interface DevDocketProvider {
 
 ### `ResolvedItem`
 
-Returned by `resolveUrl()` when a provider recognises a URL. Contains enough detail for DevDocket to create a work item.
+Returned by `resolveUrl()` when a provider recognizes a URL. Contains enough detail for DevDocket to create a work item.
 
 ```ts
 interface ResolvedItem {
