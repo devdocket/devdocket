@@ -5,6 +5,7 @@
   "version": "0.1.0",
   "publisher": "devdocket",
   "license": "MIT",
+  "icon": "resources/icon.png",
   "engines": {
     "vscode": "^1.92.0"
   },
