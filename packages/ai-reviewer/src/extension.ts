@@ -7,7 +7,7 @@ import { registerAllTools } from './tools';
 import type { DevDocketApi } from './types';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const log = vscode.window.createOutputChannel('DevDocket AI Review', { log: true });
+  const log = vscode.window.createOutputChannel('DevDocket AI Reviewer', { log: true });
   context.subscriptions.push(log);
 
   log.info('Activating DevDocket AI Reviewer extension');

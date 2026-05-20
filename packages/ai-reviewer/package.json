@@ -1,6 +1,6 @@
 {
   "name": "devdocket-ai-reviewer",
-  "displayName": "DevDocket — AI Actions",
+  "displayName": "DevDocket AI Reviewer",
   "description": "AI-powered code review and PR walkthrough actions for DevDocket",
   "version": "0.1.0",
   "publisher": "devdocket",
@@ -213,7 +213,7 @@
     ],
     "configuration": [
       {
-        "title": "DevDocket AI Actions",
+        "title": "DevDocket AI Reviewer",
         "properties": {
           "devDocketAiReview.customPromptPath": {
             "type": "string",

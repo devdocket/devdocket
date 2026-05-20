@@ -24,7 +24,7 @@ Discovers:
 - Pull requests you authored
 
 **Setup:**
-1. Install the **DevDocket ADO** extension
+1. Install the **DevDocket Azure DevOps** extension
 2. Configure your organization and project
 3. Authenticate when prompted
 
