@@ -199,7 +199,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         ? `Failed to fetch work items from ${failures[0]}`
         : `Failed to fetch work items from ${failures.length} sources`;
       if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket ADO: ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket Azure DevOps: ${message}`);
       }
       logger.warn(message);
     }

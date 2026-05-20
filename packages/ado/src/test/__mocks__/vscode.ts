@@ -64,7 +64,7 @@ const window = {
     show: vi.fn(),
     hide: vi.fn(),
     dispose: vi.fn(),
-    name: 'DevDocket ADO',
+    name: 'DevDocket Azure DevOps',
     replace: vi.fn(),
     logLevel: 2,
     onDidChangeLogLevel: vi.fn(),

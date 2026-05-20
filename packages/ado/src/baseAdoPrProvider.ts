@@ -231,7 +231,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     if (messages.length > 0) {
       const message = `${this.logLabel} errors: ${messages.join('; ')}`;
       if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket ADO: ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket Azure DevOps: ${message}`);
       }
       logger.warn(message);
     }

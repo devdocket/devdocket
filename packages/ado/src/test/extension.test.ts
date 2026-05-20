@@ -295,7 +295,7 @@ describe('extension activation', () => {
   it('creates an output channel', async () => {
     await activate(mockContext);
 
-    expect(window.createOutputChannel).toHaveBeenCalledWith('DevDocket ADO', { log: true });
+    expect(window.createOutputChannel).toHaveBeenCalledWith('DevDocket Azure DevOps', { log: true });
     expect(disposables.length).toBeGreaterThan(0);
   });
 
