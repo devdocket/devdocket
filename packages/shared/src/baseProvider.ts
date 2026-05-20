@@ -199,6 +199,18 @@ export interface ResolvedItem {
   providerId: string;
 }
 
+/**
+ * Abstraction over window focus state, allowing BaseProvider to gate
+ * background refreshes without depending on the vscode module.
+ * The core extension provides the concrete implementation.
+ */
+export interface WindowStateProvider {
+  /** Whether the window is currently focused. */
+  readonly isFocused: boolean;
+  /** Fires when focus state changes. */
+  readonly onDidChangeFocus: Event<boolean>;
+}
+
 /** Matches the subset of vscode.EventEmitter used by providers. */
 export interface EventEmitterLike<T> {
   event: Event<T>;
@@ -218,12 +230,40 @@ export abstract class BaseProvider {
   protected _isRefreshing = false;
   private _disposed = false;
 
+  private _windowState: WindowStateProvider | undefined;
+  private _windowStateSub: Disposable | undefined;
+  private _refreshIntervalMs = 0;
+  private _lastRefreshTime = 0;
+  private _overdueRefresh = false;
+
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
   constructor(emitter: EventEmitterLike<ProviderItem[]>) {
     this._onDidDiscoverItems = emitter;
     this.onDidDiscoverItems = emitter.event;
+  }
+
+  /**
+   * Provides window focus state so background refreshes are skipped when
+   * the window is unfocused. On focus gain, an immediate refresh is triggered
+   * if one was skipped while unfocused.
+   */
+  setWindowState(provider: WindowStateProvider): void {
+    this._windowStateSub?.dispose();
+    this._windowState = provider;
+    this._windowStateSub = provider.onDidChangeFocus((focused) => {
+      if (focused && this._overdueRefresh && !this._disposed) {
+        this._overdueRefresh = false;
+        this.refreshInBackground().catch((error: unknown) => {
+          try {
+            this.onBackgroundRefreshError(error);
+          } catch {
+            // Prevent handler errors from becoming unhandled rejections
+          }
+        });
+      }
+    });
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
@@ -236,7 +276,12 @@ export abstract class BaseProvider {
       return;
     }
     const clampedInterval = Math.max(interval, 60);
+    this._refreshIntervalMs = clampedInterval * 1000;
     this.refreshTimer = setInterval(() => {
+      if (this._windowState && !this._windowState.isFocused) {
+        this._overdueRefresh = true;
+        return;
+      }
       this.refreshInBackground().catch((error: unknown) => {
         try {
           this.onBackgroundRefreshError(error);
@@ -244,7 +289,7 @@ export abstract class BaseProvider {
           // Prevent handler errors from becoming unhandled rejections
         }
       });
-    }, clampedInterval * 1000);
+    }, this._refreshIntervalMs);
   }
 
   stopPeriodicRefresh(): void {
@@ -252,6 +297,7 @@ export abstract class BaseProvider {
       clearInterval(this.refreshTimer);
       this.refreshTimer = undefined;
     }
+    this._overdueRefresh = false;
   }
 
   /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
@@ -262,6 +308,7 @@ export abstract class BaseProvider {
     this._isRefreshing = true;
     try {
       await this.doBackgroundRefresh();
+      this._lastRefreshTime = Date.now();
     } finally {
       this._isRefreshing = false;
     }
@@ -278,6 +325,7 @@ export abstract class BaseProvider {
     }
     this._disposed = true;
     this.stopPeriodicRefresh();
+    this._windowStateSub?.dispose();
     this._onDidDiscoverItems.dispose();
   }
 }

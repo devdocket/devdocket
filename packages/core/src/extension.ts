@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { runWorkerPool, type PRIdentifier } from '@devdocket/shared';
+import { runWorkerPool, type PRIdentifier, type WindowStateProvider } from '@devdocket/shared';
 import { DevDocketApi } from './api/types';
 import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
@@ -482,6 +482,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const ws = new WatcherService(wr, pwr, watchStore, logger);
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
+
+  // Wire window focus state so providers skip background refreshes when unfocused
+  const windowStateEmitter = new vscode.EventEmitter<boolean>();
+  const windowState: WindowStateProvider = {
+    get isFocused() { return vscode.window.state.focused; },
+    onDidChangeFocus: windowStateEmitter.event,
+  };
+  pr.setWindowState(windowState);
+  context.subscriptions.push(
+    windowStateEmitter,
+    vscode.window.onDidChangeWindowState(state => windowStateEmitter.fire(state.focused)),
+  );
 
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
 
