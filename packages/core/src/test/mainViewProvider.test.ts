@@ -132,6 +132,8 @@ function createProviderRegistry(
     getProviderItems: vi.fn((providerId: string) => discovered.get(providerId) ?? []),
     getProviderLabel: vi.fn((providerId: string) => labels[providerId] ?? providerId),
     getProviderHealth: vi.fn((providerId: string) => health[providerId] ?? { status: 'healthy' }),
+    get loading() { return false; },
+    get hasProviders() { return discovered.size > 0; },
   };
 }
 
@@ -919,5 +921,48 @@ describe('MainViewProvider', () => {
     expect(mockView.webview.postMessage).toHaveBeenCalledTimes(2);
     expect(findPostedMessage(mockView, 'updateItems')).toBeDefined();
     expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
+  });
+
+  it('sends loading state when providers are still loading on sidebar open', async () => {
+    vi.useFakeTimers();
+    const registry = createProviderRegistry({});
+    // Simulate providers still loading
+    Object.defineProperty(registry, 'loading', { get: () => true });
+    const provider = createProvider(
+      createMockWorkGraph([]),
+      registry,
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+
+    // setLoading(true) should be sent immediately (not debounced)
+    expect(mockView.webview.postMessage).toHaveBeenCalledWith({ type: 'setLoading', loading: true });
+
+    // After debounce fires, setLoading(false) should be sent (providers are "loaded" by the time refresh runs)
+    Object.defineProperty(registry, 'loading', { get: () => false });
+    await vi.advanceTimersByTimeAsync(50);
+
+    const messages = mockView.webview.postMessage.mock.calls.map((c: any) => c[0]);
+    expect(messages.some((m: any) => m.type === 'setLoading' && m.loading === false)).toBe(true);
+    expect(messages.some((m: any) => m.type === 'updateItems')).toBe(true);
+  });
+
+  it('does not send loading state when providers are already loaded', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph([]),
+      createProviderRegistry({}),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+
+    // No setLoading sent before debounce fires
+    expect(mockView.webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'setLoading' }),
+    );
   });
 });

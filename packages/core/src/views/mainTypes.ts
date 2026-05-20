@@ -7,6 +7,7 @@ export type ExtensionMessage =
   | { type: 'updateSources'; providers: SourceProviderData[] }
   | { type: 'selectItem'; itemId: string }
   | { type: 'toggleSearch' }
+  | { type: 'setLoading'; loading: boolean }
   | { type: 'updateWatches'; watches: WatchData[] }
   | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
   | { type: 'updateEditorItem'; item: EditorItemData }

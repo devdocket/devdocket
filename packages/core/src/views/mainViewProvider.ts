@@ -45,6 +45,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private pendingRefreshReasons = new Set<RefreshReason>();
   private disposed = false;
+  private loadingSent = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -86,6 +87,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       void this.handleMessage(message);
     });
 
+    // Send loading state if providers are registered but haven't completed
+    // their initial refresh yet. This shows a "Loading providers…" message
+    // instead of the empty/onboarding state while data is being fetched.
+    if (this.providerRegistry.loading) {
+      void webviewView.webview.postMessage({ type: 'setLoading', loading: true });
+      this.loadingSent = true;
+    }
+
     this.scheduleRefresh('discovered');
   }
 
@@ -116,6 +125,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private refresh(reasons: ReadonlySet<RefreshReason>): void {
     if (!this.view) {
       return;
+    }
+
+    // Clear loading indicator once providers have data
+    if (this.loadingSent && (reasons.has('discovered') || reasons.has('health'))) {
+      void this.view.webview.postMessage({ type: 'setLoading', loading: false });
+      this.loadingSent = false;
     }
 
     const allProviderItems = this.providerRegistry.getAllProviderItems();

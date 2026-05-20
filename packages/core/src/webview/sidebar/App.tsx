@@ -21,6 +21,7 @@ export function App() {
   const [tiers, setTiers] = useState<TierData[]>([]);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
   const [hasReceivedItems, setHasReceivedItems] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [queries, setQueries] = useState<TabQueries>(emptyQueries);
   const [appliedQueries, setAppliedQueries] = useState<TabQueries>(emptyQueries);
@@ -113,11 +114,15 @@ export function App() {
           }
           previousTiersRef.current = nextTiers;
           setHasReceivedItems(true);
+          setIsLoading(false);
           setTiers(nextTiers);
           break;
         }
         case 'updateSources':
           setSources(msg.providers);
+          break;
+        case 'setLoading':
+          setIsLoading(msg.loading);
           break;
         case 'selectItem':
           setSelectedItemId(msg.itemId);
@@ -276,6 +281,8 @@ export function App() {
             ) : null}
             {isMyWorkFilterActive && myWorkVisibleCount === 0 ? (
               <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
+            ) : !isMyWorkFilterActive && isLoading ? (
+              <div class="empty-state" role="status">Loading providers…</div>
             ) : !isMyWorkFilterActive && !hasReceivedItems ? (
               <div class="empty-state">No items yet</div>
             ) : !isMyWorkFilterActive && tiers.every(tier => tier.items.length === 0) ? (
