@@ -1,4 +1,4 @@
-# devdocket-ado
+# DevDocket Azure DevOps
 
 ## 0.1.1
 

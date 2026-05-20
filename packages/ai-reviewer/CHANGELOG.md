@@ -1,4 +1,4 @@
-# devdocket-ai-reviewer
+# DevDocket AI Reviewer
 
 ## 0.1.1
 
