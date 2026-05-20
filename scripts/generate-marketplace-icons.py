@@ -107,9 +107,8 @@ def ellipse(draw: ImageDraw.ImageDraw, center: tuple[float, float], radius: floa
 
 
 def draw_github_glyph(draw: ImageDraw.ImageDraw) -> None:
-    draw.arc(scaled_box((90, 90, 115, 115)), start=35, end=325, fill=WHITE, width=5 * SCALE)
-    line(draw, [(103, 102), (116, 102)], width=5)
-    line(draw, [(114, 102), (114, 110)], width=5)
+    line(draw, [(96, 92), (89, 102), (96, 112)], width=4)
+    line(draw, [(108, 92), (115, 102), (108, 112)], width=4)
 
 
 def draw_ado_glyph(draw: ImageDraw.ImageDraw) -> None:
