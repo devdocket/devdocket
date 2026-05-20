@@ -20,11 +20,11 @@ function showAdoProjectsSettingsWarning(message: string): void {
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const log = vscode.window.createOutputChannel('DevDocket ADO', { log: true });
+  const log = vscode.window.createOutputChannel('DevDocket Azure DevOps', { log: true });
   context.subscriptions.push(log);
   setLogger(log);
 
-  log.info('DevDocket ADO activating...');
+  log.info('DevDocket Azure DevOps activating...');
 
   const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
@@ -75,7 +75,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         logger.info('All devDocketAdo.projects entries are invalid — entries must be "org" or "org/project"');
         if (!orgWarningShown) {
           showAdoProjectsSettingsWarning(
-            'DevDocket ADO: All devDocketAdo.projects entries are invalid. Each entry must be "org" or "org/project".',
+            'DevDocket Azure DevOps: All devDocketAdo.projects entries are invalid. Each entry must be "org" or "org/project".',
           );
           orgWarningShown = true;
         }
@@ -83,7 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         logger.info('No organizations configured — set devDocketAdo.projects to enable ADO providers');
         if (!orgWarningShown) {
           showAdoProjectsSettingsWarning(
-            'DevDocket ADO: No Azure DevOps organizations configured. Add entries to devDocketAdo.projects (e.g. "myorg" or "myorg/myproject").',
+            'DevDocket Azure DevOps: No Azure DevOps organizations configured. Add entries to devDocketAdo.projects (e.g. "myorg" or "myorg/myproject").',
           );
           orgWarningShown = true;
         }
@@ -138,7 +138,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }),
   );
 
-  logger.info('DevDocket ADO activated');
+  logger.info('DevDocket Azure DevOps activated');
 }
 
 export function deactivate(): void {

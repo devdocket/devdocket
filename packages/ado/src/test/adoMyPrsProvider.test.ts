@@ -215,7 +215,7 @@ describe('AdoMyPrsProvider', () => {
       }),
     ]);
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      'DevDocket ADO: My PRs errors: failed to fetch from myorg/ProjectB',
+      'DevDocket Azure DevOps: My PRs errors: failed to fetch from myorg/ProjectB',
     );
     expect(
       mockChannel.error.mock.calls.some(

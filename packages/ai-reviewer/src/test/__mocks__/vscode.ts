@@ -70,7 +70,7 @@ const mockLogOutputChannel = {
   show: vi.fn(),
   hide: vi.fn(),
   dispose: vi.fn(),
-  name: 'DevDocket AI Review',
+  name: 'DevDocket AI Reviewer',
   logLevel: 2,
   onDidChangeLogLevel: vi.fn(),
   replace: vi.fn(),
