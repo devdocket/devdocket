@@ -46,6 +46,7 @@ Are there pending .changeset/*.md files?
                         │
                         ▼
                     GitHub Release created per tag with the matching CHANGELOG entry
+                    (marked as a pre-release for any 0.x or `1.0.0-rc.1` style version)
 ```
 
 ## Day-to-day maintainer workflow
