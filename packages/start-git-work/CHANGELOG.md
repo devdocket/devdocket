@@ -1,4 +1,4 @@
-# devdocket-start-git-work
+# DevDocket Start Git Work
 
 ## 0.1.1
 

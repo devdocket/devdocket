@@ -1,4 +1,4 @@
-# devdocket-github
+# DevDocket GitHub
 
 ## 0.1.1
 
