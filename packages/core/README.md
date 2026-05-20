@@ -30,7 +30,7 @@ DevDocket adds a unified work-item sidebar to VS Code. It ingests work from prov
 
 ## Configuration
 
-DevDocket works with sensible defaults — no setup required. The full list of settings, with defaults and descriptions, is auto-generated on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket**.
+DevDocket works with sensible defaults — no setup required. The full list of settings, with defaults and descriptions, is auto-generated in the **Settings** section of the **Features** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket**.
 
 Common settings worth knowing:
 

@@ -30,7 +30,7 @@ DevDocket Start Git Work turns an accepted issue or pull request into a local de
 
 ## Configuration
 
-The Start Git Work action runs with sensible defaults — no setup required. The full list of settings is auto-documented on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket Start Git Work**.
+The Start Git Work action runs with sensible defaults — no setup required. The full list of settings is auto-documented in the **Settings** section of the **Features** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket Start Git Work**.
 
 The most useful setting is `devDocketStartGitWork.commands`, which lets you run follow-up commands after the worktree is created — for example, opening the new worktree in a fresh VS Code window:
 

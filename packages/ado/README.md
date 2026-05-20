@@ -44,7 +44,7 @@ This extension requires one setting before it can discover work:
 
 Each entry is either `<org>` to monitor an entire Azure DevOps organization or `<org>/<project>` to scope to a single project. Multiple entries are supported.
 
-The remaining settings (refresh interval, PR review resurfacing, etc.) are auto-documented on the **Feature Contributions** tab of this Marketplace listing and are also browseable from VS Code under **Settings → Extensions → DevDocket Azure DevOps**.
+The remaining settings (refresh interval, PR review resurfacing, etc.) are auto-documented in the **Settings** section of the **Features** tab of this Marketplace listing and are also browseable from VS Code under **Settings → Extensions → DevDocket Azure DevOps**.
 
 ## Related
 

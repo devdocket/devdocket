@@ -29,7 +29,7 @@ DevDocket AI Reviewer adds two AI-assisted workflows to DevDocket: code review o
 
 ## Configuration
 
-No setup is required — the AI Code Review action and `@walkthrough` chat participant work out of the box. The full list of settings is auto-documented on the **Feature Contributions** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket AI Reviewer**.
+No setup is required — the AI Code Review action and `@walkthrough` chat participant work out of the box. The full list of settings is auto-documented in the **Settings** section of the **Features** tab of this Marketplace listing and is also browseable from VS Code under **Settings → Extensions → DevDocket AI Reviewer**.
 
 Set `devDocketAiReview.customPromptPath` if you want to replace the built-in review instructions with your own prompt file. The PR diff is appended automatically.
 
