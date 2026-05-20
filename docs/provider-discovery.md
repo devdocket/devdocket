@@ -199,7 +199,7 @@ Each discovered PR is enriched with its current status: Draft, Waiting on review
 
 ## Azure DevOps Work Items
 
-**Provider:** DevDocket — Azure DevOps  
+**Provider:** DevDocket Azure DevOps  
 **Condition:** The work item is **assigned to you** and in an **active state**.
 
 A work item appears when **all** of the following are true:
@@ -239,7 +239,7 @@ This means items are correctly filtered regardless of your process template. For
 
 ## Azure DevOps PR Reviews
 
-**Provider:** DevDocket — Azure DevOps  
+**Provider:** DevDocket Azure DevOps  
 **Condition:** You are a **reviewer** on an **active** pull request.
 
 A PR review appears when **all** of the following are true:
@@ -270,7 +270,7 @@ Group reviewer detection uses the Azure DevOps Graph APIs to resolve your group/
 
 ## Azure DevOps My PRs
 
-**Provider:** DevDocket — Azure DevOps
+**Provider:** DevDocket Azure DevOps
 **Condition:** You are the **creator** of an **active** pull request.
 
 A PR appears when **all** of the following are true:

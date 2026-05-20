@@ -27,7 +27,7 @@
             "type": "string",
             "default": "",
             "editPresentation": "multilineText",
-            "description": "Filter out repositories from DevDocket results. Uses gitignore-style patterns, one per line. Matching repositories are excluded; unmatched repositories are shown.\n\nExamples:\nmyorg/old-*        # filter out repos starting with old-\nmyorg/*            # filter out all repos in myorg\n!myorg/important   # except keep this one\n\nSupports wildcards (*), negation (!), and comments (#).\nLeave empty to show all repositories."
+            "markdownDescription": "Filter out repositories from DevDocket results. Uses gitignore-style patterns, one per line. Matching repositories are excluded; unmatched repositories are shown.\n\nExamples:\n\n```text\nmyorg/old-*        # filter out repos starting with old-\nmyorg/*            # filter out all repos in myorg\n!myorg/important   # except keep this one\n```\n\nSupports wildcards (`*`), negation (`!`), and comments (`#`). Leave empty to show all repositories."
           },
           "devDocketGithub.refreshIntervalSeconds": {
             "type": "number",

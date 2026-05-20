@@ -46,7 +46,7 @@
               ]
             },
             "default": [],
-            "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
+            "markdownDescription": "Commands to run after creating a worktree. Each entry specifies a `command` and optional `args`. Use `{path}` in `args` to reference the new worktree path.\n\nExample:\n\n```jsonc\n[\n  { \"command\": \"code.cmd\", \"args\": [\"{path}\"] }\n]\n```\n\nOn Windows, use the explicit `.cmd` extension for batch-file executables such as `code.cmd`."
           },
           "devdocket.startGitWork.promptForNames": {
             "type": "boolean",
