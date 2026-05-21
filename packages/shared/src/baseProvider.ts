@@ -244,6 +244,10 @@ export abstract class BaseProvider {
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
+  protected markRefreshSuccess(): void {
+    this._lastRefreshTime = Date.now();
+  }
+
   private handleBackgroundRefreshError(error: unknown): void {
     try {
       this.onBackgroundRefreshError(error);
@@ -369,7 +373,7 @@ export abstract class BaseProvider {
     this._isRefreshing = true;
     try {
       await this.doBackgroundRefresh();
-      this._lastRefreshTime = Date.now();
+      this.markRefreshSuccess();
     } finally {
       this._isRefreshing = false;
     }

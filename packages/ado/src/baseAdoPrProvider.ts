@@ -102,6 +102,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       }
 
       await this.fetchAndPublishPrs(session.accessToken, true, session.account.id, abortController.signal);
+      this.markRefreshSuccess();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`ADO ${this.logLabel} fetch aborted due to cancellation`);

@@ -64,6 +64,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       }
 
       await this.fetchAndPublish(session.accessToken, true, abortController.signal);
+      this.markRefreshSuccess();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`${this.label} fetch aborted due to cancellation`);

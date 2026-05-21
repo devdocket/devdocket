@@ -107,6 +107,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       }
 
       await this.fetchAndPublishWorkItems(session.accessToken, true, abortController.signal);
+      this.markRefreshSuccess();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         logger.debug('ADO work items fetch aborted due to cancellation');
