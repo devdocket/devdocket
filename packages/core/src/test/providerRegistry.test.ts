@@ -184,8 +184,12 @@ describe('ProviderRegistry', () => {
 
     registry.register(provider);
 
-    expect(() => registry.setWindowState(createMockWindowState(false))).not.toThrow();
-    expect(warnSpy).toHaveBeenCalledWith('Provider throws-window-state rejected window state updates', expect.any(Error));
+    try {
+      expect(() => registry.setWindowState(createMockWindowState(false))).not.toThrow();
+      expect(warnSpy).toHaveBeenCalledWith('Provider throws-window-state rejected window state updates', expect.any(Error));
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('logs and ignores async errors from window-state-aware providers', async () => {
