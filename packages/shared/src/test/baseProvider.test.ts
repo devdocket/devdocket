@@ -420,16 +420,16 @@ describe('BaseProvider', () => {
       provider.setWindowState(state);
 
       provider.startPeriodicRefresh(60);
-      await vi.advanceTimersByTimeAsync(120_000);
+      await vi.advanceTimersByTimeAsync(149_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(1_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
-      await vi.advanceTimersByTimeAsync(120_000);
+      await vi.advanceTimersByTimeAsync(149_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(1_000);
       expect(provider.backgroundRefreshCalls).toBe(2);
 
       provider.dispose();
