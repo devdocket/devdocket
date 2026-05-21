@@ -76,6 +76,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ): void {
     this.view = webviewView;
+    this.loadingSent = false;
 
     webviewView.webview.options = {
       enableScripts: true,

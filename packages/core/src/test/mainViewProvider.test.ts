@@ -956,6 +956,24 @@ describe('MainViewProvider', () => {
     expect(messages.some((m: any) => m.type === 'setLoading' && m.loading === false)).toBe(true);
   });
 
+  it('resends loading state when the sidebar webview is resolved again while providers are still loading', () => {
+    const registry = createProviderRegistry({});
+    registry.setLoading(true);
+    const provider = createProvider(
+      createMockWorkGraph([]),
+      registry,
+      createStateStore(),
+    );
+    const firstView = createMockWebviewView();
+    const secondView = createMockWebviewView();
+
+    provider.resolveWebviewView(firstView.view, {} as any, {} as any);
+    expect(firstView.webview.postMessage).toHaveBeenCalledWith({ type: 'setLoading', loading: true });
+
+    provider.resolveWebviewView(secondView.view, {} as any, {} as any);
+    expect(secondView.webview.postMessage).toHaveBeenCalledWith({ type: 'setLoading', loading: true });
+  });
+
   it('does not send loading state when providers are already loaded', async () => {
     vi.useFakeTimers();
     const provider = createProvider(
