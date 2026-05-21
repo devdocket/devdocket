@@ -51,6 +51,8 @@ export function App() {
   const visibleSources = filteredSources?.providers ?? sources;
   const myWorkVisibleCount = getTierItemCount(visibleTiers);
   const sourcesVisibleCount = getProviderItemCount(visibleSources);
+  const hasMyWorkItems = tiers.some(tier => tier.items.length > 0);
+  const showLoadingPlaceholder = isLoading && !hasMyWorkItems;
   const myWorkSearchBoxVisible = isSearchBoxEffectivelyVisible('myWork', searchBoxVisible, queries, appliedQueries);
   const sourcesSearchBoxVisible = isSearchBoxEffectivelyVisible('sources', searchBoxVisible, queries, appliedQueries);
 
@@ -280,7 +282,7 @@ export function App() {
             ) : null}
             {isMyWorkFilterActive && myWorkVisibleCount === 0 ? (
               <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
-            ) : !isMyWorkFilterActive && isLoading ? (
+            ) : !isMyWorkFilterActive && showLoadingPlaceholder ? (
               <div class="empty-state" role="status">Loading providers…</div>
             ) : !isMyWorkFilterActive && tiersLoaded && tiers.every(tier => tier.items.length === 0) ? (
               <EmptyMyWork />
