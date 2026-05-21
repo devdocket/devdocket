@@ -227,14 +227,14 @@ export abstract class BaseProvider {
    *  used by Microsoft's vscode-pull-request-github extension (2min focused,
    *  5min unfocused = 2.5x). */
   private static readonly UNFOCUSED_INTERVAL_MULTIPLIER = 2.5;
-  private static readonly REFRESH_TOLERANCE_MS = 1000;
 
   protected readonly _onDidDiscoverItems: EventEmitterLike<ProviderItem[]>;
   readonly onDidDiscoverItems: Event<ProviderItem[]>;
 
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private periodicRefreshIntervalMs: number | undefined;
   private _lastRefreshTime = 0;
+  private _lastRefreshAttemptTime = 0;
   protected _isRefreshing = false;
   private _disposed = false;
 
@@ -256,6 +256,38 @@ export abstract class BaseProvider {
     this.refreshInBackground().catch((error: unknown) => {
       this.handleBackgroundRefreshError(error);
     });
+  }
+
+  private getRequiredRefreshIntervalMs(): number | undefined {
+    const focusedIntervalMs = this.periodicRefreshIntervalMs;
+    if (!focusedIntervalMs) {
+      return undefined;
+    }
+    return this._windowState?.isFocused === false
+      ? focusedIntervalMs * BaseProvider.UNFOCUSED_INTERVAL_MULTIPLIER
+      : focusedIntervalMs;
+  }
+
+  private scheduleNextPeriodicRefresh(): void {
+    if (this._disposed) {
+      return;
+    }
+    const requiredIntervalMs = this.getRequiredRefreshIntervalMs();
+    if (!requiredIntervalMs) {
+      return;
+    }
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    const elapsedMs = Date.now() - this._lastRefreshAttemptTime;
+    const delayMs = Math.max(requiredIntervalMs - elapsedMs, 0);
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      if (this._disposed || this._isRefreshing) {
+        return;
+      }
+      this.triggerPeriodicRefresh();
+    }, delayMs);
   }
 
   private refreshOnFocusIfStale(): void {
@@ -289,7 +321,13 @@ export abstract class BaseProvider {
       if (focused) {
         this.refreshOnFocusIfStale();
       }
+      if (!this._isRefreshing) {
+        this.scheduleNextPeriodicRefresh();
+      }
     });
+    if (!this._isRefreshing) {
+      this.scheduleNextPeriodicRefresh();
+    }
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
@@ -302,23 +340,16 @@ export abstract class BaseProvider {
       return;
     }
     const clampedInterval = Math.max(interval, 60);
-    const focusedIntervalMs = clampedInterval * 1000;
-    this.periodicRefreshIntervalMs = focusedIntervalMs;
-    this._lastRefreshTime = Date.now();
-    this.refreshTimer = setInterval(() => {
-      const requiredIntervalMs = this._windowState?.isFocused === false
-        ? focusedIntervalMs * BaseProvider.UNFOCUSED_INTERVAL_MULTIPLIER
-        : focusedIntervalMs;
-      if (Date.now() - this._lastRefreshTime < requiredIntervalMs - BaseProvider.REFRESH_TOLERANCE_MS) {
-        return;
-      }
-      this.triggerPeriodicRefresh();
-    }, focusedIntervalMs);
+    const startTime = Date.now();
+    this.periodicRefreshIntervalMs = clampedInterval * 1000;
+    this._lastRefreshTime = startTime;
+    this._lastRefreshAttemptTime = startTime;
+    this.scheduleNextPeriodicRefresh();
   }
 
   stopPeriodicRefresh(): void {
     if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
+      clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
     }
     this.periodicRefreshIntervalMs = undefined;
@@ -334,7 +365,9 @@ export abstract class BaseProvider {
       await this.doBackgroundRefresh();
       this._lastRefreshTime = Date.now();
     } finally {
+      this._lastRefreshAttemptTime = Date.now();
       this._isRefreshing = false;
+      this.scheduleNextPeriodicRefresh();
     }
   }
 
