@@ -572,5 +572,25 @@ describe('BaseProvider', () => {
 
       provider.dispose();
     });
+
+    it('triggers an overdue refresh when replacing unfocused state with a focused one', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const first = createMockWindowState(false);
+      const second = createMockWindowState(true);
+
+      provider.setWindowState(first.state);
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      provider.setWindowState(second.state);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
   });
 });

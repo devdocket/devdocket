@@ -272,6 +272,7 @@ export abstract class BaseProvider {
         this.triggerOverdueRefresh();
       }
     });
+    this.triggerOverdueRefresh();
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
