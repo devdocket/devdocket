@@ -203,10 +203,14 @@ describe('ProviderRegistry', () => {
 
     registry.register(provider);
 
-    expect(() => registry.setWindowState(createMockWindowState(false))).not.toThrow();
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    try {
+      expect(() => registry.setWindowState(createMockWindowState(false))).not.toThrow();
+      await new Promise((resolve) => setTimeout(resolve, 0));
 
-    expect(warnSpy).toHaveBeenCalledWith('Provider async-window-state rejected window state updates', expect.any(Error));
+      expect(warnSpy).toHaveBeenCalledWith('Provider async-window-state rejected window state updates', expect.any(Error));
+    } finally {
+      warnSpy.mockRestore();
+    }
   });
 
   it('returns undefined from getProvider for unknown id', () => {
