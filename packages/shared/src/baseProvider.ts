@@ -253,9 +253,16 @@ export abstract class BaseProvider {
   }
 
   private triggerPeriodicRefresh(): void {
-    this.refreshInBackground().catch((error: unknown) => {
-      this.handleBackgroundRefreshError(error);
-    });
+    this._lastRefreshAttemptTime = Date.now();
+    this.refreshInBackground()
+      .catch((error: unknown) => {
+        this.handleBackgroundRefreshError(error);
+      })
+      .finally(() => {
+        if (!this._isRefreshing) {
+          this.scheduleNextPeriodicRefresh();
+        }
+      });
   }
 
   private getRequiredRefreshIntervalMs(): number | undefined {
