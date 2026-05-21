@@ -87,13 +87,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       void this.handleMessage(message);
     });
 
-    // Send loading state if providers are registered but haven't completed
-    // their initial refresh yet. This shows a "Loading providers…" message
-    // instead of the empty/onboarding state while data is being fetched.
-    if (this.providerRegistry.loading) {
-      void webviewView.webview.postMessage({ type: 'setLoading', loading: true });
-      this.loadingSent = true;
-    }
+    // Sync loading state immediately so the sidebar shows a loading
+    // placeholder instead of the empty/onboarding state while providers are
+    // still completing their initial refresh.
+    this.syncLoadingState();
 
     this.scheduleRefresh('discovered');
   }
@@ -122,16 +119,26 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'toggleSearch' });
   }
 
+  private syncLoadingState(): void {
+    if (!this.view) {
+      return;
+    }
+
+    const loading = this.providerRegistry.loading;
+    if (loading === this.loadingSent) {
+      return;
+    }
+
+    void this.view.webview.postMessage({ type: 'setLoading', loading });
+    this.loadingSent = loading;
+  }
+
   private refresh(reasons: ReadonlySet<RefreshReason>): void {
     if (!this.view) {
       return;
     }
 
-    // Clear loading indicator once providers have data
-    if (this.loadingSent && (reasons.has('discovered') || reasons.has('health'))) {
-      void this.view.webview.postMessage({ type: 'setLoading', loading: false });
-      this.loadingSent = false;
-    }
+    this.syncLoadingState();
 
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
