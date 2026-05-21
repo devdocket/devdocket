@@ -259,9 +259,7 @@ export abstract class BaseProvider {
         this.handleBackgroundRefreshError(error);
       })
       .finally(() => {
-        if (!this._isRefreshing) {
-          this.scheduleNextPeriodicRefresh();
-        }
+        this.scheduleNextPeriodicRefresh();
       });
   }
 
@@ -290,7 +288,11 @@ export abstract class BaseProvider {
     const delayMs = Math.max(requiredIntervalMs - elapsedMs, 0);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      if (this._disposed || this._isRefreshing) {
+      if (this._disposed) {
+        return;
+      }
+      if (this._isRefreshing) {
+        this.scheduleNextPeriodicRefresh();
         return;
       }
       this.triggerPeriodicRefresh();
@@ -328,13 +330,9 @@ export abstract class BaseProvider {
       if (focused) {
         this.refreshOnFocusIfStale();
       }
-      if (!this._isRefreshing) {
-        this.scheduleNextPeriodicRefresh();
-      }
-    });
-    if (!this._isRefreshing) {
       this.scheduleNextPeriodicRefresh();
-    }
+    });
+    this.scheduleNextPeriodicRefresh();
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
@@ -372,9 +370,7 @@ export abstract class BaseProvider {
       await this.doBackgroundRefresh();
       this._lastRefreshTime = Date.now();
     } finally {
-      this._lastRefreshAttemptTime = Date.now();
       this._isRefreshing = false;
-      this.scheduleNextPeriodicRefresh();
     }
   }
 
