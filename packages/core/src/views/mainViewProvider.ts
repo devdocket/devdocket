@@ -535,6 +535,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'openWalkthrough':
         await vscode.commands.executeCommand('devdocket.openWalkthrough');
         break;
+      case 'browseProviderExtensions':
+        await vscode.commands.executeCommand('devdocket.browseProviderExtensions');
+        break;
       case 'clearHistory':
         await vscode.commands.executeCommand('devdocket.clearHistory');
         break;

@@ -299,7 +299,7 @@ export class ProviderRegistry {
 
   /**
    * Ask each registered provider to resolve a URL.
-   * Returns the first successful result, or `undefined` if no provider recognises the URL.
+   * Returns the first successful result, or `undefined` if no provider recognizes the URL.
    */
   async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
     for (const provider of this.providers.values()) {
@@ -309,7 +309,7 @@ export class ProviderRegistry {
         if (result) { return { ...result, providerId: provider.id }; }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { throw error; }
-        // Provider recognised the URL but failed (e.g. 404, auth error) — surface to user
+        // Provider recognized the URL but failed (e.g. 404, auth error) — surface to user
         logger.warn(`Provider ${provider.id} failed to resolve URL`, error);
         throw error;
       }

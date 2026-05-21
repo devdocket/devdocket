@@ -187,7 +187,7 @@ export interface ProviderBadge {
 }
 
 /**
- * Result returned by a provider's `resolveUrl` method when it recognises a URL.
+ * Result returned by a provider's `resolveUrl` method when it recognizes a URL.
  * Contains enough detail for the core extension to create a work item.
  */
 export interface ResolvedItem {
