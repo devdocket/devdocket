@@ -214,6 +214,16 @@ const workspace = {
   }),
   onDidChangeConfiguration: vi.fn((listener: Function) => _onDidChangeConfigurationEmitter.event(listener)),
   _onDidChangeConfigurationEmitter,
+  createFileSystemWatcher: vi.fn(() => ({
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidCreate: vi.fn(() => ({ dispose: vi.fn() })),
+    onDidDelete: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
+  })),
+  fs: {
+    readFile: vi.fn().mockRejectedValue(new Error('not found')),
+    writeFile: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 class MockThemeColor {
@@ -246,6 +256,10 @@ const authentication = {
   getSession: vi.fn().mockResolvedValue(undefined),
 };
 
+class MockRelativePattern {
+  constructor(public base: any, public pattern: string) {}
+}
+
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
@@ -257,6 +271,7 @@ export {
   MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   MockStatusBarItem as StatusBarItem,
+  MockRelativePattern as RelativePattern,
   MockMemento,
   MockMemento as Memento,
   TreeItemCollapsibleState,
