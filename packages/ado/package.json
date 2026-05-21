@@ -41,7 +41,8 @@
     "devdocket.devdocket"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onStartupFinished",
+    "onView:devdocket.main"
   ],
   "main": "./dist/extension.js",
   "contributes": {
