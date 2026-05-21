@@ -127,12 +127,14 @@ function createProviderRegistry(
   health: Record<string, { status: string }> = {},
 ) {
   const discovered = new Map<string, TestProviderItem[]>(Object.entries(itemsByProvider));
+  let loading = false;
   return {
     getAllProviderItems: vi.fn(() => discovered),
     getProviderItems: vi.fn((providerId: string) => discovered.get(providerId) ?? []),
     getProviderLabel: vi.fn((providerId: string) => labels[providerId] ?? providerId),
     getProviderHealth: vi.fn((providerId: string) => health[providerId] ?? { status: 'healthy' }),
-    get loading() { return false; },
+    get loading() { return loading; },
+    setLoading(value: boolean) { loading = value; },
     get hasProviders() { return discovered.size > 0; },
   };
 }
@@ -925,11 +927,10 @@ describe('MainViewProvider', () => {
     expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
   });
 
-  it('sends loading state when providers are still loading on sidebar open', async () => {
+  it('keeps loading state active until providers finish their initial refresh', async () => {
     vi.useFakeTimers();
     const registry = createProviderRegistry({});
-    // Simulate providers still loading
-    Object.defineProperty(registry, 'loading', { get: () => true });
+    registry.setLoading(true);
     const provider = createProvider(
       createMockWorkGraph([]),
       registry,
@@ -939,16 +940,20 @@ describe('MainViewProvider', () => {
 
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
 
-    // setLoading(true) should be sent immediately (not debounced)
     expect(mockView.webview.postMessage).toHaveBeenCalledWith({ type: 'setLoading', loading: true });
 
-    // After debounce fires, setLoading(false) should be sent (providers are "loaded" by the time refresh runs)
-    Object.defineProperty(registry, 'loading', { get: () => false });
     await vi.advanceTimersByTimeAsync(50);
 
-    const messages = mockView.webview.postMessage.mock.calls.map((c: any) => c[0]);
-    expect(messages.some((m: any) => m.type === 'setLoading' && m.loading === false)).toBe(true);
+    let messages = mockView.webview.postMessage.mock.calls.map((c: any) => c[0]);
+    expect(messages.some((m: any) => m.type === 'setLoading' && m.loading === false)).toBe(false);
     expect(messages.some((m: any) => m.type === 'updateItems')).toBe(true);
+
+    registry.setLoading(false);
+    provider.scheduleRefresh('discovered');
+    await vi.advanceTimersByTimeAsync(50);
+
+    messages = mockView.webview.postMessage.mock.calls.map((c: any) => c[0]);
+    expect(messages.some((m: any) => m.type === 'setLoading' && m.loading === false)).toBe(true);
   });
 
   it('does not send loading state when providers are already loaded', async () => {
