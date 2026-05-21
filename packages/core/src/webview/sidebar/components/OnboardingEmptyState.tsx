@@ -21,6 +21,13 @@ export function OnboardingEmptyState({ description, titleId }: OnboardingEmptySt
         <button
           type="button"
           class="onboarding-empty-state-button onboarding-empty-state-button-secondary"
+          onClick={() => postMessage({ type: 'browseProviderExtensions' })}
+        >
+          Browse Provider Extensions
+        </button>
+        <button
+          type="button"
+          class="onboarding-empty-state-button onboarding-empty-state-button-secondary"
           onClick={() => postMessage({ type: 'openWalkthrough' })}
         >
           Open Walkthrough

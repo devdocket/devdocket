@@ -232,6 +232,7 @@ describe('registerCommands', () => {
       'devdocket.addActivity',
       'devdocket.watchUrl',
       'devdocket.showWatchesQuickPick',
+      'devdocket.browseProviderExtensions',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -302,6 +303,19 @@ describe('registerCommands', () => {
       await invoke('devdocket.showWatchesQuickPick');
 
       expect(watchPanelProvider.open).toHaveBeenCalled();
+    });
+  });
+
+  // ── browseProviderExtensions ─────────────────────────────────────
+
+  describe('devdocket.browseProviderExtensions', () => {
+    it('opens the Extensions view filtered to the devdocket publisher', async () => {
+      await invoke('devdocket.browseProviderExtensions');
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'workbench.extensions.search',
+        '@publisher:"devdocket"',
+      );
     });
   });
 
@@ -397,14 +411,28 @@ describe('registerCommands', () => {
       );
     });
 
-    it('shows error when no provider recognises the URL', async () => {
+    it('shows error when no provider recognizes the URL', async () => {
       providerRegistry.resolveUrl.mockResolvedValue(undefined);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://invalid.com/something');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue(undefined);
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: No provider recognised this URL',
+        'DevDocket: No provider recognized this URL',
+        'Browse Provider Extensions',
+      );
+    });
+
+    it('opens the Extensions view filtered by publisher when user clicks Browse Provider Extensions', async () => {
+      providerRegistry.resolveUrl.mockResolvedValue(undefined);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://invalid.com/something');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Browse Provider Extensions');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'workbench.extensions.search',
+        '@publisher:"devdocket"',
       );
     });
 
