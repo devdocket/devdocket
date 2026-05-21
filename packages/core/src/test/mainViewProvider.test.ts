@@ -960,6 +960,7 @@ describe('MainViewProvider', () => {
   });
 
   it('resends loading state when the sidebar webview is resolved again while providers are still loading', () => {
+    vi.useFakeTimers();
     const registry = createProviderRegistry({});
     registry.setLoading(true);
     const provider = createProvider(
@@ -975,6 +976,7 @@ describe('MainViewProvider', () => {
 
     provider.resolveWebviewView(secondView.view, {} as any, {} as any);
     expect(secondView.webview.postMessage).toHaveBeenCalledWith({ type: 'setLoading', loading: true });
+    provider.dispose();
   });
 
   it('retries refresh when providers have no items and none have refreshed successfully yet', () => {
