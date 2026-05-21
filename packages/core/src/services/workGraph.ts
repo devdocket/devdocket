@@ -16,6 +16,11 @@ export const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemS
   [WorkItemState.Archived, new Set([WorkItemState.New])],
 ]);
 
+type WorkGraphChangeSource = 'local' | 'externalReload';
+interface WorkGraphChangeEvent {
+  source: WorkGraphChangeSource;
+}
+
 /**
  * In-memory graph of {@link WorkItem}s backed by a persistent {@link ITaskStore}.
  * Provides CRUD operations, state transitions, and ordering.
@@ -29,7 +34,7 @@ export class WorkGraph {
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private currentMutation: Promise<void> = Promise.resolve();
-  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  private readonly _onDidChange = new vscode.EventEmitter<WorkGraphChangeEvent>();
   private readonly _onDidTransitionState = new vscode.EventEmitter<{ itemId: string; item: WorkItem; oldState: string; newState: string }>();
   /**
    * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
@@ -42,6 +47,10 @@ export class WorkGraph {
   readonly onDidTransitionState = this._onDidTransitionState.event;
 
   constructor(private readonly store: ITaskStore) {}
+
+  private emitDidChange(source: WorkGraphChangeSource = 'local'): void {
+    this._onDidChange.fire({ source });
+  }
 
   private async withLock<T>(work: () => Promise<T>): Promise<T> {
     const prev = this.currentMutation;
@@ -227,7 +236,7 @@ export class WorkGraph {
       }
     }
     this.invalidateStateCache();
-    this._onDidChange.fire();
+    this.emitDidChange();
     logger.info(`Created work item: ${item.id}`);
     return item;
   }
@@ -272,7 +281,7 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
-    this._onDidChange.fire();
+    this.emitDidChange();
     logger.info(`Updated work item: ${id}`);
   }
 
@@ -319,7 +328,7 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
-    this._onDidChange.fire();
+    this.emitDidChange();
     this._onDidTransitionState.fire({ itemId: id, item: updated, oldState: item.state, newState });
     logger.info(`Transitioned work item ${id} to ${newState}`);
   }
@@ -360,13 +369,13 @@ export class WorkGraph {
 
     const index = siblings.findIndex((s) => s.id === id);
     if (index === -1) {
-      if (didMutate) { this._onDidChange.fire(); }
+      if (didMutate) { this.emitDidChange(); }
       return;
     }
 
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
     if (swapIndex < 0 || swapIndex >= siblings.length) {
-      if (didMutate) { this._onDidChange.fire(); }
+      if (didMutate) { this.emitDidChange(); }
       return;
     }
 
@@ -380,7 +389,7 @@ export class WorkGraph {
     this.items.set(updatedItem.id, updatedItem);
     this.items.set(updatedSwap.id, updatedSwap);
     this.invalidateStateCache();
-    this._onDidChange.fire();
+    this.emitDidChange();
   }
 
   /** Move a work item to the first position among siblings in the same state. */
@@ -417,7 +426,7 @@ export class WorkGraph {
         this.items.set(updated.id, updated);
       }
       this.invalidateStateCache();
-      this._onDidChange.fire();
+      this.emitDidChange();
     }
   }
 
@@ -466,7 +475,7 @@ export class WorkGraph {
         this.items.set(updated.id, updated);
       }
       this.invalidateStateCache();
-      this._onDidChange.fire();
+      this.emitDidChange();
     }
   }
 
@@ -505,7 +514,7 @@ export class WorkGraph {
         this.items.set(updated.id, updated);
       }
       this.invalidateStateCache();
-      this._onDidChange.fire();
+      this.emitDidChange();
     }
   }
 
@@ -545,7 +554,7 @@ export class WorkGraph {
       }
     } finally {
       if (deleted > 0) {
-        this._onDidChange.fire();
+        this.emitDidChange();
       }
     }
 
@@ -598,7 +607,7 @@ export class WorkGraph {
     this.items.delete(id);
     this.invalidateStateCache();
     if (!options?.silent) {
-      this._onDidChange.fire();
+      this.emitDidChange();
     }
     logger.info(`Deleted work item: ${id}`);
   }
@@ -633,7 +642,7 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
-    this._onDidChange.fire();
+    this.emitDidChange();
   }
 
   /** Append an entry to the log, trimming the oldest entries if the cap is exceeded. */
@@ -658,7 +667,7 @@ export class WorkGraph {
     this.store.invalidateCache?.();
     try {
       await this.load();
-      this._onDidChange.fire();
+      this.emitDidChange('externalReload');
     } catch (err) {
       logger.error('WorkGraph: failed to reload after cache invalidation', err);
     }

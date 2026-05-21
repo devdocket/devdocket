@@ -486,23 +486,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   // Cross-window state propagation for work-item and inbox/read-state stores.
   const stateVersion = new StateVersionService(context.globalStorageUri);
-  let suppressStateVersionBump = false;
-  const bumpStateVersion = () => suppressStateVersionBump ? Promise.resolve() : stateVersion.bump();
-  wg.onDidChange(safeHandler('sv:workGraph', () => bumpStateVersion()));
+  const bumpStateVersion = () => stateVersion.bump();
+  wg.onDidChange(safeHandler('sv:workGraph', (event) => event.source === 'externalReload' ? Promise.resolve() : bumpStateVersion()));
   ss.onDidChange(safeHandler('sv:stateStore', () => bumpStateVersion()));
   readStateStore.onDidChange(safeHandler('sv:readState', () => bumpStateVersion()));
   stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
     logger.debug('External state change detected — invalidating caches');
-    suppressStateVersionBump = true;
-    try {
-      await wg.invalidateAndReload();
-      ss.invalidateCache();
-      await ss.load();
-      readStateStore.invalidateCache();
-      await readStateStore.load();
-    } finally {
-      suppressStateVersionBump = false;
-    }
+    await wg.invalidateAndReload();
+    ss.invalidateCache();
+    await ss.load();
+    readStateStore.invalidateCache();
+    await readStateStore.load();
   }));
 
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);

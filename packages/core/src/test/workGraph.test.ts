@@ -161,6 +161,15 @@ describe('WorkGraph', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it('tags invalidateAndReload change events as external reloads', async () => {
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.invalidateAndReload();
+
+    expect(listener).toHaveBeenCalledWith({ source: 'externalReload' });
+  });
+
   it('sets notes on create', async () => {
     const item = await graph.createItem({
       title: 'Detailed',
