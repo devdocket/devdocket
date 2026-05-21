@@ -978,6 +978,7 @@ describe('MainViewProvider', () => {
   });
 
   it('retries refresh when providers have no items and none have refreshed successfully yet', () => {
+    vi.useFakeTimers();
     const registry = createProviderRegistry({ github: [] });
     const provider = createProvider(
       createMockWorkGraph([]),
@@ -989,9 +990,11 @@ describe('MainViewProvider', () => {
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
 
     expect(registry.refreshAll).toHaveBeenCalledTimes(1);
+    provider.dispose();
   });
 
   it('does not retry refresh when providers previously refreshed successfully with no items', () => {
+    vi.useFakeTimers();
     const registry = createProviderRegistry({ github: [] }, {}, {
       github: { status: 'healthy', lastRefreshTime: new Date('2024-01-02T03:04:05Z') },
     });
@@ -1005,6 +1008,7 @@ describe('MainViewProvider', () => {
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
 
     expect(registry.refreshAll).not.toHaveBeenCalled();
+    provider.dispose();
   });
 
   it('does not send loading state when providers are already loaded', async () => {
