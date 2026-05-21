@@ -1028,5 +1028,6 @@ describe('MainViewProvider', () => {
     expect(mockView.webview.postMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ type: 'setLoading' }),
     );
+    provider.dispose();
   });
 });
