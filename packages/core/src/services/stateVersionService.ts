@@ -4,7 +4,7 @@ import { logger } from './logger';
 /**
  * Cross-window change propagation via a version file in globalStorageUri.
  *
- * On every user-intent state mutation (work items, inbox state, watches, etc.),
+ * On every user-intent mutation of the work-item and inbox/read-state stores,
  * the caller bumps the version. Other VS Code windows detect the file change
  * via a FileSystemWatcher and fire `onDidExternalStateChange` so consumers can
  * invalidate their caches and re-render.

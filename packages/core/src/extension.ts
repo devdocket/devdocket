@@ -484,20 +484,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
-  // Cross-window state propagation: bump version on mutations, invalidate on external changes
+  // Cross-window state propagation for work-item and inbox/read-state stores.
   const stateVersion = new StateVersionService(context.globalStorageUri);
-  wg.onDidChange(safeHandler('sv:workGraph', () => stateVersion.bump()));
-  ss.onDidChange(safeHandler('sv:stateStore', () => stateVersion.bump()));
-  readStateStore.onDidChange(safeHandler('sv:readState', () => stateVersion.bump()));
-  ws.onDidChangeWatchedRuns(safeHandler('sv:watchedRuns', () => stateVersion.bump()));
-  ws.onDidChangePRWatches(safeHandler('sv:watchedPRs', () => stateVersion.bump()));
+  let suppressStateVersionBump = false;
+  const bumpStateVersion = () => suppressStateVersionBump ? Promise.resolve() : stateVersion.bump();
+  wg.onDidChange(safeHandler('sv:workGraph', () => bumpStateVersion()));
+  ss.onDidChange(safeHandler('sv:stateStore', () => bumpStateVersion()));
+  readStateStore.onDidChange(safeHandler('sv:readState', () => bumpStateVersion()));
   stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
     logger.debug('External state change detected — invalidating caches');
-    wg.invalidateAndReload();
-    ss.invalidateCache();
-    await ss.load();
-    readStateStore.invalidateCache();
-    await readStateStore.load();
+    suppressStateVersionBump = true;
+    try {
+      await wg.invalidateAndReload();
+      ss.invalidateCache();
+      await ss.load();
+      readStateStore.invalidateCache();
+      await readStateStore.load();
+    } finally {
+      suppressStateVersionBump = false;
+    }
   }));
 
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);

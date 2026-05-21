@@ -654,13 +654,14 @@ export class WorkGraph {
    * Used for cross-window change propagation — when another window writes
    * new data, this window invalidates its stale cache and re-reads.
    */
-  invalidateAndReload(): void {
+  async invalidateAndReload(): Promise<void> {
     this.store.invalidateCache?.();
-    void this.load().then(() => {
+    try {
+      await this.load();
       this._onDidChange.fire();
-    }).catch(err => {
+    } catch (err) {
       logger.error('WorkGraph: failed to reload after cache invalidation', err);
-    });
+    }
   }
 }
 

@@ -103,6 +103,9 @@ export class JsonTaskStore implements ITaskStore {
    * Items deleted locally (in loadedIds but not in cache) stay deleted.
    */
   private async persist(): Promise<void> {
+    if (this.cache === null) {
+      await this.loadAll();
+    }
     const local = this.getCache();
     const remoteItems = this.parseFromGlobalState();
     const merged = new Map(local);
