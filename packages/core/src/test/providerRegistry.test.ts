@@ -173,6 +173,21 @@ describe('ProviderRegistry', () => {
     expect(() => registry.register(provider)).not.toThrow();
   });
 
+  it('logs and ignores errors from window-state-aware providers', () => {
+    const provider = {
+      ...createMockProvider('throws-window-state'),
+      setWindowState: vi.fn(() => {
+        throw new Error('window state failed');
+      }),
+    };
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    registry.register(provider);
+
+    expect(() => registry.setWindowState(createMockWindowState(false))).not.toThrow();
+    expect(warnSpy).toHaveBeenCalledWith('Provider throws-window-state rejected window state updates', expect.any(Error));
+  });
+
   it('returns undefined from getProvider for unknown id', () => {
     expect(registry.getProvider('nonexistent')).toBeUndefined();
   });

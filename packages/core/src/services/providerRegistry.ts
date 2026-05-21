@@ -130,7 +130,11 @@ export class ProviderRegistry {
 
   private applyWindowState(provider: DevDocketProvider): void {
     if (this._windowState && isWindowStateAwareProvider(provider)) {
-      provider.setWindowState(this._windowState);
+      try {
+        provider.setWindowState(this._windowState);
+      } catch (error) {
+        logger.warn(`Provider ${provider.id} rejected window state updates`, error);
+      }
     }
   }
 
