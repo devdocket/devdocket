@@ -113,7 +113,6 @@ export function App() {
             announce(buildLiveAnnouncement(previousTiers, nextTiers));
           }
           previousTiersRef.current = nextTiers;
-          setIsLoading(false);
           setTiers(nextTiers);
           setTiersLoaded(true);
           break;
