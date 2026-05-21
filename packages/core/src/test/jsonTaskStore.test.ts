@@ -351,6 +351,20 @@ describe('JsonTaskStore', () => {
       expect(persisted[0].id).toBe('new');
     });
 
+    it('honors remote deletions for untouched items', async () => {
+      await store.save(makeItem({ id: 'shared', title: 'Shared', updatedAt: 1000 }));
+
+      // Another window deletes the item entirely.
+      await memento.update('devdocket.workitems', []);
+
+      // This window only changes an unrelated item, so the deleted item should stay deleted.
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 2000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].id).toBe('other');
+    });
+
     it('invalidateCache forces re-read on next access', async () => {
       await store.save(makeItem({ id: 'a', title: 'Original' }));
 

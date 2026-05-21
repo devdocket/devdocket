@@ -72,8 +72,14 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
 export class JsonTaskStore implements ITaskStore {
   private readonly globalState: Memento;
   private cache: Map<string, WorkItem> | null = null;
-  /** IDs known at load time — used to distinguish "deleted locally" from "added remotely". */
-  private loadedIds = new Set<string>();
+  /** IDs modified locally since the last successful persist. */
+  private dirtyIds = new Set<string>();
+  /** IDs deleted locally since the last successful persist. */
+  private removedIds = new Set<string>();
+  /** Last persisted or loaded updatedAt value for each known item. */
+  private syncedUpdatedAt = new Map<string, number>();
+  /** Local delete tombstones used to suppress stale reintroductions from other windows. */
+  private deletedUpdatedAt = new Map<string, number>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -85,7 +91,9 @@ export class JsonTaskStore implements ITaskStore {
     }
     const items = this.parseFromGlobalState();
     this.cache = new Map(items.map(item => [item.id, item]));
-    this.loadedIds = new Set(this.cache.keys());
+    this.syncedUpdatedAt = new Map(items.map(item => [item.id, item.updatedAt]));
+    this.dirtyIds.clear();
+    this.removedIds.clear();
     return items;
   }
 
@@ -97,10 +105,10 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   /**
-   * Re-reads from globalState, merges remote items with the local cache,
-   * and writes the merged result. Items modified locally (by `updatedAt`)
-   * take precedence. Items added remotely (not in loadedIds) are preserved.
-   * Items deleted locally (in loadedIds but not in cache) stay deleted.
+   * Re-reads from globalState, adopts untouched remote state, overlays local
+   * mutations, and writes the merged result. Local edits use `updatedAt`
+   * last-writer-wins for shared items, locally removed items stay deleted, and
+   * untouched local items disappear when another window deletes them remotely.
    */
   private async persist(): Promise<void> {
     if (this.cache === null) {
@@ -108,29 +116,59 @@ export class JsonTaskStore implements ITaskStore {
     }
     const local = this.getCache();
     const remoteItems = this.parseFromGlobalState();
-    const merged = new Map(local);
+    const remoteById = new Map(remoteItems.map(item => [item.id, item]));
+    const merged = new Map<string, WorkItem>();
 
     for (const remote of remoteItems) {
-      if (merged.has(remote.id)) {
-        // Both windows have this item — keep the one with the later updatedAt
-        const localItem = merged.get(remote.id)!;
-        if (remote.updatedAt > localItem.updatedAt) {
-          merged.set(remote.id, remote);
-        }
-      } else if (!this.loadedIds.has(remote.id)) {
-        // Remote has an item we never saw — added by another window
-        merged.set(remote.id, remote);
+      const deletedAt = this.deletedUpdatedAt.get(remote.id);
+      if (deletedAt !== undefined && remote.updatedAt <= deletedAt) {
+        continue;
       }
-      // else: item was in loadedIds but deleted from local cache — locally deleted
+      merged.set(remote.id, remote);
     }
 
-    this.cache = merged;
-    // Track newly discovered remote IDs so future persists can distinguish
-    // "deleted locally" from "never seen"
-    for (const id of merged.keys()) {
-      this.loadedIds.add(id);
+    for (const [id, localItem] of local) {
+      if (this.dirtyIds.has(id) || this.removedIds.has(id)) {
+        continue;
+      }
+
+      const remoteItem = remoteById.get(id);
+      if (remoteItem) {
+        continue;
+      }
+
+      const syncedUpdatedAt = this.syncedUpdatedAt.get(id);
+      if (syncedUpdatedAt !== undefined && localItem.updatedAt !== syncedUpdatedAt) {
+        merged.set(id, localItem);
+      }
     }
+
+    for (const id of this.removedIds) {
+      merged.delete(id);
+    }
+
+    for (const id of this.dirtyIds) {
+      const localItem = local.get(id);
+      if (!localItem) {
+        continue;
+      }
+      const remoteItem = merged.get(id);
+      if (!remoteItem || localItem.updatedAt >= remoteItem.updatedAt) {
+        merged.set(id, localItem);
+      }
+    }
+
     await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+    this.cache = merged;
+    this.syncedUpdatedAt = new Map(Array.from(merged.values(), item => [item.id, item.updatedAt]));
+    for (const [id, deletedAt] of Array.from(this.deletedUpdatedAt.entries())) {
+      const mergedItem = merged.get(id);
+      if (mergedItem && mergedItem.updatedAt > deletedAt) {
+        this.deletedUpdatedAt.delete(id);
+      }
+    }
+    this.dirtyIds.clear();
+    this.removedIds.clear();
   }
 
   /** Parse and validate work items from globalState. */
@@ -154,6 +192,9 @@ export class JsonTaskStore implements ITaskStore {
   async save(item: WorkItem): Promise<void> {
     if (this.cache === null) { await this.loadAll(); }
     this.getCache().set(item.id, item);
+    this.dirtyIds.add(item.id);
+    this.removedIds.delete(item.id);
+    this.deletedUpdatedAt.delete(item.id);
     await this.persist();
   }
 
@@ -161,13 +202,22 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache === null) { await this.loadAll(); }
     for (const item of items) {
       this.getCache().set(item.id, item);
+      this.dirtyIds.add(item.id);
+      this.removedIds.delete(item.id);
+      this.deletedUpdatedAt.delete(item.id);
     }
     await this.persist();
   }
 
   async delete(id: string): Promise<void> {
     if (this.cache === null) { await this.loadAll(); }
+    const existing = this.getCache().get(id);
+    if (existing) {
+      this.deletedUpdatedAt.set(id, existing.updatedAt);
+    }
     this.getCache().delete(id);
+    this.removedIds.add(id);
+    this.dirtyIds.delete(id);
     await this.persist();
   }
 
@@ -177,6 +227,9 @@ export class JsonTaskStore implements ITaskStore {
    */
   invalidateCache(): void {
     this.cache = null;
-    this.loadedIds.clear();
+    this.syncedUpdatedAt.clear();
+    this.deletedUpdatedAt.clear();
+    this.dirtyIds.clear();
+    this.removedIds.clear();
   }
 }
