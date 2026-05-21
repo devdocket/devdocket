@@ -121,9 +121,9 @@ export class ProviderRegistry {
   ) {}
 
   /**
-   * Sets the window state provider for focus-aware refresh gating.
+   * Sets the window state provider for focus-aware refresh throttling.
    * Providers that extend BaseProvider (and expose setWindowState) will
-   * skip background refreshes when the window is unfocused.
+   * slow background refreshes when the window is unfocused.
    */
   setWindowState(windowState: WindowStateProvider): void {
     this._windowState = windowState;
