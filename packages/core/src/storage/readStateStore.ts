@@ -44,12 +44,12 @@ export class ReadStateStore {
         }
       }
     }
-    // Update local state to match merged
+    await this.globalState.update(STORAGE_KEY, [...merged]);
     this.items.clear();
     for (const key of merged) {
       this.items.add(key);
     }
-    await this.globalState.update(STORAGE_KEY, [...merged]);
+    this.removedSinceLoad.clear();
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */
@@ -161,6 +161,7 @@ export class ReadStateStore {
       }
       logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
+    this.removedSinceLoad.clear();
     this.loaded = true;
   }
 

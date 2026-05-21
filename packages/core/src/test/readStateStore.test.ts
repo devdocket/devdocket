@@ -174,6 +174,26 @@ describe('ReadStateStore', () => {
       windowB.dispose();
     });
 
+    it('allows remote re-additions after a successful persist', async () => {
+      await memento.update('devdocket.read-state', ['gh::shared']);
+
+      const windowA = new ReadStateStore(memento);
+      await windowA.load();
+
+      await windowA.deleteMany(['gh::shared']);
+
+      const windowB = new ReadStateStore(memento);
+      await windowB.load();
+      await windowB.add('gh::shared');
+
+      await windowA.add('gh::local');
+
+      expect(memento.get<string[]>('devdocket.read-state')?.sort()).toEqual(['gh::local', 'gh::shared']);
+
+      windowA.dispose();
+      windowB.dispose();
+    });
+
     it('invalidateCache forces a re-read on next load', async () => {
       await store.add('gh::issue-1');
 
