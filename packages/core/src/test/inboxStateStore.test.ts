@@ -355,6 +355,37 @@ describe('InboxStateStore', () => {
       windowA.dispose();
       windowB.dispose();
     });
+
+    it('retains dirty tracking when persist fails', async () => {
+      await memento.update('devdocket.inbox-state', [
+        { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
+      ]);
+
+      const failingMemento = {
+        get: (key: string) => memento.get(key),
+        update: vi.fn()
+          .mockRejectedValueOnce(new Error('quota exceeded'))
+          .mockImplementation((key: string, value: unknown) => memento.update(key, value)),
+      };
+      const failingStore = new InboxStateStore(failingMemento as any);
+      await failingStore.load();
+
+      await expect(failingStore.setState('gh', 'shared', 'accepted')).rejects.toThrow('quota exceeded');
+
+      await memento.update('devdocket.inbox-state', [
+        { providerId: 'gh', externalId: 'shared', inboxState: 'dismissed' },
+      ]);
+
+      await failingStore.setState('gh', 'other', 'unseen');
+
+      const records = await failingStore.loadAll();
+      expect(records.map(record => `${record.externalId}:${record.inboxState}`).sort()).toEqual([
+        'other:unseen',
+        'shared:accepted',
+      ]);
+
+      failingStore.dispose();
+    });
   });
 
   // ── Edge cases ────────────────────────────────────────────────────

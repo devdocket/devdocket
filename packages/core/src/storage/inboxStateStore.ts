@@ -115,13 +115,13 @@ export class InboxStateStore {
       }
     }
 
+    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
     this.cache.clear();
     for (const [k, record] of merged) {
       this.cache.set(k, record);
     }
     this.dirtyKeys.clear();
     this.removedKeys.clear();
-    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
   }
 
   /** Parse and validate inbox state records from globalState. */
