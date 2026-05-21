@@ -58,6 +58,10 @@ export class InboxStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private loaded = false;
+  /** Keys modified locally since the last load/persist. */
+  private dirtyKeys = new Set<string>();
+  /** Keys removed locally since the last load/persist. */
+  private removedKeys = new Set<string>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -88,8 +92,52 @@ export class InboxStateStore {
     return this.cache.get(this.key(providerId, externalId))?.resurfaceVersion;
   }
 
+  /**
+   * Re-reads from globalState, merges remote records with local mutations,
+   * and writes the merged result. Untouched keys adopt the remote view,
+   * locally changed keys win, and locally removed keys stay removed.
+   */
   private async persist(): Promise<void> {
-    await this.globalState.update(STORAGE_KEY, Array.from(this.cache.values()));
+    const merged = new Map<string, InboxStateRecord>();
+
+    for (const remote of this.parseFromGlobalState()) {
+      merged.set(this.key(remote.providerId, remote.externalId), remote);
+    }
+
+    for (const k of this.removedKeys) {
+      merged.delete(k);
+    }
+
+    for (const k of this.dirtyKeys) {
+      const local = this.cache.get(k);
+      if (local) {
+        merged.set(k, local);
+      }
+    }
+
+    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+    this.cache.clear();
+    for (const [k, record] of merged) {
+      this.cache.set(k, record);
+    }
+    this.dirtyKeys.clear();
+    this.removedKeys.clear();
+  }
+
+  /** Parse and validate inbox state records from globalState. */
+  private parseFromGlobalState(): InboxStateRecord[] {
+    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+    if (!Array.isArray(parsed)) { return []; }
+    const records: InboxStateRecord[] = [];
+    for (let i = 0; i < parsed.length; i++) {
+      const error = validateInboxStateRecord(parsed[i], i);
+      if (error) {
+        logger.warn(`Skipping invalid inbox state record: ${error}`);
+        continue;
+      }
+      records.push(parsed[i] as InboxStateRecord);
+    }
+    return records;
   }
 
   /**
@@ -112,6 +160,8 @@ export class InboxStateStore {
       newRecord.resurfaceVersion = previousValue.resurfaceVersion;
     }
     this.cache.set(k, newRecord);
+    this.dirtyKeys.add(k);
+    this.removedKeys.delete(k);
     await this.persist();
     this._onDidChange.fire();
   }
@@ -137,6 +187,8 @@ export class InboxStateStore {
         newRecord.resurfaceVersion = previousRecord.resurfaceVersion;
       }
       this.cache.set(k, newRecord);
+      this.dirtyKeys.add(k);
+      this.removedKeys.delete(k);
     }
     await this.persist();
     this._onDidChange.fire();
@@ -155,18 +207,14 @@ export class InboxStateStore {
    */
   async load(): Promise<void> {
     if (this.loaded) { return; }
-    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
     this.cache.clear();
-    if (Array.isArray(parsed)) {
-      for (let i = 0; i < parsed.length; i++) {
-        const error = validateInboxStateRecord(parsed[i], i);
-        if (error) {
-          logger.warn(`Skipping invalid inbox state record: ${error}`);
-          continue;
-        }
-        const record = parsed[i] as InboxStateRecord;
-        this.cache.set(this.key(record.providerId, record.externalId), record);
-      }
+    const records = this.parseFromGlobalState();
+    for (const record of records) {
+      this.cache.set(this.key(record.providerId, record.externalId), record);
+    }
+    this.dirtyKeys.clear();
+    this.removedKeys.clear();
+    if (records.length > 0) {
       logger.debug(`Loaded inbox state: ${this.cache.size} entries`);
     }
     this.loaded = true;
@@ -208,6 +256,8 @@ export class InboxStateStore {
 
     for (const k of staleKeys) {
       this.cache.delete(k);
+      this.removedKeys.add(k);
+      this.dirtyKeys.delete(k);
     }
 
     await this.persist();
@@ -218,5 +268,16 @@ export class InboxStateStore {
   /** Disposes the change event emitter. */
   dispose(): void {
     this._onDidChange.dispose();
+  }
+
+  /**
+   * Invalidates the in-memory cache so the next mutation re-reads from
+   * globalState. Used for cross-window change propagation.
+   */
+  invalidateCache(): void {
+    this.cache.clear();
+    this.dirtyKeys.clear();
+    this.removedKeys.clear();
+    this.loaded = false;
   }
 }

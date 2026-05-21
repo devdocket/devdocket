@@ -16,6 +16,7 @@ import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
 import { WatchStore } from './storage/watchStore';
+import { StateVersionService } from './services/stateVersionService';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
@@ -483,7 +484,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
-  // Wire window focus state so providers skip background refreshes when unfocused
+  // Wire window focus state so providers can throttle background refreshes when unfocused.
   const windowStateEmitter = new vscode.EventEmitter<boolean>();
   const windowState: WindowStateProvider = {
     get isFocused() { return vscode.window.state.focused; },
@@ -494,6 +495,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     windowStateEmitter,
     vscode.window.onDidChangeWindowState(state => windowStateEmitter.fire(state.focused)),
   );
+
+  // Cross-window state propagation for work-item and inbox/read-state stores.
+  const stateVersion = new StateVersionService(context.globalStorageUri);
+  const bumpStateVersion = () => stateVersion.bump();
+  let mainProvider: MainViewProvider | undefined;
+  wg.onDidChange(safeHandler('sv:workGraph', (event) => event.source === 'externalReload' ? Promise.resolve() : bumpStateVersion()));
+  ss.onDidChange(safeHandler('sv:stateStore', () => bumpStateVersion()));
+  readStateStore.onDidChange(safeHandler('sv:readState', () => bumpStateVersion()));
+  labelCache.onDidChange(safeHandler('sv:labelCache', () => bumpStateVersion()));
+  stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
+    logger.debug('External state change detected — invalidating caches');
+    await wg.invalidateAndReload();
+    ss.invalidateCache();
+    await ss.load();
+    readStateStore.invalidateCache();
+    await readStateStore.load();
+    labelCache.invalidateCache();
+    await labelCache.load();
+    mainProvider?.scheduleRefresh('discovered');
+  }));
 
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
 
@@ -506,7 +527,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const providerHealthStatusBar = new ProviderHealthStatusBar(pr);
 
-  const mainProvider = new MainViewProvider(
+  mainProvider = new MainViewProvider(
     context.extensionUri,
     wg,
     pr,
@@ -594,12 +615,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
     { dispose: () => readStateStore.dispose() },
+    { dispose: () => labelCache.dispose() },
     { dispose: () => ws.dispose() },
     { dispose: () => wr.dispose() },
     { dispose: () => pwr.dispose() },
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
     { dispose: () => adrr.dispose() },
+    { dispose: () => stateVersion.dispose() },
   );
 
   const commandRegStart = performance.now();

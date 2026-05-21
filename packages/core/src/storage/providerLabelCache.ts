@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
 
 const STORAGE_KEY = 'devdocket.provider-labels';
@@ -7,9 +8,11 @@ const STORAGE_KEY = 'devdocket.provider-labels';
  * can show human-friendly group names immediately on startup, before
  * provider extensions have registered.
  */
-export class ProviderLabelCache {
+export class ProviderLabelCache implements vscode.Disposable {
   private readonly globalState: Memento;
   private labels = new Map<string, string>();
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  readonly onDidChange = this._onDidChange.event;
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -37,10 +40,28 @@ export class ProviderLabelCache {
   async set(providerId: string, label: string): Promise<void> {
     if (this.labels.get(providerId) === label) { return; }
     this.labels.set(providerId, label);
+    // Re-read from globalState and merge (remote additions preserved, local wins on conflict)
+    const remote = this.globalState.get<Record<string, unknown>>(STORAGE_KEY);
     const obj = Object.create(null) as Record<string, string>;
+    if (remote && typeof remote === 'object' && !Array.isArray(remote)) {
+      for (const [key, value] of Object.entries(remote)) {
+        if (typeof value === 'string') {
+          obj[key] = value;
+        }
+      }
+    }
     for (const [key, value] of this.labels) {
       obj[key] = value;
     }
     await this.globalState.update(STORAGE_KEY, obj);
+    this._onDidChange.fire();
+  }
+
+  invalidateCache(): void {
+    this.labels.clear();
+  }
+
+  dispose(): void {
+    this._onDidChange.dispose();
   }
 }

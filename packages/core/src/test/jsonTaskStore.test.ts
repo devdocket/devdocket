@@ -281,4 +281,141 @@ describe('JsonTaskStore', () => {
       expect(items[0].activityLog).toHaveLength(2);
     });
   });
+
+  describe('merge-on-write (multi-window safety)', () => {
+    it('preserves items added by another window during persist', async () => {
+      // Window A creates item1
+      await store.save(makeItem({ id: 'item1', title: 'Window A item', updatedAt: 1000 }));
+
+      // Simulate another window adding item2 directly to globalState
+      const current = memento.get<WorkItem[]>('devdocket.workitems') ?? [];
+      await memento.update('devdocket.workitems', [
+        ...current,
+        makeItem({ id: 'item2', title: 'Window B item', updatedAt: 2000 }),
+      ]);
+
+      // Window A saves item3 — should preserve item2 from remote
+      await store.save(makeItem({ id: 'item3', title: 'Another A item', updatedAt: 3000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted).toHaveLength(3);
+      expect(persisted.map(i => i.id).sort()).toEqual(['item1', 'item2', 'item3']);
+    });
+
+    it('keeps locally modified item when it has later updatedAt', async () => {
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+
+      // Another window writes an older version
+      await memento.update('devdocket.workitems', [
+        makeItem({ id: 'shared', title: 'Remote older', updatedAt: 500 }),
+      ]);
+
+      // Window A updates the item
+      await store.save(makeItem({ id: 'shared', title: 'Local newer', updatedAt: 2000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].title).toBe('Local newer');
+    });
+
+    it('takes remote item when it has later updatedAt', async () => {
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+
+      // Another window writes a newer version
+      await memento.update('devdocket.workitems', [
+        makeItem({ id: 'shared', title: 'Remote newer', updatedAt: 5000 }),
+      ]);
+
+      // Window A saves an unrelated item — merge should pick up remote's newer version
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const shared = persisted.find(i => i.id === 'shared');
+      expect(shared?.title).toBe('Remote newer');
+    });
+
+    it('does not restore locally deleted items from remote', async () => {
+      await store.save(makeItem({ id: 'to-delete', title: 'Delete me', updatedAt: 1000 }));
+      await store.delete('to-delete');
+
+      // Remote still has the item (from before the delete)
+      await memento.update('devdocket.workitems', [
+        makeItem({ id: 'to-delete', title: 'Still here', updatedAt: 1000 }),
+      ]);
+
+      // Window A saves something else — should not restore deleted item
+      await store.save(makeItem({ id: 'new', title: 'New', updatedAt: 2000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].id).toBe('new');
+    });
+
+    it('uses delete time when suppressing stale remote reintroductions', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+
+      const windowB = new JsonTaskStore(memento);
+      await windowB.loadAll();
+      await windowB.save(makeItem({ id: 'shared', title: 'Remote update', updatedAt: 2000 }));
+
+      await store.delete('shared');
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted.map(item => item.id).sort()).toEqual(['other']);
+
+      vi.useRealTimers();
+    });
+
+    it('honors remote deletions for untouched items', async () => {
+      await store.save(makeItem({ id: 'shared', title: 'Shared', updatedAt: 1000 }));
+
+      // Another window deletes the item entirely.
+      await memento.update('devdocket.workitems', []);
+
+      // This window only changes an unrelated item, so the deleted item should stay deleted.
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 2000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].id).toBe('other');
+    });
+
+    it('keeps newer remote updates that arrive after a local delete', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.delete('shared');
+
+      await memento.update('devdocket.workitems', [
+        makeItem({ id: 'shared', title: 'Remote newer', updatedAt: Date.now() + 1 }),
+      ]);
+
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: Date.now() + 2 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted.map(item => item.id).sort()).toEqual(['other', 'shared']);
+      expect(persisted.find(item => item.id === 'shared')?.title).toBe('Remote newer');
+
+      vi.useRealTimers();
+    });
+
+    it('invalidateCache forces re-read on next access', async () => {
+      await store.save(makeItem({ id: 'a', title: 'Original' }));
+
+      // Another window modifies the data
+      await memento.update('devdocket.workitems', [
+        makeItem({ id: 'a', title: 'Modified by other window' }),
+      ]);
+
+      store.invalidateCache();
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('Modified by other window');
+    });
+  });
 });

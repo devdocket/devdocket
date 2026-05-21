@@ -66,11 +66,20 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
  * Persists {@link WorkItem} objects in VS Code globalState.
  *
  * An in-memory cache is populated on first load and kept in sync with
- * every mutation.
+ * every mutation. On persist, the store re-reads from globalState and
+ * merges to avoid clobbering changes made by other VS Code windows.
  */
 export class JsonTaskStore implements ITaskStore {
   private readonly globalState: Memento;
   private cache: Map<string, WorkItem> | null = null;
+  /** IDs modified locally since the last successful persist. */
+  private dirtyIds = new Set<string>();
+  /** IDs deleted locally since the last successful persist. */
+  private removedIds = new Set<string>();
+  /** Last persisted or loaded updatedAt value for each known item. */
+  private syncedUpdatedAt = new Map<string, number>();
+  /** Local delete tombstones used to suppress stale reintroductions from other windows. */
+  private deletedUpdatedAt = new Map<string, number>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -80,9 +89,96 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache !== null) {
       return Array.from(this.cache.values());
     }
+    const items = this.parseFromGlobalState();
+    this.cache = new Map(items.map(item => [item.id, item]));
+    this.syncedUpdatedAt = new Map(items.map(item => [item.id, item.updatedAt]));
+    this.dirtyIds.clear();
+    this.removedIds.clear();
+    return items;
+  }
+
+  private getCache(): Map<string, WorkItem> {
+    if (this.cache === null) {
+      throw new Error('Cache not initialized — call loadAll() first');
+    }
+    return this.cache;
+  }
+
+  /**
+   * Re-reads from globalState, adopts untouched remote state, overlays local
+   * mutations, and writes the merged result. Local edits use `updatedAt`
+   * last-writer-wins for shared items, locally removed items stay deleted, and
+   * untouched local items disappear when another window deletes them remotely.
+   */
+  private async persist(): Promise<void> {
+    if (this.cache === null) {
+      await this.loadAll();
+    }
+    const local = this.getCache();
+    const remoteItems = this.parseFromGlobalState();
+    const remoteById = new Map(remoteItems.map(item => [item.id, item]));
+    const merged = new Map<string, WorkItem>();
+
+    for (const remote of remoteItems) {
+      const deletedAt = this.deletedUpdatedAt.get(remote.id);
+      if (deletedAt !== undefined && remote.updatedAt <= deletedAt) {
+        continue;
+      }
+      merged.set(remote.id, remote);
+    }
+
+    for (const [id, localItem] of local) {
+      if (this.dirtyIds.has(id) || this.removedIds.has(id)) {
+        continue;
+      }
+
+      const remoteItem = remoteById.get(id);
+      if (remoteItem) {
+        continue;
+      }
+
+      const syncedUpdatedAt = this.syncedUpdatedAt.get(id);
+      if (syncedUpdatedAt !== undefined && localItem.updatedAt !== syncedUpdatedAt) {
+        merged.set(id, localItem);
+      }
+    }
+
+    for (const id of this.removedIds) {
+      const remoteItem = merged.get(id);
+      const deletedAt = this.deletedUpdatedAt.get(id);
+      if (remoteItem && deletedAt !== undefined && remoteItem.updatedAt <= deletedAt) {
+        merged.delete(id);
+      }
+    }
+
+    for (const id of this.dirtyIds) {
+      const localItem = local.get(id);
+      if (!localItem) {
+        continue;
+      }
+      const remoteItem = merged.get(id);
+      if (!remoteItem || localItem.updatedAt >= remoteItem.updatedAt) {
+        merged.set(id, localItem);
+      }
+    }
+
+    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+    this.cache = merged;
+    this.syncedUpdatedAt = new Map(Array.from(merged.values(), item => [item.id, item.updatedAt]));
+    for (const [id, deletedAt] of Array.from(this.deletedUpdatedAt.entries())) {
+      const mergedItem = merged.get(id);
+      if (mergedItem && mergedItem.updatedAt > deletedAt) {
+        this.deletedUpdatedAt.delete(id);
+      }
+    }
+    this.dirtyIds.clear();
+    this.removedIds.clear();
+  }
+
+  /** Parse and validate work items from globalState. */
+  private parseFromGlobalState(): WorkItem[] {
     const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
     if (!Array.isArray(parsed)) {
-      this.cache = new Map();
       return [];
     }
     const items: WorkItem[] = [];
@@ -94,24 +190,15 @@ export class JsonTaskStore implements ITaskStore {
         items.push(parsed[i] as WorkItem);
       }
     }
-    this.cache = new Map(items.map(item => [item.id, item]));
     return items;
-  }
-
-  private getCache(): Map<string, WorkItem> {
-    if (this.cache === null) {
-      throw new Error('Cache not initialized — call loadAll() first');
-    }
-    return this.cache;
-  }
-
-  private async persist(): Promise<void> {
-    await this.globalState.update(STORAGE_KEY, Array.from(this.getCache().values()));
   }
 
   async save(item: WorkItem): Promise<void> {
     if (this.cache === null) { await this.loadAll(); }
     this.getCache().set(item.id, item);
+    this.dirtyIds.add(item.id);
+    this.removedIds.delete(item.id);
+    this.deletedUpdatedAt.delete(item.id);
     await this.persist();
   }
 
@@ -119,13 +206,33 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache === null) { await this.loadAll(); }
     for (const item of items) {
       this.getCache().set(item.id, item);
+      this.dirtyIds.add(item.id);
+      this.removedIds.delete(item.id);
+      this.deletedUpdatedAt.delete(item.id);
     }
     await this.persist();
   }
 
   async delete(id: string): Promise<void> {
     if (this.cache === null) { await this.loadAll(); }
+    if (this.getCache().has(id)) {
+      this.deletedUpdatedAt.set(id, Date.now());
+    }
     this.getCache().delete(id);
+    this.removedIds.add(id);
+    this.dirtyIds.delete(id);
     await this.persist();
+  }
+
+  /**
+   * Invalidates the in-memory cache so the next access re-reads from
+   * globalState. Used for cross-window change propagation.
+   */
+  invalidateCache(): void {
+    this.cache = null;
+    this.syncedUpdatedAt.clear();
+    this.deletedUpdatedAt.clear();
+    this.dirtyIds.clear();
+    this.removedIds.clear();
   }
 }
