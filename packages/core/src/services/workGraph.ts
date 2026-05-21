@@ -664,13 +664,15 @@ export class WorkGraph {
    * new data, this window invalidates its stale cache and re-reads.
    */
   async invalidateAndReload(): Promise<void> {
-    this.store.invalidateCache?.();
-    try {
-      await this.load();
-      this.emitDidChange('externalReload');
-    } catch (err) {
-      logger.error('WorkGraph: failed to reload after cache invalidation', err);
-    }
+    return this.withLock(async () => {
+      this.store.invalidateCache?.();
+      try {
+        await this.load();
+        this.emitDidChange('externalReload');
+      } catch (err) {
+        logger.error('WorkGraph: failed to reload after cache invalidation', err);
+      }
+    });
   }
 }
 
