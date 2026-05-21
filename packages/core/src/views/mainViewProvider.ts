@@ -95,20 +95,32 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     this.scheduleRefresh('discovered');
 
-    // If providers are registered but none have emitted items yet (e.g. a
-    // fresh VS Code instance where the initial refresh timed out or auth
-    // wasn't available), trigger a full user-level refresh so providers
-    // re-authenticate and fetch data. Without this, background refreshes
-    // may silently skip (createIfNone: false returns no session) and the
-    // sidebar stays permanently empty.
-    if (this.providerRegistry.hasProviders && !this.providerRegistry.loading) {
-      const allItems = this.providerRegistry.getAllProviderItems();
-      const hasAnyItems = Array.from(allItems.values()).some(items => items.length > 0);
-      if (!hasAnyItems) {
-        logger.debug('Sidebar opened with registered providers but no items — triggering refresh');
-        void this.providerRegistry.refreshAll();
-      }
+    // If providers are registered, no items are visible, and at least one
+    // provider has never completed a successful refresh (e.g. a fresh VS Code
+    // instance where the initial refresh timed out or auth wasn't available),
+    // trigger a full user-level refresh so providers re-authenticate and fetch
+    // data. This avoids retrying on every sidebar open for users who
+    // legitimately have zero discoverable items.
+    if (this.shouldRetryEmptySidebarRefresh()) {
+      logger.debug('Sidebar opened before providers completed a successful refresh — triggering refresh');
+      void this.providerRegistry.refreshAll();
     }
+  }
+
+  private shouldRetryEmptySidebarRefresh(): boolean {
+    if (!this.providerRegistry.hasProviders || this.providerRegistry.loading) {
+      return false;
+    }
+
+    const allItems = this.providerRegistry.getAllProviderItems();
+    const hasAnyItems = Array.from(allItems.values()).some(items => items.length > 0);
+    if (hasAnyItems) {
+      return false;
+    }
+
+    return Array.from(allItems.keys()).some(
+      providerId => this.providerRegistry.getProviderHealth(providerId).lastRefreshTime === undefined,
+    );
   }
 
   scheduleRefresh(reason: RefreshReason): void {
