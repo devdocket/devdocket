@@ -124,17 +124,20 @@ function createMockWorkGraph(initialItems: WorkItem[] = []) {
 function createProviderRegistry(
   itemsByProvider: Record<string, TestProviderItem[]>,
   labels: Record<string, string> = {},
-  health: Record<string, { status: string }> = {},
+  initialHealth: Record<string, { status: string; lastRefreshTime?: Date }> = {},
 ) {
   const discovered = new Map<string, TestProviderItem[]>(Object.entries(itemsByProvider));
+  const health = new Map(Object.entries(initialHealth));
   let loading = false;
   return {
     getAllProviderItems: vi.fn(() => discovered),
     getProviderItems: vi.fn((providerId: string) => discovered.get(providerId) ?? []),
     getProviderLabel: vi.fn((providerId: string) => labels[providerId] ?? providerId),
-    getProviderHealth: vi.fn((providerId: string) => health[providerId] ?? { status: 'healthy' }),
+    getProviderHealth: vi.fn((providerId: string) => health.get(providerId) ?? { status: 'unknown' }),
+    refreshAll: vi.fn(async () => undefined),
     get loading() { return loading; },
     setLoading(value: boolean) { loading = value; },
+    setHealth(providerId: string, value: { status: string; lastRefreshTime?: Date }) { health.set(providerId, value); },
     get hasProviders() { return discovered.size > 0; },
   };
 }
@@ -972,6 +975,36 @@ describe('MainViewProvider', () => {
 
     provider.resolveWebviewView(secondView.view, {} as any, {} as any);
     expect(secondView.webview.postMessage).toHaveBeenCalledWith({ type: 'setLoading', loading: true });
+  });
+
+  it('retries refresh when providers have no items and none have refreshed successfully yet', () => {
+    const registry = createProviderRegistry({ github: [] });
+    const provider = createProvider(
+      createMockWorkGraph([]),
+      registry,
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+
+    expect(registry.refreshAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not retry refresh when providers previously refreshed successfully with no items', () => {
+    const registry = createProviderRegistry({ github: [] }, {}, {
+      github: { status: 'healthy', lastRefreshTime: new Date('2024-01-02T03:04:05Z') },
+    });
+    const provider = createProvider(
+      createMockWorkGraph([]),
+      registry,
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+
+    expect(registry.refreshAll).not.toHaveBeenCalled();
   });
 
   it('does not send loading state when providers are already loaded', async () => {
