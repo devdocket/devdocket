@@ -160,6 +160,36 @@ describe('BaseProvider', () => {
       provider.dispose();
     });
 
+    it('does not immediately retrigger after an overlong refresh', async () => {
+      const provider = new TestProvider(createMockEmitter());
+
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(r => { resolveGate = r; }),
+        resolve: () => resolveGate(),
+      };
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      resolveGate();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.refreshGate = undefined;
+      await vi.advanceTimersByTimeAsync(49_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
     it('stops existing timer when called with invalid interval', async () => {
       const provider = new TestProvider(createMockEmitter());
 

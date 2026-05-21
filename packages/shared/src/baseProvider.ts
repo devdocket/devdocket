@@ -285,7 +285,8 @@ export abstract class BaseProvider {
       clearTimeout(this.refreshTimer);
     }
     const elapsedMs = Date.now() - this._lastRefreshAttemptTime;
-    const delayMs = Math.max(requiredIntervalMs - elapsedMs, 0);
+    const intervalsElapsed = Math.floor(elapsedMs / requiredIntervalMs) + 1;
+    const delayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       if (this._disposed) {
