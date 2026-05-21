@@ -58,8 +58,10 @@ export class InboxStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private loaded = false;
-  /** Keys known at load time — used to distinguish "pruned locally" from "added remotely". */
-  private loadedKeys = new Set<string>();
+  /** Keys modified locally since the last load/persist. */
+  private dirtyKeys = new Set<string>();
+  /** Keys removed locally since the last load/persist. */
+  private removedKeys = new Set<string>();
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -91,29 +93,34 @@ export class InboxStateStore {
   }
 
   /**
-   * Re-reads from globalState, merges remote records with the local cache,
-   * and writes the merged result. Local changes take precedence for the same key.
-   * Remote additions (keys not known at load time) are preserved.
+   * Re-reads from globalState, merges remote records with local mutations,
+   * and writes the merged result. Untouched keys adopt the remote view,
+   * locally changed keys win, and locally removed keys stay removed.
    */
   private async persist(): Promise<void> {
-    const remoteRecords = this.parseFromGlobalState();
-    const merged = new Map(this.cache);
+    const merged = new Map<string, InboxStateRecord>();
 
-    for (const remote of remoteRecords) {
-      const k = this.key(remote.providerId, remote.externalId);
-      if (!merged.has(k) && !this.loadedKeys.has(k)) {
-        // Remote has a record we never saw — added by another window
-        merged.set(k, remote);
-      }
-      // else: local cache has it (local wins) or we pruned it (stay pruned)
+    for (const remote of this.parseFromGlobalState()) {
+      merged.set(this.key(remote.providerId, remote.externalId), remote);
     }
 
-    // Update cache and tracking
+    for (const k of this.removedKeys) {
+      merged.delete(k);
+    }
+
+    for (const k of this.dirtyKeys) {
+      const local = this.cache.get(k);
+      if (local) {
+        merged.set(k, local);
+      }
+    }
+
     this.cache.clear();
     for (const [k, record] of merged) {
       this.cache.set(k, record);
     }
-    this.loadedKeys = new Set(merged.keys());
+    this.dirtyKeys.clear();
+    this.removedKeys.clear();
     await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
   }
 
@@ -153,6 +160,8 @@ export class InboxStateStore {
       newRecord.resurfaceVersion = previousValue.resurfaceVersion;
     }
     this.cache.set(k, newRecord);
+    this.dirtyKeys.add(k);
+    this.removedKeys.delete(k);
     await this.persist();
     this._onDidChange.fire();
   }
@@ -178,6 +187,8 @@ export class InboxStateStore {
         newRecord.resurfaceVersion = previousRecord.resurfaceVersion;
       }
       this.cache.set(k, newRecord);
+      this.dirtyKeys.add(k);
+      this.removedKeys.delete(k);
     }
     await this.persist();
     this._onDidChange.fire();
@@ -201,7 +212,8 @@ export class InboxStateStore {
     for (const record of records) {
       this.cache.set(this.key(record.providerId, record.externalId), record);
     }
-    this.loadedKeys = new Set(this.cache.keys());
+    this.dirtyKeys.clear();
+    this.removedKeys.clear();
     if (records.length > 0) {
       logger.debug(`Loaded inbox state: ${this.cache.size} entries`);
     }
@@ -244,6 +256,8 @@ export class InboxStateStore {
 
     for (const k of staleKeys) {
       this.cache.delete(k);
+      this.removedKeys.add(k);
+      this.dirtyKeys.delete(k);
     }
 
     await this.persist();
@@ -262,7 +276,8 @@ export class InboxStateStore {
    */
   invalidateCache(): void {
     this.cache.clear();
-    this.loadedKeys.clear();
+    this.dirtyKeys.clear();
+    this.removedKeys.clear();
     this.loaded = false;
   }
 }

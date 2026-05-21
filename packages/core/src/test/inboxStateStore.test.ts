@@ -280,6 +280,81 @@ describe('InboxStateStore', () => {
       expect(store.getState('gh', 'issue-1')).toBe('accepted');
       expect(store.getState('gh', 'issue-2')).toBe('dismissed');
     });
+
+    it('invalidateCache forces a re-read on next load', async () => {
+      await store.setState('gh', 'issue-1', 'unseen');
+
+      await memento.update('devdocket.inbox-state', [
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'dismissed' },
+      ]);
+
+      store.invalidateCache();
+      await store.load();
+
+      expect(store.getState('gh', 'issue-1')).toBe('dismissed');
+    });
+  });
+
+  describe('merge-on-write', () => {
+    it('preserves remote additions while persisting local changes', async () => {
+      const windowA = new InboxStateStore(memento);
+      const windowB = new InboxStateStore(memento);
+      await windowA.load();
+
+      await windowB.setState('gh', 'remote', 'accepted');
+      await windowA.setState('gh', 'local', 'unseen');
+
+      const records = (await windowA.loadAll())
+        .map(record => `${record.providerId}::${record.externalId}:${record.inboxState}`)
+        .sort();
+      expect(records).toEqual([
+        'gh::local:unseen',
+        'gh::remote:accepted',
+      ]);
+
+      windowA.dispose();
+      windowB.dispose();
+    });
+
+    it('keeps remote updates for untouched keys', async () => {
+      await memento.update('devdocket.inbox-state', [
+        { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
+      ]);
+
+      const windowA = new InboxStateStore(memento);
+      const windowB = new InboxStateStore(memento);
+      await windowA.load();
+      await windowB.load();
+
+      await windowB.setState('gh', 'shared', 'dismissed');
+      await windowA.setState('gh', 'local', 'accepted');
+
+      expect(windowA.getState('gh', 'shared')).toBe('dismissed');
+      expect(windowA.getState('gh', 'local')).toBe('accepted');
+
+      windowA.dispose();
+      windowB.dispose();
+    });
+
+    it('prefers local updates for keys changed in this window', async () => {
+      await memento.update('devdocket.inbox-state', [
+        { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
+      ]);
+
+      const windowA = new InboxStateStore(memento);
+      const windowB = new InboxStateStore(memento);
+      await windowA.load();
+      await windowB.load();
+
+      await windowB.setState('gh', 'shared', 'dismissed');
+      await windowA.setState('gh', 'shared', 'accepted');
+
+      expect(windowA.getState('gh', 'shared')).toBe('accepted');
+      expect(memento.get<Array<{ inboxState: string }>>('devdocket.inbox-state')?.[0]?.inboxState).toBe('accepted');
+
+      windowA.dispose();
+      windowB.dispose();
+    });
   });
 
   // ── Edge cases ────────────────────────────────────────────────────

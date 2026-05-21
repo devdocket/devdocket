@@ -141,6 +141,51 @@ describe('ReadStateStore', () => {
     expect(result).toEqual([]);
   });
 
+  describe('merge-on-write', () => {
+    it('preserves remote additions while persisting local changes', async () => {
+      const windowA = new ReadStateStore(memento);
+      const windowB = new ReadStateStore(memento);
+      await windowA.load();
+
+      await windowB.add('gh::remote');
+      await windowA.add('gh::local');
+
+      expect(memento.get<string[]>('devdocket.read-state')?.sort()).toEqual(['gh::local', 'gh::remote']);
+
+      windowA.dispose();
+      windowB.dispose();
+    });
+
+    it('keeps locally removed keys deleted while preserving remote additions', async () => {
+      await memento.update('devdocket.read-state', ['gh::keep', 'gh::remove']);
+
+      const windowA = new ReadStateStore(memento);
+      const windowB = new ReadStateStore(memento);
+      await windowA.load();
+      await windowB.load();
+
+      await windowB.add('gh::remote');
+      await windowA.deleteMany(['gh::remove']);
+
+      expect([...windowA.keys()].sort()).toEqual(['gh::keep', 'gh::remote']);
+      expect(memento.get<string[]>('devdocket.read-state')?.sort()).toEqual(['gh::keep', 'gh::remote']);
+
+      windowA.dispose();
+      windowB.dispose();
+    });
+
+    it('invalidateCache forces a re-read on next load', async () => {
+      await store.add('gh::issue-1');
+
+      await memento.update('devdocket.read-state', ['gh::issue-2']);
+
+      store.invalidateCache();
+      await store.load();
+
+      expect([...store.keys()]).toEqual(['gh::issue-2']);
+    });
+  });
+
   describe('prune', () => {
     it('removes only stale keys belonging to providers that returned items', async () => {
       await store.addMany(['gh::keep', 'gh::stale', 'jira::stale']);

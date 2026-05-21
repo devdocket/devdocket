@@ -655,9 +655,7 @@ export class WorkGraph {
    * new data, this window invalidates its stale cache and re-reads.
    */
   invalidateAndReload(): void {
-    if ('invalidateCache' in this.store && typeof (this.store as any).invalidateCache === 'function') {
-      (this.store as any).invalidateCache();
-    }
+    this.store.invalidateCache?.();
     void this.load().then(() => {
       this._onDidChange.fire();
     }).catch(err => {
