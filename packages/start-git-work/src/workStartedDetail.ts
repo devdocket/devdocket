@@ -12,7 +12,7 @@ import type { ActivityDetailRender } from '@devdocket/shared';
  * the shape is treated as a stable, versioned contract rather
  * than a free-form string. Any change to the payload shape
  * MUST bump the version (e.g. introduce `WorkStartedDetailV2`)
- * and update {@link decodeWorkStartedDetail} to recognise the
+ * and update {@link decodeWorkStartedDetail} to recognize the
  * new version alongside the old one.
  *
  * `repoPath` is required: every write site has a known repo,
@@ -78,7 +78,7 @@ export function encodeWorkStartedDetail(input: Readonly<WorkStartedDetailInput>)
  *   payloads of the same shape. This preserves the cleanup
  *   prompt for activity logs created prior to this change.
  * - Logs a warning and returns `undefined` for entries whose
- *   `v` is present but unrecognised. This makes future
+ *   `v` is present but unrecognized. This makes future
  *   schema mismatches visible in the logs instead of
  *   silently downgrading cleanup to a no-op.
  * - Returns `undefined` when the payload is missing the

@@ -96,7 +96,7 @@ export interface DevDocketProvider {
    * Providers that support URL import should parse the URL and, if it
    * matches a pattern they own (e.g. a GitHub issue URL), fetch the
    * item details and return a {@link ResolvedItem}. Return `undefined`
-   * if the URL is not recognised by this provider.
+   * if the URL is not recognized by this provider.
    *
    * @param url - The raw URL entered by the user.
    * @param signal - Optional abort signal for cancellation.
