@@ -63,6 +63,23 @@ function formatItemTitle(item: { group?: string; title: string }): string {
 
 // isSafeUrl is imported from ../utils/url.
 
+/**
+ * Label for the notification action button that opens the VS Code Extensions
+ * view filtered to DevDocket-published extensions. Shared between the action
+ * registration and the post-await `if (action === ...)` check so they cannot
+ * drift apart silently.
+ */
+const BROWSE_PROVIDER_EXTENSIONS_ACTION = 'Browse Provider Extensions';
+
+/**
+ * Open the VS Code Extensions view filtered to extensions published by the
+ * "devdocket" publisher. Used by the URL-import error notification and by
+ * onboarding empty states so new users can discover provider extensions.
+ */
+async function browseProviderExtensions(): Promise<void> {
+  await vscode.commands.executeCommand('workbench.extensions.search', '@publisher:"devdocket"');
+}
+
 /** Log the error and show a user-facing message. */
 function handleCommandError(context: string, err: unknown): void {
   logger.error(context, err);
@@ -347,7 +364,13 @@ async function handleCreateItemFromUrl(
   }
 
   if (!details) {
-    void vscode.window.showErrorMessage('DevDocket: No provider recognised this URL');
+    const action = await vscode.window.showErrorMessage(
+      'DevDocket: No provider recognized this URL',
+      BROWSE_PROVIDER_EXTENSIONS_ACTION,
+    );
+    if (action === BROWSE_PROVIDER_EXTENSIONS_ACTION) {
+      await browseProviderExtensions();
+    }
     return;
   }
 
@@ -820,6 +843,8 @@ export function registerCommands(
           false,
         ),
       )),
+    vscode.commands.registerCommand('devdocket.browseProviderExtensions',
+      wrapCommand('Failed to open Extensions view', () => browseProviderExtensions())),
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',

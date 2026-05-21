@@ -853,9 +853,11 @@ describe('MainViewProvider', () => {
 
     await mockView.simulateMessage({ type: 'createItem' });
     await mockView.simulateMessage({ type: 'openWalkthrough' });
+    await mockView.simulateMessage({ type: 'browseProviderExtensions' });
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.createItem');
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.openWalkthrough');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.browseProviderExtensions');
   });
 
   it('handles reorderItems messages through the webview message switch', async () => {

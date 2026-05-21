@@ -25,6 +25,7 @@ export type WebviewMessage =
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
   | { type: 'openWalkthrough' }
+  | { type: 'browseProviderExtensions' }
   | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
   | { type: 'openWatches' }

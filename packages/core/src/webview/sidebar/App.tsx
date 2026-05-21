@@ -19,8 +19,8 @@ import {
 export function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('myWork');
   const [tiers, setTiers] = useState<TierData[]>([]);
+  const [tiersLoaded, setTiersLoaded] = useState(false);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
-  const [hasReceivedItems, setHasReceivedItems] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [queries, setQueries] = useState<TabQueries>(emptyQueries);
@@ -113,9 +113,9 @@ export function App() {
             announce(buildLiveAnnouncement(previousTiers, nextTiers));
           }
           previousTiersRef.current = nextTiers;
-          setHasReceivedItems(true);
           setIsLoading(false);
           setTiers(nextTiers);
+          setTiersLoaded(true);
           break;
         }
         case 'updateSources':
@@ -283,9 +283,7 @@ export function App() {
               <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
             ) : !isMyWorkFilterActive && isLoading ? (
               <div class="empty-state" role="status">Loading providers…</div>
-            ) : !isMyWorkFilterActive && !hasReceivedItems ? (
-              <div class="empty-state">No items yet</div>
-            ) : !isMyWorkFilterActive && tiers.every(tier => tier.items.length === 0) ? (
+            ) : !isMyWorkFilterActive && tiersLoaded && tiers.every(tier => tier.items.length === 0) ? (
               <EmptyMyWork />
             ) : (
               <div class="tiers">
