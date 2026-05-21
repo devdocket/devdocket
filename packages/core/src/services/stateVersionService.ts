@@ -22,6 +22,7 @@ export class StateVersionService {
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
   private lastExternalVersionKey: string | undefined;
+  private lastBumpedVersion = 0;
   private static readonly DEBOUNCE_MS = 100;
 
   constructor(globalStorageUri: vscode.Uri) {
@@ -83,14 +84,16 @@ export class StateVersionService {
   async bump(): Promise<void> {
     if (this.disposed) { return; }
     try {
+      const version = Math.max(Date.now(), this.lastBumpedVersion + 1);
       const data = JSON.stringify({
         instanceId: this.instanceId,
-        version: Date.now(),
+        version,
       });
       await vscode.workspace.fs.writeFile(
         this.versionFileUri,
         Buffer.from(data, 'utf-8'),
       );
+      this.lastBumpedVersion = version;
     } catch (err) {
       // Non-critical — worst case is a missed cross-window update
       logger.debug('StateVersionService: failed to bump version file', err);
