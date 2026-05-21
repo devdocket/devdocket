@@ -341,20 +341,19 @@ describe('GitHubIssueProvider', () => {
     expect(logged).toBe(true);
   });
 
-  it('startPeriodicRefresh schedules a repeating timer', () => {
+  it('startPeriodicRefresh schedules a repeating timer', async () => {
     vi.useFakeTimers();
 
-    // Spy on the private refreshInBackground method that's called by the timer
-    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue();
+    const refreshSpy = vi.spyOn(provider as any, 'doBackgroundRefresh').mockResolvedValue();
     provider.startPeriodicRefresh(60);
 
     // No immediate call — only on interval
     expect(refreshSpy).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(refreshSpy).toHaveBeenCalledTimes(1);
 
-    vi.advanceTimersByTime(60_000);
+    await vi.advanceTimersByTimeAsync(61_000);
     expect(refreshSpy).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();

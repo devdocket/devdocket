@@ -327,7 +327,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       vi.useFakeTimers();
 
       let callCount = 0;
-      const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockImplementation(async () => {
+      const refreshSpy = vi.spyOn(provider as any, 'doBackgroundRefresh').mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
           throw new Error('transient failure');
@@ -336,12 +336,10 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       provider.startPeriodicRefresh(60);
 
-      vi.advanceTimersByTime(60_000);
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(refreshSpy).toHaveBeenCalledTimes(1);
 
-      vi.advanceTimersByTime(60_000);
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(61_000);
       expect(refreshSpy).toHaveBeenCalledTimes(2);
     });
 
@@ -349,7 +347,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       vi.useFakeTimers();
 
       let callCount = 0;
-      const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockImplementation(async () => {
+      const refreshSpy = vi.spyOn(provider as any, 'doBackgroundRefresh').mockImplementation(async () => {
         callCount++;
         if (callCount === 1) {
           throw new Error('Auth unavailable');
@@ -358,12 +356,10 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       provider.startPeriodicRefresh(60);
 
-      vi.advanceTimersByTime(60_000);
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(refreshSpy).toHaveBeenCalledTimes(1);
 
-      vi.advanceTimersByTime(60_000);
-      await vi.advanceTimersByTimeAsync(0);
+      await vi.advanceTimersByTimeAsync(61_000);
       expect(refreshSpy).toHaveBeenCalledTimes(2);
     });
   });
