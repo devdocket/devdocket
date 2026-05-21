@@ -351,6 +351,25 @@ describe('JsonTaskStore', () => {
       expect(persisted[0].id).toBe('new');
     });
 
+    it('uses delete time when suppressing stale remote reintroductions', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+
+      const windowB = new JsonTaskStore(memento);
+      await windowB.loadAll();
+      await windowB.save(makeItem({ id: 'shared', title: 'Remote update', updatedAt: 2000 }));
+
+      await store.delete('shared');
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted.map(item => item.id).sort()).toEqual(['other']);
+
+      vi.useRealTimers();
+    });
+
     it('honors remote deletions for untouched items', async () => {
       await store.save(makeItem({ id: 'shared', title: 'Shared', updatedAt: 1000 }));
 

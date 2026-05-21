@@ -211,9 +211,8 @@ export class JsonTaskStore implements ITaskStore {
 
   async delete(id: string): Promise<void> {
     if (this.cache === null) { await this.loadAll(); }
-    const existing = this.getCache().get(id);
-    if (existing) {
-      this.deletedUpdatedAt.set(id, existing.updatedAt);
+    if (this.getCache().has(id)) {
+      this.deletedUpdatedAt.set(id, Date.now());
     }
     this.getCache().delete(id);
     this.removedIds.add(id);
