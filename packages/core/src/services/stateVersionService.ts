@@ -21,6 +21,7 @@ export class StateVersionService {
   private watcher: vscode.FileSystemWatcher | undefined;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private disposed = false;
+  private lastExternalVersionKey: string | undefined;
   private static readonly DEBOUNCE_MS = 100;
 
   constructor(globalStorageUri: vscode.Uri) {
@@ -59,9 +60,17 @@ export class StateVersionService {
     try {
       const content = await vscode.workspace.fs.readFile(this.versionFileUri);
       const data = JSON.parse(Buffer.from(content).toString('utf-8'));
-      if (data.instanceId !== this.instanceId) {
-        this._onDidExternalStateChange.fire();
+      if (data.instanceId === this.instanceId) {
+        return;
       }
+
+      const versionKey = `${String(data.instanceId)}::${String(data.version)}`;
+      if (this.lastExternalVersionKey === versionKey) {
+        return;
+      }
+
+      this.lastExternalVersionKey = versionKey;
+      this._onDidExternalStateChange.fire();
     } catch {
       // File doesn't exist or is invalid — ignore
     }
