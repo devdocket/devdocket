@@ -75,4 +75,25 @@ describe('ProviderLabelCache', () => {
     expect(cache2.get('jira')).toBe('Jira Board');
     expect(cache2.get('ado')).toBe('Azure DevOps');
   });
+
+  it('fires onDidChange after a successful set', async () => {
+    const cache = new ProviderLabelCache(memento);
+    const listener = vi.fn();
+    cache.onDidChange(listener);
+
+    await cache.set('github', 'GitHub Issues');
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('invalidateCache clears the in-memory labels until reload', async () => {
+    const cache = new ProviderLabelCache(memento);
+    await cache.set('github', 'GitHub Issues');
+
+    cache.invalidateCache();
+    expect(cache.get('github')).toBeUndefined();
+
+    await cache.load();
+    expect(cache.get('github')).toBe('GitHub Issues');
+  });
 });

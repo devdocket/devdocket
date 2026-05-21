@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
 
 const STORAGE_KEY = 'devdocket.provider-labels';
@@ -7,9 +8,11 @@ const STORAGE_KEY = 'devdocket.provider-labels';
  * can show human-friendly group names immediately on startup, before
  * provider extensions have registered.
  */
-export class ProviderLabelCache {
+export class ProviderLabelCache implements vscode.Disposable {
   private readonly globalState: Memento;
   private labels = new Map<string, string>();
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  readonly onDidChange = this._onDidChange.event;
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -51,5 +54,14 @@ export class ProviderLabelCache {
       obj[key] = value;
     }
     await this.globalState.update(STORAGE_KEY, obj);
+    this._onDidChange.fire();
+  }
+
+  invalidateCache(): void {
+    this.labels.clear();
+  }
+
+  dispose(): void {
+    this._onDidChange.dispose();
   }
 }

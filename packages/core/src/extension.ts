@@ -487,9 +487,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   // Cross-window state propagation for work-item and inbox/read-state stores.
   const stateVersion = new StateVersionService(context.globalStorageUri);
   const bumpStateVersion = () => stateVersion.bump();
+  let mainProvider: MainViewProvider | undefined;
   wg.onDidChange(safeHandler('sv:workGraph', (event) => event.source === 'externalReload' ? Promise.resolve() : bumpStateVersion()));
   ss.onDidChange(safeHandler('sv:stateStore', () => bumpStateVersion()));
   readStateStore.onDidChange(safeHandler('sv:readState', () => bumpStateVersion()));
+  labelCache.onDidChange(safeHandler('sv:labelCache', () => bumpStateVersion()));
   stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
     logger.debug('External state change detected — invalidating caches');
     await wg.invalidateAndReload();
@@ -497,6 +499,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     await ss.load();
     readStateStore.invalidateCache();
     await readStateStore.load();
+    labelCache.invalidateCache();
+    await labelCache.load();
+    mainProvider?.scheduleRefresh('discovered');
   }));
 
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
@@ -510,7 +515,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const providerHealthStatusBar = new ProviderHealthStatusBar(pr);
 
-  const mainProvider = new MainViewProvider(
+  mainProvider = new MainViewProvider(
     context.extensionUri,
     wg,
     pr,
@@ -598,6 +603,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
     { dispose: () => readStateStore.dispose() },
+    { dispose: () => labelCache.dispose() },
     { dispose: () => ws.dispose() },
     { dispose: () => wr.dispose() },
     { dispose: () => pwr.dispose() },
