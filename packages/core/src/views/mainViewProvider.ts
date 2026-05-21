@@ -94,6 +94,21 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     this.syncLoadingState();
 
     this.scheduleRefresh('discovered');
+
+    // If providers are registered but none have emitted items yet (e.g. a
+    // fresh VS Code instance where the initial refresh timed out or auth
+    // wasn't available), trigger a full user-level refresh so providers
+    // re-authenticate and fetch data. Without this, background refreshes
+    // may silently skip (createIfNone: false returns no session) and the
+    // sidebar stays permanently empty.
+    if (this.providerRegistry.hasProviders && !this.providerRegistry.loading) {
+      const allItems = this.providerRegistry.getAllProviderItems();
+      const hasAnyItems = Array.from(allItems.values()).some(items => items.length > 0);
+      if (!hasAnyItems) {
+        logger.debug('Sidebar opened with registered providers but no items — triggering refresh');
+        void this.providerRegistry.refreshAll();
+      }
+    }
   }
 
   scheduleRefresh(reason: RefreshReason): void {
