@@ -948,6 +948,7 @@ describe('MainViewProvider', () => {
     await vi.advanceTimersByTimeAsync(50);
 
     let messages = mockView.webview.postMessage.mock.calls.map((c: any) => c[0]);
+    expect(messages.filter((m: any) => m.type === 'setLoading' && m.loading === true)).toHaveLength(2);
     expect(messages.some((m: any) => m.type === 'setLoading' && m.loading === false)).toBe(false);
     expect(messages.some((m: any) => m.type === 'updateItems')).toBe(true);
 

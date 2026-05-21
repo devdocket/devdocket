@@ -46,6 +46,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private pendingRefreshReasons = new Set<RefreshReason>();
   private disposed = false;
   private loadingSent = false;
+  private forceLoadingSyncOnNextRefresh = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -77,6 +78,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   ): void {
     this.view = webviewView;
     this.loadingSent = false;
+    this.forceLoadingSyncOnNextRefresh = this.providerRegistry.loading;
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -147,13 +149,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'toggleSearch' });
   }
 
-  private syncLoadingState(): void {
+  private syncLoadingState(force = false): void {
     if (!this.view) {
       return;
     }
 
     const loading = this.providerRegistry.loading;
-    if (loading === this.loadingSent) {
+    if (!force && loading === this.loadingSent) {
       return;
     }
 
@@ -166,7 +168,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    this.syncLoadingState();
+    const forceLoadingSync = this.forceLoadingSyncOnNextRefresh;
+    this.forceLoadingSyncOnNextRefresh = false;
+    this.syncLoadingState(forceLoadingSync);
 
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
