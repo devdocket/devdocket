@@ -492,8 +492,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   };
   pr.setWindowState(windowState);
   context.subscriptions.push(
-    windowStateEmitter,
     vscode.window.onDidChangeWindowState(state => windowStateEmitter.fire(state.focused)),
+    windowStateEmitter,
   );
 
   // Cross-window state propagation for work-item and inbox/read-state stores.
