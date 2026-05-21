@@ -144,7 +144,11 @@ export class JsonTaskStore implements ITaskStore {
     }
 
     for (const id of this.removedIds) {
-      merged.delete(id);
+      const remoteItem = merged.get(id);
+      const deletedAt = this.deletedUpdatedAt.get(id);
+      if (remoteItem && deletedAt !== undefined && remoteItem.updatedAt <= deletedAt) {
+        merged.delete(id);
+      }
     }
 
     for (const id of this.dirtyIds) {

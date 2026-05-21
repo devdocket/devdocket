@@ -384,6 +384,26 @@ describe('JsonTaskStore', () => {
       expect(persisted[0].id).toBe('other');
     });
 
+    it('keeps newer remote updates that arrive after a local delete', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.delete('shared');
+
+      await memento.update('devdocket.workitems', [
+        makeItem({ id: 'shared', title: 'Remote newer', updatedAt: Date.now() + 1 }),
+      ]);
+
+      await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: Date.now() + 2 }));
+
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      expect(persisted.map(item => item.id).sort()).toEqual(['other', 'shared']);
+      expect(persisted.find(item => item.id === 'shared')?.title).toBe('Remote newer');
+
+      vi.useRealTimers();
+    });
+
     it('invalidateCache forces re-read on next access', async () => {
       await store.save(makeItem({ id: 'a', title: 'Original' }));
 
