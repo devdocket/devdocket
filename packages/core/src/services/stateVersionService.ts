@@ -23,6 +23,7 @@ export class StateVersionService {
   private disposed = false;
   private lastExternalVersionKey: string | undefined;
   private lastBumpedVersion = 0;
+  private bumpTail: Promise<void> = Promise.resolve();
   private static readonly DEBOUNCE_MS = 100;
 
   constructor(globalStorageUri: vscode.Uri) {
@@ -82,22 +83,26 @@ export class StateVersionService {
    * Call this after any user-intent state mutation.
    */
   async bump(): Promise<void> {
-    if (this.disposed) { return; }
-    try {
+    const next = this.bumpTail.catch(() => undefined).then(async () => {
+      if (this.disposed) { return; }
       const version = Math.max(Date.now(), this.lastBumpedVersion + 1);
-      const data = JSON.stringify({
-        instanceId: this.instanceId,
-        version,
-      });
-      await vscode.workspace.fs.writeFile(
-        this.versionFileUri,
-        Buffer.from(data, 'utf-8'),
-      );
       this.lastBumpedVersion = version;
-    } catch (err) {
-      // Non-critical — worst case is a missed cross-window update
-      logger.debug('StateVersionService: failed to bump version file', err);
-    }
+      try {
+        const data = JSON.stringify({
+          instanceId: this.instanceId,
+          version,
+        });
+        await vscode.workspace.fs.writeFile(
+          this.versionFileUri,
+          Buffer.from(data, 'utf-8'),
+        );
+      } catch (err) {
+        // Non-critical — worst case is a missed cross-window update
+        logger.debug('StateVersionService: failed to bump version file', err);
+      }
+    });
+    this.bumpTail = next;
+    await next;
   }
 
   dispose(): void {

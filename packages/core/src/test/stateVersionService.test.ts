@@ -119,6 +119,19 @@ describe('StateVersionService', () => {
     service.dispose();
   });
 
+  it('serializes concurrent bumps so each write gets a unique version', async () => {
+    vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+    const service = new StateVersionService(vscode.Uri.file('C:\\state'));
+
+    await Promise.all([service.bump(), service.bump(), service.bump()]);
+
+    const versions = (vscode.workspace.fs.writeFile as any).mock.calls.slice(0, 3)
+      .map(([, content]: [unknown, Uint8Array]) => JSON.parse(Buffer.from(content).toString('utf-8')).version);
+    expect(new Set(versions).size).toBe(3);
+
+    service.dispose();
+  });
+
   it('stops reacting after dispose', async () => {
     const service = new StateVersionService(vscode.Uri.file('C:\\state'));
     const listener = vi.fn();
