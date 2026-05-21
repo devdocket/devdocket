@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { CancellationTokenSource, EventEmitter } from 'vscode';
 import { DevDocketProvider, ProviderItem } from '../api/types';
+import type { WindowStateProvider } from '@devdocket/shared';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { logger } from '../services/logger';
@@ -75,6 +76,13 @@ function createMockProvider(id: string): DevDocketProvider & { fireItems: (items
   };
 }
 
+function createMockWindowState(isFocused = true): WindowStateProvider {
+  return {
+    isFocused,
+    onDidChangeFocus: vi.fn(() => ({ dispose: vi.fn() })),
+  };
+}
+
 describe('ProviderRegistry', () => {
   let store: ITaskStore;
   let graph: WorkGraph;
@@ -113,6 +121,35 @@ describe('ProviderRegistry', () => {
     expect(provider.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('applies window state to already registered providers that support it', () => {
+    const provider = {
+      ...createMockProvider('window-aware'),
+      setWindowState: vi.fn(),
+    };
+    registry.register(provider);
+    provider.setWindowState.mockClear();
+    const windowState = createMockWindowState(false);
+
+    registry.setWindowState(windowState);
+
+    expect(provider.setWindowState).toHaveBeenCalledOnce();
+    expect(provider.setWindowState).toHaveBeenCalledWith(windowState);
+  });
+
+  it('applies window state to newly registered providers after state is set', () => {
+    const windowState = createMockWindowState(false);
+    registry.setWindowState(windowState);
+    const provider = {
+      ...createMockProvider('late-window-aware'),
+      setWindowState: vi.fn(),
+    };
+
+    registry.register(provider);
+
+    expect(provider.setWindowState).toHaveBeenCalledOnce();
+    expect(provider.setWindowState).toHaveBeenCalledWith(windowState);
+  });
+
   it('removes the provider when the returned Disposable is disposed', () => {
     const provider = createMockProvider('removable');
     const disposable = registry.register(provider);
@@ -127,6 +164,13 @@ describe('ProviderRegistry', () => {
     registry.register(provider);
 
     expect(registry.getProvider('findme')).toBe(provider);
+  });
+
+  it('does not try to apply window state to providers that do not support it', () => {
+    const provider = createMockProvider('not-window-aware');
+    registry.setWindowState(createMockWindowState(false));
+
+    expect(() => registry.register(provider)).not.toThrow();
   });
 
   it('returns undefined from getProvider for unknown id', () => {

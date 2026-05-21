@@ -22,13 +22,14 @@ function createMockWindowState(focused = true): {
 } {
   let isFocused = focused;
   const listeners: Array<(f: boolean) => void> = [];
+  const onDidChangeFocus = vi.fn((listener: (f: boolean) => void): Disposable => {
+    listeners.push(listener);
+    return { dispose: () => { const i = listeners.indexOf(listener); if (i >= 0) listeners.splice(i, 1); } };
+  });
   return {
     state: {
       get isFocused() { return isFocused; },
-      onDidChangeFocus: (listener: (f: boolean) => void): Disposable => {
-        listeners.push(listener);
-        return { dispose: () => { const i = listeners.indexOf(listener); if (i >= 0) listeners.splice(i, 1); } };
-      },
+      onDidChangeFocus,
     },
     setFocused: (f: boolean) => {
       isFocused = f;
@@ -250,6 +251,16 @@ describe('BaseProvider', () => {
       await provider.refreshInBackground();
       expect(provider.backgroundRefreshCalls).toBe(0);
     });
+
+    it('does not subscribe to window state after dispose', () => {
+      const provider = new TestProvider(createMockEmitter());
+      const windowState = createMockWindowState();
+      provider.dispose();
+
+      provider.setWindowState(windowState.state);
+
+      expect(windowState.state.onDidChangeFocus).not.toHaveBeenCalled();
+    });
   });
 
   describe('refreshInBackground concurrency guard', () => {
@@ -420,6 +431,36 @@ describe('BaseProvider', () => {
       // Allow the async refresh to settle
       await vi.advanceTimersByTimeAsync(0);
       expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('runs an overdue refresh after an in-flight refresh completes', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(r => { resolveGate = r; }),
+        resolve: () => resolveGate(),
+      };
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      const firstRefresh = provider.refreshInBackground();
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      resolveGate();
+      await firstRefresh;
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(2);
 
       provider.dispose();
     });

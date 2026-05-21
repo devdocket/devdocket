@@ -232,12 +232,24 @@ export abstract class BaseProvider {
 
   private _windowState: WindowStateProvider | undefined;
   private _windowStateSub: Disposable | undefined;
-  private _refreshIntervalMs = 0;
-  private _lastRefreshTime = 0;
   private _overdueRefresh = false;
 
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
+
+  private triggerOverdueRefresh(): void {
+    if (this._disposed || !this._overdueRefresh || this._isRefreshing || !this._windowState?.isFocused) {
+      return;
+    }
+    this._overdueRefresh = false;
+    this.refreshInBackground().catch((error: unknown) => {
+      try {
+        this.onBackgroundRefreshError(error);
+      } catch {
+        // Prevent handler errors from becoming unhandled rejections
+      }
+    });
+  }
 
   constructor(emitter: EventEmitterLike<ProviderItem[]>) {
     this._onDidDiscoverItems = emitter;
@@ -250,18 +262,14 @@ export abstract class BaseProvider {
    * if one was skipped while unfocused.
    */
   setWindowState(provider: WindowStateProvider): void {
+    if (this._disposed) {
+      return;
+    }
     this._windowStateSub?.dispose();
     this._windowState = provider;
     this._windowStateSub = provider.onDidChangeFocus((focused) => {
-      if (focused && this._overdueRefresh && !this._disposed) {
-        this._overdueRefresh = false;
-        this.refreshInBackground().catch((error: unknown) => {
-          try {
-            this.onBackgroundRefreshError(error);
-          } catch {
-            // Prevent handler errors from becoming unhandled rejections
-          }
-        });
+      if (focused) {
+        this.triggerOverdueRefresh();
       }
     });
   }
@@ -276,7 +284,6 @@ export abstract class BaseProvider {
       return;
     }
     const clampedInterval = Math.max(interval, 60);
-    this._refreshIntervalMs = clampedInterval * 1000;
     this.refreshTimer = setInterval(() => {
       if (this._windowState && !this._windowState.isFocused) {
         this._overdueRefresh = true;
@@ -289,7 +296,7 @@ export abstract class BaseProvider {
           // Prevent handler errors from becoming unhandled rejections
         }
       });
-    }, this._refreshIntervalMs);
+    }, clampedInterval * 1000);
   }
 
   stopPeriodicRefresh(): void {
@@ -308,9 +315,9 @@ export abstract class BaseProvider {
     this._isRefreshing = true;
     try {
       await this.doBackgroundRefresh();
-      this._lastRefreshTime = Date.now();
     } finally {
       this._isRefreshing = false;
+      this.triggerOverdueRefresh();
     }
   }
 

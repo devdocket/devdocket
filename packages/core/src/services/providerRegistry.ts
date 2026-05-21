@@ -32,6 +32,14 @@ function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
   return state === WorkItemState.New || state === WorkItemState.InProgress || state === WorkItemState.Paused;
 }
 
+interface WindowStateAwareProvider {
+  setWindowState(windowState: WindowStateProvider): void;
+}
+
+function isWindowStateAwareProvider(provider: DevDocketProvider): provider is DevDocketProvider & WindowStateAwareProvider {
+  return typeof (provider as Partial<WindowStateAwareProvider>).setWindowState === 'function';
+}
+
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
@@ -121,8 +129,8 @@ export class ProviderRegistry {
   }
 
   private applyWindowState(provider: DevDocketProvider): void {
-    if (this._windowState && typeof (provider as any).setWindowState === 'function') {
-      (provider as any).setWindowState(this._windowState);
+    if (this._windowState && isWindowStateAwareProvider(provider)) {
+      provider.setWindowState(this._windowState);
     }
   }
 
