@@ -398,90 +398,8 @@ describe('BaseProvider', () => {
     });
   });
 
-  describe('focus gating via setWindowState', () => {
-    it('skips timer-fired refresh when window is unfocused', async () => {
-      const provider = new TestProvider(createMockEmitter());
-      const { state } = createMockWindowState(false);
-      provider.setWindowState(state);
-
-      provider.startPeriodicRefresh(60);
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(provider.backgroundRefreshCalls).toBe(0);
-
-      // Second tick still skipped
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(provider.backgroundRefreshCalls).toBe(0);
-
-      provider.dispose();
-    });
-
-    it('refreshes immediately on focus gain when overdue', async () => {
-      const provider = new TestProvider(createMockEmitter());
-      const { state, setFocused } = createMockWindowState(false);
-      provider.setWindowState(state);
-
-      provider.startPeriodicRefresh(60);
-
-      // Timer fires while unfocused — skipped
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(provider.backgroundRefreshCalls).toBe(0);
-
-      // Gaining focus triggers the overdue refresh
-      setFocused(true);
-      // Allow the async refresh to settle
-      await vi.advanceTimersByTimeAsync(0);
-      expect(provider.backgroundRefreshCalls).toBe(1);
-
-      provider.dispose();
-    });
-
-    it('runs an overdue refresh after an in-flight refresh completes', async () => {
-      const provider = new TestProvider(createMockEmitter());
-      const { state, setFocused } = createMockWindowState(false);
-      provider.setWindowState(state);
-
-      let resolveGate!: () => void;
-      provider.refreshGate = {
-        promise: new Promise<void>(r => { resolveGate = r; }),
-        resolve: () => resolveGate(),
-      };
-
-      provider.startPeriodicRefresh(60);
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(provider.backgroundRefreshCalls).toBe(0);
-
-      const firstRefresh = provider.refreshInBackground();
-      expect(provider.backgroundRefreshCalls).toBe(1);
-
-      setFocused(true);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(provider.backgroundRefreshCalls).toBe(1);
-
-      resolveGate();
-      await firstRefresh;
-      await vi.advanceTimersByTimeAsync(0);
-      expect(provider.backgroundRefreshCalls).toBe(2);
-
-      provider.dispose();
-    });
-
-    it('does not refresh on focus gain when not overdue', async () => {
-      const provider = new TestProvider(createMockEmitter());
-      const { state, setFocused } = createMockWindowState(true);
-      provider.setWindowState(state);
-
-      provider.startPeriodicRefresh(60);
-
-      // Focus toggled before timer fires — no overdue
-      setFocused(false);
-      setFocused(true);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(provider.backgroundRefreshCalls).toBe(0);
-
-      provider.dispose();
-    });
-
-    it('allows timer-fired refresh when window is focused', async () => {
+  describe('focus throttling via setWindowState', () => {
+    it('polls at focused interval when focused', async () => {
       const provider = new TestProvider(createMockEmitter());
       const { state } = createMockWindowState(true);
       provider.setWindowState(state);
@@ -490,45 +408,102 @@ describe('BaseProvider', () => {
       await vi.advanceTimersByTimeAsync(60_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
       provider.dispose();
     });
 
-    it('works without window state set (backward compatible)', async () => {
+    it('polls at 2.5x interval when unfocused', async () => {
       const provider = new TestProvider(createMockEmitter());
-      // No setWindowState call — should behave as before
+      const { state } = createMockWindowState(false);
+      provider.setWindowState(state);
+
       provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
       await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
+    it('refreshes on focus gain if last refresh was longer than focused interval ago', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       provider.dispose();
     });
 
-    it('does not gate explicit refreshInBackground calls', async () => {
+    it('does not refresh on focus gain if last refresh was recent', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(true);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      setFocused(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('does not throttle explicit refreshInBackground calls', async () => {
       const provider = new TestProvider(createMockEmitter());
       const { state } = createMockWindowState(false);
       provider.setWindowState(state);
 
-      // Direct call should still work even when unfocused
       await provider.refreshInBackground();
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       provider.dispose();
     });
 
-    it('clears overdue flag on stopPeriodicRefresh', async () => {
+    it('works without window state set (backward compatible)', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('stopPeriodicRefresh clears state', async () => {
       const provider = new TestProvider(createMockEmitter());
       const { state, setFocused } = createMockWindowState(false);
       provider.setWindowState(state);
 
       provider.startPeriodicRefresh(60);
-      await vi.advanceTimersByTimeAsync(60_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       provider.stopPeriodicRefresh();
-
-      // Focus gain should not trigger refresh since timer was stopped
       setFocused(true);
       await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(180_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       provider.dispose();
@@ -540,11 +515,8 @@ describe('BaseProvider', () => {
       provider.setWindowState(state);
 
       provider.startPeriodicRefresh(60);
-      await vi.advanceTimersByTimeAsync(60_000);
-
       provider.dispose();
 
-      // Focus gain after dispose should not trigger refresh
       setFocused(true);
       await vi.advanceTimersByTimeAsync(0);
       expect(provider.backgroundRefreshCalls).toBe(0);
@@ -557,36 +529,12 @@ describe('BaseProvider', () => {
 
       provider.setWindowState(first.state);
       provider.setWindowState(second.state);
-
       provider.startPeriodicRefresh(60);
 
-      // Timer fires — second state is focused, so it should refresh
       await vi.advanceTimersByTimeAsync(60_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
-      // Old window state fire should not trigger anything
       first.setFocused(true);
-      await vi.advanceTimersByTimeAsync(0);
-      // Still only 1 (no spurious refresh from old subscription)
-      expect(provider.backgroundRefreshCalls).toBe(1);
-
-      provider.dispose();
-    });
-
-    it('triggers an overdue refresh when replacing unfocused state with a focused one', async () => {
-      const provider = new TestProvider(createMockEmitter());
-      const first = createMockWindowState(false);
-      const second = createMockWindowState(true);
-
-      provider.setWindowState(first.state);
-      provider.startPeriodicRefresh(60);
-      await vi.advanceTimersByTimeAsync(60_000);
-      expect(provider.backgroundRefreshCalls).toBe(0);
-
-      provider.setWindowState(second.state);
-      await vi.advanceTimersByTimeAsync(0);
-      expect(provider.backgroundRefreshCalls).toBe(1);
-
       await vi.advanceTimersByTimeAsync(0);
       expect(provider.backgroundRefreshCalls).toBe(1);
 

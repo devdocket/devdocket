@@ -223,32 +223,50 @@ export interface EventEmitterLike<T> {
  * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {
+  /** Multiplier for the unfocused-window polling interval. Matches the pattern
+   *  used by Microsoft's vscode-pull-request-github extension (2min focused,
+   *  5min unfocused = 2.5x). */
+  private static readonly UNFOCUSED_INTERVAL_MULTIPLIER = 2.5;
+  private static readonly REFRESH_TOLERANCE_MS = 1000;
+
   protected readonly _onDidDiscoverItems: EventEmitterLike<ProviderItem[]>;
   readonly onDidDiscoverItems: Event<ProviderItem[]>;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private periodicRefreshIntervalMs: number | undefined;
+  private _lastRefreshTime = 0;
   protected _isRefreshing = false;
   private _disposed = false;
 
   private _windowState: WindowStateProvider | undefined;
   private _windowStateSub: Disposable | undefined;
-  private _overdueRefresh = false;
 
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
-  private triggerOverdueRefresh(): void {
-    if (this._disposed || !this._overdueRefresh || this._isRefreshing || !this._windowState?.isFocused) {
+  private handleBackgroundRefreshError(error: unknown): void {
+    try {
+      this.onBackgroundRefreshError(error);
+    } catch {
+      // Prevent handler errors from becoming unhandled rejections
+    }
+  }
+
+  private triggerPeriodicRefresh(): void {
+    this.refreshInBackground().catch((error: unknown) => {
+      this.handleBackgroundRefreshError(error);
+    });
+  }
+
+  private refreshOnFocusIfStale(): void {
+    const focusedIntervalMs = this.periodicRefreshIntervalMs;
+    if (this._disposed || !focusedIntervalMs || this._isRefreshing || !this._windowState?.isFocused) {
       return;
     }
-    this._overdueRefresh = false;
-    this.refreshInBackground().catch((error: unknown) => {
-      try {
-        this.onBackgroundRefreshError(error);
-      } catch {
-        // Prevent handler errors from becoming unhandled rejections
-      }
-    });
+    if (Date.now() - this._lastRefreshTime <= focusedIntervalMs) {
+      return;
+    }
+    this.triggerPeriodicRefresh();
   }
 
   constructor(emitter: EventEmitterLike<ProviderItem[]>) {
@@ -257,9 +275,9 @@ export abstract class BaseProvider {
   }
 
   /**
-   * Provides window focus state so background refreshes are skipped when
+   * Provides window focus state so background refreshes can be throttled when
    * the window is unfocused. On focus gain, an immediate refresh is triggered
-   * if one was skipped while unfocused.
+   * when the focused polling interval has already elapsed.
    */
   setWindowState(provider: WindowStateProvider): void {
     if (this._disposed) {
@@ -269,10 +287,9 @@ export abstract class BaseProvider {
     this._windowState = provider;
     this._windowStateSub = provider.onDidChangeFocus((focused) => {
       if (focused) {
-        this.triggerOverdueRefresh();
+        this.refreshOnFocusIfStale();
       }
     });
-    this.triggerOverdueRefresh();
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
@@ -285,19 +302,18 @@ export abstract class BaseProvider {
       return;
     }
     const clampedInterval = Math.max(interval, 60);
+    const focusedIntervalMs = clampedInterval * 1000;
+    this.periodicRefreshIntervalMs = focusedIntervalMs;
+    this._lastRefreshTime = Date.now();
     this.refreshTimer = setInterval(() => {
-      if (this._windowState && !this._windowState.isFocused) {
-        this._overdueRefresh = true;
+      const requiredIntervalMs = this._windowState?.isFocused === false
+        ? focusedIntervalMs * BaseProvider.UNFOCUSED_INTERVAL_MULTIPLIER
+        : focusedIntervalMs;
+      if (Date.now() - this._lastRefreshTime < requiredIntervalMs - BaseProvider.REFRESH_TOLERANCE_MS) {
         return;
       }
-      this.refreshInBackground().catch((error: unknown) => {
-        try {
-          this.onBackgroundRefreshError(error);
-        } catch {
-          // Prevent handler errors from becoming unhandled rejections
-        }
-      });
-    }, clampedInterval * 1000);
+      this.triggerPeriodicRefresh();
+    }, focusedIntervalMs);
   }
 
   stopPeriodicRefresh(): void {
@@ -305,7 +321,7 @@ export abstract class BaseProvider {
       clearInterval(this.refreshTimer);
       this.refreshTimer = undefined;
     }
-    this._overdueRefresh = false;
+    this.periodicRefreshIntervalMs = undefined;
   }
 
   /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
@@ -316,9 +332,9 @@ export abstract class BaseProvider {
     this._isRefreshing = true;
     try {
       await this.doBackgroundRefresh();
+      this._lastRefreshTime = Date.now();
     } finally {
       this._isRefreshing = false;
-      this.triggerOverdueRefresh();
     }
   }
 

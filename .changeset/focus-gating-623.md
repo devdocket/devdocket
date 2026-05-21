@@ -3,4 +3,4 @@
 "devdocket": patch
 ---
 
-Add focus-aware refresh gating so background provider refreshes are skipped when the VS Code window is unfocused, reducing redundant API calls across multiple windows.
+Throttle background provider refreshes when the VS Code window is unfocused so background windows still poll for new notifications while reducing redundant API calls across multiple windows.
