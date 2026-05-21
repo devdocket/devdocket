@@ -33,7 +33,11 @@ function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
 }
 
 interface WindowStateAwareProvider {
-  setWindowState(windowState: WindowStateProvider): void;
+  setWindowState(windowState: WindowStateProvider): void | PromiseLike<void>;
+}
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return typeof value === 'object' && value !== null && typeof (value as PromiseLike<T>).then === 'function';
 }
 
 function isWindowStateAwareProvider(provider: DevDocketProvider): provider is DevDocketProvider & WindowStateAwareProvider {
@@ -131,7 +135,12 @@ export class ProviderRegistry {
   private applyWindowState(provider: DevDocketProvider): void {
     if (this._windowState && isWindowStateAwareProvider(provider)) {
       try {
-        provider.setWindowState(this._windowState);
+        const result = provider.setWindowState(this._windowState);
+        if (isPromiseLike<void>(result)) {
+          void Promise.resolve(result).catch((error: unknown) => {
+            logger.warn(`Provider ${provider.id} rejected window state updates`, error);
+          });
+        }
       } catch (error) {
         logger.warn(`Provider ${provider.id} rejected window state updates`, error);
       }

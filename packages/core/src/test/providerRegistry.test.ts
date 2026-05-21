@@ -188,6 +188,23 @@ describe('ProviderRegistry', () => {
     expect(warnSpy).toHaveBeenCalledWith('Provider throws-window-state rejected window state updates', expect.any(Error));
   });
 
+  it('logs and ignores async errors from window-state-aware providers', async () => {
+    const provider = {
+      ...createMockProvider('async-window-state'),
+      setWindowState: vi.fn(async () => {
+        throw new Error('async window state failed');
+      }),
+    };
+    const warnSpy = vi.spyOn(logger, 'warn');
+
+    registry.register(provider);
+
+    expect(() => registry.setWindowState(createMockWindowState(false))).not.toThrow();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(warnSpy).toHaveBeenCalledWith('Provider async-window-state rejected window state updates', expect.any(Error));
+  });
+
   it('returns undefined from getProvider for unknown id', () => {
     expect(registry.getProvider('nonexistent')).toBeUndefined();
   });
