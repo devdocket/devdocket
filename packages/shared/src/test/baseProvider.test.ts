@@ -401,7 +401,7 @@ describe('BaseProvider', () => {
   describe('focus gating via setWindowState', () => {
     it('skips timer-fired refresh when window is unfocused', async () => {
       const provider = new TestProvider(createMockEmitter());
-      const { state, setFocused } = createMockWindowState(false);
+      const { state } = createMockWindowState(false);
       provider.setWindowState(state);
 
       provider.startPeriodicRefresh(60);
