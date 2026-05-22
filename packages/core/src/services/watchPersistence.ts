@@ -65,7 +65,8 @@ export class WatchPersistence {
     const snapshot = clonePersistedSnapshot(runs, prs);
     this.pendingSave = this.pendingSave
       .catch(() => undefined)
-      .then(() => this.persistSnapshot(snapshot));
+      .then(() => this.persistSnapshot(snapshot))
+      .catch(() => undefined);
   }
 
   async flush(): Promise<void> {
