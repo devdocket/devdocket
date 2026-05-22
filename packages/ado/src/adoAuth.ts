@@ -43,7 +43,7 @@ export async function retryAdoWithAuth(
       });
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
       throw error;
     }
   }
