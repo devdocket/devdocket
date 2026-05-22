@@ -89,7 +89,7 @@ The moment that PR merges, the publish path of `changesets.yml` runs:
 
 - `main` is fast-forwarded to `dev`'s HEAD (the script aborts if `main` has diverged — see [Recovery](#recovery)).
 - One git tag per bumped package is created on `main` (e.g., `core-v0.1.0`, `shared-v0.1.0`).
-- The dedicated `devdocket bot` GitHub App pushes `main`, and the workflow creates tag refs via the REST API. (The default `GITHUB_TOKEN` won't work here because tag pushes made with it don't trigger downstream workflows.)
+- The dedicated `devdocket bot` GitHub App pushes `main`, and the workflow creates tag refs via the REST API. (The default `GITHUB_TOKEN` won't trigger those downstream workflows when it is used for the release update.)
 
 ### 4. Approve each per-package publish (if you enabled required reviewers)
 
