@@ -42,6 +42,7 @@ function resetGitVersionCheck(): void {
 /** @internal Test-only hooks for repoManager.ts. */
 export const __testing = {
   resetGitVersionCheck,
+  repoDirFor,
 };
 
 export interface WorktreeInfo {
@@ -84,6 +85,18 @@ async function gitAdoAuth(args: string[], cwd: string, token: string, timeout = 
 
 function sanitizePathSegment(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'repo';
+}
+
+type RepoDirInput =
+  | { provider: 'github'; org: string; repo: string }
+  | { provider: 'ado'; org: string; project: string; repo: string };
+
+function repoDirFor(input: RepoDirInput): string {
+  if (input.provider === 'github') {
+    return `${sanitizePathSegment(input.org)}-${sanitizePathSegment(input.repo)}`;
+  }
+
+  return sanitizePathSegment(`ado-${input.org}-${input.project}-${input.repo}`);
 }
 
 function sanitizeUrlForLog(url: string): string {
@@ -210,7 +223,7 @@ export class RepoManager {
     const key = this.githubKey(org, repo, prNumber);
     this.log.info(`Parsed GitHub PR: org=${org}, repo=${repo}, prNumber=${prNumber}`);
 
-    const repoDir = `${org}-${repo}`;
+    const repoDir = repoDirFor({ provider: 'github', org, repo });
     const repoBase = path.join(this.storageUri.fsPath, 'repos', repoDir);
     const clonePath = path.join(repoBase, 'clone');
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
@@ -352,7 +365,7 @@ export class RepoManager {
     const key = this.adoKey(org, project, repo, prNumber);
     this.log.info(`Parsed ADO PR: org=${org}, project=${project}, repo=${repo}, prNumber=${prNumber}`);
 
-    const repoDir = sanitizePathSegment(`ado-${org}-${project}-${repo}`);
+    const repoDir = repoDirFor({ provider: 'ado', org, project, repo });
     const repoBase = path.join(this.storageUri.fsPath, 'repos', repoDir);
     const clonePath = path.join(repoBase, 'clone');
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
@@ -511,9 +524,10 @@ export class RepoManager {
     }
 
     if (repoBases.size === 0) {
-      repoBases.add(path.join(this.storageUri.fsPath, 'repos', sanitizePathSegment(`${org}-${repo}`)));
-      if (org.includes('/')) {
-        repoBases.add(path.join(this.storageUri.fsPath, 'repos', sanitizePathSegment(`ado-${org}-${repo}`)));
+      repoBases.add(path.join(this.storageUri.fsPath, 'repos', repoDirFor({ provider: 'github', org, repo })));
+      const [adoOrg, project, ...rest] = org.split('/');
+      if (adoOrg && project && rest.length === 0) {
+        repoBases.add(path.join(this.storageUri.fsPath, 'repos', repoDirFor({ provider: 'ado', org: adoOrg, project, repo })));
       }
     }
 

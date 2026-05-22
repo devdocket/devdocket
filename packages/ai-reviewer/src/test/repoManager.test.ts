@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
 import { RepoManager, parsePrUrl, __testing } from '../repoManager';
 import { GitExecError } from '../tools/gitUtils';
-const { resetGitVersionCheck } = __testing;
+const { resetGitVersionCheck, repoDirFor } = __testing;
 
 // Mock child_process
 vi.mock('child_process', () => ({
@@ -28,6 +28,16 @@ function setProcessPlatform(platform: NodeJS.Platform): void {
 
 function createRepoManager(): RepoManager {
   return new RepoManager({ fsPath: '/mock/storage' } as never, mockLogOutputChannel as never);
+}
+
+function repoManagerInternals(manager: RepoManager): {
+  ensureGitHubWorktree: (prUrl: string, org: string, repo: string, prNumber: string) => Promise<{ clonePath: string }>;
+  ensureAdoWorktree: (prUrl: string, org: string, project: string, repo: string, prNumber: string) => Promise<{ clonePath: string }>;
+} {
+  return manager as unknown as {
+    ensureGitHubWorktree: (prUrl: string, org: string, repo: string, prNumber: string) => Promise<{ clonePath: string }>;
+    ensureAdoWorktree: (prUrl: string, org: string, project: string, repo: string, prNumber: string) => Promise<{ clonePath: string }>;
+  };
 }
 
 function getCloneArgs(): string[] {
@@ -158,6 +168,18 @@ describe('parsePrUrl', () => {
   });
 });
 
+describe('repoDirFor', () => {
+  it('sanitizes GitHub org and repo segments independently', () => {
+    expect(repoDirFor({ provider: 'github', org: 'octo corp', repo: 'repo:name' })).toBe('octo-corp-repo-name');
+  });
+
+  it('preserves the existing ADO repo directory format', () => {
+    expect(repoDirFor({ provider: 'ado', org: 'org name', project: 'project name', repo: 'repo@name' })).toBe(
+      'ado-org-name-project-name-repo-name',
+    );
+  });
+});
+
 describe('RepoManager', () => {
   let manager: RepoManager;
 
@@ -212,6 +234,44 @@ describe('RepoManager', () => {
       await expect(manager.ensureWorktree('https://example.com/not-pr?token=secret#frag')).rejects.toThrow(
         'Invalid PR URL: https://example.com/not-pr',
       );
+    });
+
+    it('uses the same sanitized GitHub repo directory for creation and cleanup', async () => {
+      const internals = repoManagerInternals(manager);
+      const info = await internals.ensureGitHubWorktree(
+        'https://github.com/octo%20corp/repo%3Aname/pull/42',
+        'octo corp',
+        'repo:name',
+        '42',
+      );
+      vi.mocked(workspace.fs.delete).mockClear();
+
+      await manager.removeRepo('octo corp', 'repo:name');
+
+      const expectedRepoBase = `/mock/storage/repos/${repoDirFor({ provider: 'github', org: 'octo corp', repo: 'repo:name' })}`;
+      expect(normalizePath(info.clonePath)).toBe(`${expectedRepoBase}/clone`);
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => normalizePath((call[0] as { fsPath: string }).fsPath));
+      expect(deletedPaths).toContain(expectedRepoBase);
+    });
+
+    it('keeps the ADO repo directory naming in sync between creation and cleanup', async () => {
+      mockAdoPrDetails();
+      const internals = repoManagerInternals(manager);
+      const info = await internals.ensureAdoWorktree(
+        'https://dev.azure.com/org%20name/project%20name/_git/repo%40name/pullrequest/42',
+        'org name',
+        'project name',
+        'repo@name',
+        '42',
+      );
+      vi.mocked(workspace.fs.delete).mockClear();
+
+      await manager.removeRepo('org name/project name', 'repo@name');
+
+      const expectedRepoBase = `/mock/storage/repos/${repoDirFor({ provider: 'ado', org: 'org name', project: 'project name', repo: 'repo@name' })}`;
+      expect(normalizePath(info.clonePath)).toBe(`${expectedRepoBase}/clone`);
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => normalizePath((call[0] as { fsPath: string }).fsPath));
+      expect(deletedPaths).toContain(expectedRepoBase);
     });
 
     it('redacts query strings and fragments from parse-failing URLs', async () => {
