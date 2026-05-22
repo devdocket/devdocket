@@ -64,7 +64,11 @@ export abstract class BaseGitHubProvider extends BaseProvider {
 
       if (!session || token?.isCancellationRequested) {
         if (!session) {
-          logger.info('User cancelled GitHub authentication');
+          if (interactive) {
+            logger.info('User cancelled GitHub authentication');
+          } else {
+            logger.debug('No cached GitHub session available for non-interactive refresh');
+          }
         }
         return;
       }
