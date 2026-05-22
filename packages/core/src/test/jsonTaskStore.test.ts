@@ -205,7 +205,7 @@ describe('JsonTaskStore', () => {
       expect(items[0].id).toBe('valid');
     });
 
-    it('returns empty when globalState contains a non-array', async () => {
+    it('returns empty when the backing JSON file contains a non-array', async () => {
       fileSystem.writeJson(fileUri, { not: 'an array' });
 
       const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
