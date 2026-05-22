@@ -58,9 +58,6 @@ export class AdoPrClient {
   ) {}
 
   async fetchPullRequestDetails(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<AdoPullRequestDetails | undefined> {
-    if (options.signal?.aborted) {
-      throw createAbortError();
-    }
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
