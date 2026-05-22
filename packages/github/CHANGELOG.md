@@ -1,5 +1,14 @@
 # DevDocket GitHub
 
+## 0.1.2
+
+### Patch Changes
+
+- [#631 Activate provider extensions when DevDocket sidebar opens](https://github.com/devdocket/devdocket/pull/631) [`3b5342d`](https://github.com/devdocket/devdocket/commit/3b5342d786da9ede1d22f708dc781eb7049426d4) - Activate provider and action extensions when the DevDocket sidebar opens, not only at VS Code startup. This ensures extensions installed mid-session (e.g., via Settings Sync) activate the first time the user opens the DevDocket sidebar instead of requiring a VS Code restart.
+
+- Updated dependencies [[`3789ea0`](https://github.com/devdocket/devdocket/commit/3789ea05145bb8b1e5c037cb73375fe716e75db0)]:
+  - @devdocket/shared@0.2.0
+
 ## 0.1.1
 
 ### Patch Changes
