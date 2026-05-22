@@ -291,7 +291,7 @@ describe('JsonTaskStore', () => {
       // Window A creates item1
       await store.save(makeItem({ id: 'item1', title: 'Window A item', updatedAt: 1000 }));
 
-      // Simulate another window adding item2 directly to globalState
+      // Simulate another window adding item2 directly to the shared JSON file
       const current = fileSystem.readJson<WorkItem[]>(fileUri) ?? [];
       fileSystem.writeJson(fileUri, [
         ...current,
