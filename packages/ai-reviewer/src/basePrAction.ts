@@ -60,16 +60,23 @@ export abstract class BasePrAction implements DevDocketAction {
 
     if (!await confirmAiUsage(this.confirmationMessage)) return;
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: this.progressTitle,
-        cancellable: true,
-      },
-      async (progress, token) => {
-        await this.doWork(item, progress, token);
-      },
-    );
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: this.progressTitle,
+          cancellable: true,
+        },
+        async (progress, token) => {
+          await this.doWork(item, progress, token);
+        },
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      throw err;
+    }
   }
 
   async fetchDiff(url: string, token?: vscode.CancellationToken): Promise<string | undefined> {
