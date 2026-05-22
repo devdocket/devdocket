@@ -357,6 +357,7 @@ describe('WatcherService', () => {
       });
       registry.register(watcher);
       await service.startWatch(createIdentifier());
+      await service.flushPersistence();
       // Reset the saveAll spy to ignore the post-startWatch persist.
       (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
       // Advance timers to start the poll. Don't await — the poll's await
@@ -383,6 +384,29 @@ describe('WatcherService', () => {
       // saveAll is called async — flush
       await vi.advanceTimersByTimeAsync(0);
       expect(watchStore.saveAll).toHaveBeenCalled();
+    });
+
+    it('flushPersistence waits for queued saves', async () => {
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+
+      let resolveSave: (() => void) | undefined;
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise<void>(resolve => {
+        resolveSave = resolve;
+      }));
+
+      await service.startWatch(createIdentifier());
+
+      let flushed = false;
+      const flushPromise = service.flushPersistence().then(() => {
+        flushed = true;
+      });
+      await Promise.resolve();
+
+      expect(flushed).toBe(false);
+      resolveSave?.();
+      await flushPromise;
+      expect(flushed).toBe(true);
     });
 
     it('loads persisted watches on loadPersistedWatches', async () => {
