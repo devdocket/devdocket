@@ -112,6 +112,9 @@ export abstract class BasePrAction implements DevDocketAction {
     const abortController = new AbortController();
     const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
+      if (token?.isCancellationRequested) {
+        throw createAbortError();
+      }
       const session = await getGitHubSession({ interactive: true, signal: abortController.signal });
       if (!session) {
         vscode.window.showWarningMessage(
