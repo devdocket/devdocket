@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { createAbortError } from '@devdocket/shared';
+import { combineSignals, createAbortError } from '@devdocket/shared';
 import type { WorkItem, DevDocketAction } from './types';
 import { parseAdoPrUrl, parsePullRequestUrl, parsePrUrl } from './prUrl';
 import { AdoPrClient } from './adoPrClient';
@@ -95,6 +95,9 @@ export abstract class BasePrAction implements DevDocketAction {
 
       return undefined;
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       console.error(`${this.progressTitle}: failed to fetch diff:`, err);
       vscode.window.showWarningMessage(`${this.progressTitle}: Failed to fetch PR diff`);
       return undefined;
@@ -125,7 +128,7 @@ export abstract class BasePrAction implements DevDocketAction {
             Accept: 'application/vnd.github.diff',
             'X-GitHub-Api-Version': '2022-11-28',
           },
-          signal: abortController.signal,
+          signal: combineSignals(abortController.signal, 30_000),
         },
       );
 

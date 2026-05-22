@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { combineSignals, createAbortError } from '@devdocket/shared';
+import { combineSignals, getSessionWithAuthFallback } from '@devdocket/shared';
 
 export const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
@@ -18,52 +18,13 @@ export async function getAdoHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) {
-    return promise;
-  }
-  if (signal.aborted) {
-    return Promise.reject(createAbortError());
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(createAbortError());
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      value => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      error => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      },
-    );
-  });
-}
-
 export async function getAdoSession(options: AdoAuthOptions = {}): Promise<vscode.AuthenticationSession | undefined> {
-  const { interactive = false, signal } = options;
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-
-  const session = await raceWithAbort(
-    vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true }),
-    signal,
-  );
-  if (session || !interactive) {
-    return session;
-  }
-
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-
-  return raceWithAbort(
-    vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true }),
-    signal,
-  );
+  return getSessionWithAuthFallback({
+    interactive: options.interactive,
+    signal: options.signal,
+    getSilent: () => vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true }),
+    getInteractive: () => vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true }),
+  });
 }
 
 /** Retry a request with ADO auth, prompting only for interactive callers. */
@@ -72,7 +33,7 @@ export async function retryAdoWithAuth(
   signal?: AbortSignal,
   options: Omit<AdoAuthOptions, 'signal'> = {},
 ): Promise<Response | undefined> {
-  const authSignal = signal ? combineSignals(signal, 30_000) : undefined;
+  const authSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
   try {
     const session = await getAdoSession({ ...options, signal: authSignal });
     if (session) {

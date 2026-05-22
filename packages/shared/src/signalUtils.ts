@@ -11,6 +11,53 @@ export function createAbortError(): Error {
   return error;
 }
 
+export function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(createAbortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      value => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+export async function getSessionWithAuthFallback<T>(options: {
+  interactive?: boolean;
+  signal?: AbortSignal;
+  getSilent: () => Promise<T | undefined>;
+  getInteractive: () => Promise<T | undefined>;
+}): Promise<T | undefined> {
+  const { interactive = false, signal, getSilent, getInteractive } = options;
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  const session = await raceWithAbort(getSilent(), signal);
+  if (session || !interactive) {
+    return session;
+  }
+
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  return raceWithAbort(getInteractive(), signal);
+}
+
 /**
  * Combines a cancellation signal with a per-request timeout into a single AbortSignal.
  * Node 18 compatible — does not use AbortSignal.any() (requires Node 20.3+).

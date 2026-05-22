@@ -10,7 +10,7 @@ export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegme
 export { validateRefreshInterval } from './refreshInterval';
 export type { DevDocketRunWatcher, RunIdentifier, RunStatus, JobStatus, RunState, RunConclusion, CancellationTokenLike } from './runWatcher';
 export type { DevDocketPRWatcher, PRIdentifier, PRState, PRRunsSnapshot } from './prWatcher';
-export { combineSignals, createAbortError } from './signalUtils';
+export { combineSignals, createAbortError, raceWithAbort, getSessionWithAuthFallback } from './signalUtils';
 export { runWorkerPool, runWorkerPoolSettled } from './concurrency';
 export { WorkItemState } from './workItem';
 export type { WorkItem, WorkItemInput, ActivityLogEntry, ActivityType } from './workItem';

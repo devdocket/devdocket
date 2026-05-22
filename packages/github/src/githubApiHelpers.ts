@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, combineSignals, createAbortError, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
+import { isValidGitHubRepo, combineSignals, createAbortError, getSessionWithAuthFallback, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubAuthOptions {
@@ -155,55 +155,16 @@ export async function getHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) {
-    return promise;
-  }
-  if (signal.aborted) {
-    return Promise.reject(createAbortError());
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(createAbortError());
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      value => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      error => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      },
-    );
-  });
-}
-
 export async function getGitHubSession(
   scopes: readonly string[],
   options: GitHubAuthOptions = {},
 ): Promise<vscode.AuthenticationSession | undefined> {
-  const { interactive = false, signal } = options;
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-
-  const session = await raceWithAbort(
-    vscode.authentication.getSession('github', [...scopes], { silent: true }),
-    signal,
-  );
-  if (session || !interactive) {
-    return session;
-  }
-
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-
-  return raceWithAbort(
-    vscode.authentication.getSession('github', [...scopes], { createIfNone: true }),
-    signal,
-  );
+  return getSessionWithAuthFallback({
+    interactive: options.interactive,
+    signal: options.signal,
+    getSilent: () => vscode.authentication.getSession('github', [...scopes], { silent: true }),
+    getInteractive: () => vscode.authentication.getSession('github', [...scopes], { createIfNone: true }),
+  });
 }
 
 /** Retry a request with GitHub auth, prompting only for interactive callers. */
@@ -212,7 +173,7 @@ export async function retryWithAuth(
   signal?: AbortSignal,
   options: Omit<GitHubAuthOptions, 'signal'> = {},
 ): Promise<Response | undefined> {
-  const authSignal = signal ? combineSignals(signal, 30_000) : undefined;
+  const authSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
   try {
     const session = await getGitHubSession(['repo'], { ...options, signal: authSignal });
     if (session) {

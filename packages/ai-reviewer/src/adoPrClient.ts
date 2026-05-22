@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { combineSignals, createAbortError } from '@devdocket/shared';
+import { combineSignals, createAbortError, raceWithAbort } from '@devdocket/shared';
 import type { AdoPrUrlParts } from './prUrl';
 import { ADO_AUTH_SCOPE, getAdoSession, type AuthRequestOptions } from './auth';
 
@@ -50,30 +50,6 @@ interface AdoCommitDiffResponse {
 
 type FetchLike = typeof fetch;
 type SessionProvider = (options?: AuthRequestOptions) => Promise<vscode.AuthenticationSession | undefined>;
-
-function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
-  if (!signal) {
-    return promise;
-  }
-  if (signal.aborted) {
-    return Promise.reject(createAbortError());
-  }
-
-  return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(createAbortError());
-    signal.addEventListener('abort', onAbort, { once: true });
-    promise.then(
-      value => {
-        signal.removeEventListener('abort', onAbort);
-        resolve(value);
-      },
-      error => {
-        signal.removeEventListener('abort', onAbort);
-        reject(error);
-      },
-    );
-  });
-}
 
 export class AdoPrClient {
   constructor(
