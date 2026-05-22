@@ -89,10 +89,10 @@ export class AdoPrClient {
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
-    const signal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
+    const detailsSignal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
     const detailsResponse = await this.fetchImpl(this.prApiUrl(parts), {
       headers: this.jsonHeaders(session.accessToken),
-      signal,
+      signal: detailsSignal,
     });
 
     if (!detailsResponse.ok) {
@@ -106,9 +106,10 @@ export class AdoPrClient {
       throw new Error('Azure DevOps PR metadata did not include source and target versions');
     }
 
+    const diffSignal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
     const diffResponse = await this.fetchImpl(this.diffApiUrl(parts, baseVersion, targetVersion), {
       headers: this.jsonHeaders(session.accessToken),
-      signal,
+      signal: diffSignal,
     });
 
     if (!diffResponse.ok) {
