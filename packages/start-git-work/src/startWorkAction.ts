@@ -74,6 +74,11 @@ type ResolvedGitWork = GitWorkInfo & { cloneUrl: string; ref: string };
 
 type WorkMode = 'checkout' | 'worktree';
 
+type CanRunDecision = {
+  canRun: boolean;
+  reason?: string;
+};
+
 type RepoPathPick = vscode.QuickPickItem & (
   | { pickKind: 'repo'; repoPath: string }
   | { pickKind: 'paste' }
@@ -108,17 +113,25 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    if (item.state !== WorkItemState.InProgress || !item.providerId || !item.externalId) {
-      return false;
+    const decision = this.getCanRunDecision(item);
+    if (!decision.canRun) {
+      logger.debug(`Start Git Work unavailable for item ${item.id}: ${decision.reason ?? 'unknown reason'}`);
     }
-
-    return !!this.getProviderItem(item.providerId, item.externalId)?.capabilities?.gitWork;
+    return decision.canRun;
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {
+    const providerItem = item.providerId && item.externalId
+      ? this.getProviderItem(item.providerId, item.externalId)
+      : undefined;
     const gitWork = await this.resolveGitWork(item);
     if (!gitWork) {
-      void vscode.window.showErrorMessage('DevDocket: This work item is not supported by Start Git Work.');
+      const unsupportedMessage = this.getUnsupportedMessage(item, providerItem);
+      if (unsupportedMessage) {
+        void vscode.window.showInformationMessage(unsupportedMessage);
+      } else {
+        void vscode.window.showErrorMessage('DevDocket: This work item is not supported by Start Git Work.');
+      }
       return;
     }
 
@@ -137,6 +150,37 @@ export class StartWorkAction implements DevDocketAction {
     } else {
       await this.runIssueFlow(item, gitWork, repoPath);
     }
+  }
+
+  private getCanRunDecision(item: Readonly<WorkItem>): CanRunDecision {
+    if (item.state !== WorkItemState.InProgress) {
+      return { canRun: false, reason: `item state is ${item.state}` };
+    }
+    if (!item.providerId) {
+      return { canRun: false, reason: 'providerId is missing' };
+    }
+    if (!item.externalId) {
+      return { canRun: false, reason: 'externalId is missing' };
+    }
+
+    const providerItem = this.getProviderItem(item.providerId, item.externalId);
+    if (!providerItem) {
+      return { canRun: false, reason: `live provider item ${item.providerId}/${item.externalId} was not found` };
+    }
+    if (providerItem.capabilities?.gitWork) {
+      return { canRun: true };
+    }
+    if (this.getUnsupportedMessage(item, providerItem)) {
+      return { canRun: true };
+    }
+    return { canRun: false, reason: `provider item ${item.providerId}/${item.externalId} has no gitWork capability` };
+  }
+
+  private getUnsupportedMessage(item: Readonly<WorkItem>, providerItem?: ProviderItem): string | undefined {
+    if (item.providerId === 'ado-work-items' && providerItem && !providerItem.capabilities?.gitWork) {
+      return 'DevDocket: This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.';
+    }
+    return undefined;
   }
 
   private async resolveGitWork(item: Readonly<WorkItem>): Promise<GitWorkInfo | undefined> {

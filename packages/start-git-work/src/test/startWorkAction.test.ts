@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { window, workspace } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
+import { setLogger } from '../logger';
 import * as path from 'path';
 import type { ProviderItemCapabilities } from '@devdocket/shared';
 
@@ -31,6 +32,12 @@ import { execFile } from 'child_process';
 import * as fs from 'fs';
 
 const ORIGIN_REMOTE_V = 'origin\thttps://example.com/acme/repo.git (fetch)\norigin\thttps://example.com/acme/repo.git (push)\n';
+const mockLogger = {
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+};
 
 type GitWork = NonNullable<ProviderItemCapabilities['gitWork']>;
 
@@ -140,6 +147,7 @@ function mockNoLocalBranch(remoteOutput = ORIGIN_REMOTE_V) {
 describe('StartWorkAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    setLogger(mockLogger);
     (workspace as any).workspaceFolders = [{ uri: { fsPath: '/mock/workspace' } }];
     mockInputBox('/mock/workspace');
     mockQuickPicks();
@@ -160,11 +168,18 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true when a lazy gitWork capability is present', () => {
-      const item = createWorkItem();
-      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+    it('returns true for ADO PRs when a lazy gitWork capability is present', () => {
+      const item = createWorkItem({ providerId: 'ado-pr-reviews', externalId: 'myorg/MyProject/myrepo/101' });
+      const { action } = createAction(discovered('ado-pr-reviews', 'myorg/MyProject/myrepo/101', async () => ({
         kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
       })));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for ADO work items without gitWork so the action can explain why it is unavailable', () => {
+      const item = createWorkItem({ providerId: 'ado-work-items', externalId: 'myorg/MyProject/1' });
+      const { action } = createAction(discovered('ado-work-items', 'myorg/MyProject/1'));
 
       expect(action.canRun(item)).toBe(true);
     });
@@ -181,6 +196,7 @@ describe('StartWorkAction', () => {
       const { action } = createAction({});
 
       expect(action.canRun(item)).toBe(false);
+      expect(mockLogger.debug).toHaveBeenCalledWith('Start Git Work unavailable for item wc-test-1: live provider item provider/item-1 was not found');
     });
 
     it('returns false for non-InProgress items', () => {
@@ -194,6 +210,18 @@ describe('StartWorkAction', () => {
   });
 
   describe('run', () => {
+    it('explains why Start Git Work is unavailable for ADO work items without an associated repo', async () => {
+      const item = createWorkItem({ providerId: 'ado-work-items', externalId: 'myorg/MyProject/1' });
+      const { action } = createAction(discovered('ado-work-items', 'myorg/MyProject/1'));
+
+      await action.run(item);
+
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'DevDocket: This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.',
+      );
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
     it('creates the provider-suggested branch for an issue', async () => {
       const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'ABC-123' });
       const { action, memento } = createAction(discovered('fake-vendor', 'ABC-123', {
