@@ -1,8 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import * as path from 'node:path';
 import type { ProviderItem, PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
-import { logger } from '../services/logger';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import type { WorkItem } from '../models/workItem';
 import type { ProviderRegistry } from '../services/providerRegistry';
@@ -13,18 +11,12 @@ import { isFailedConclusion, toConclusionLabel } from '../webview/shared/runConc
 import { parseProviderItemKey } from './providerItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
-interface CodiconsResources {
-  distDir: string;
-  cssPath: string;
-}
-
 export class WatchPanelProvider implements vscode.Disposable {
   static readonly viewType = 'devdocket.watchPanel';
 
   private panel?: vscode.WebviewPanel;
   private panelDisposables: vscode.Disposable[] = [];
   private readonly refreshDisposables: vscode.Disposable[];
-  private readonly codiconsResources = resolveCodiconsResources();
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -96,14 +88,9 @@ export class WatchPanelProvider implements vscode.Disposable {
   }
 
   private getWebviewOptions(): vscode.WebviewPanelOptions & vscode.WebviewOptions {
-    const localResourceRoots = [vscode.Uri.joinPath(this.extensionUri, 'webview-dist')];
-    if (this.codiconsResources) {
-      localResourceRoots.push(vscode.Uri.file(this.codiconsResources.distDir));
-    }
-
     return {
       enableScripts: true,
-      localResourceRoots,
+      localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'webview-dist')],
     };
   }
 
@@ -301,10 +288,7 @@ export class WatchPanelProvider implements vscode.Disposable {
 
   private getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'webview-dist', 'watchPanel.js'));
-    const codiconsUri = this.codiconsResources
-      ? webview.asWebviewUri(vscode.Uri.file(this.codiconsResources.cssPath))
-      : undefined;
-    const codiconsLink = codiconsUri ? `\n  <link rel="stylesheet" href="${codiconsUri}">` : '';
+    const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'webview-dist', 'codicons', 'codicon.css'));
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
@@ -313,7 +297,8 @@ export class WatchPanelProvider implements vscode.Disposable {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}' ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-  <title>CI Watches</title>${codiconsLink}
+  <title>CI Watches</title>
+  <link rel="stylesheet" href="${codiconsUri}">
   <style nonce="${nonce}">
     * { box-sizing: border-box; }
     body {
@@ -743,19 +728,6 @@ function truncate(value: string, maxLength = 140): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
-
-function resolveCodiconsResources(): CodiconsResources | undefined {
-  try {
-    const cssPath = require.resolve('@vscode/codicons/dist/codicon.css');
-    return {
-      distDir: path.dirname(cssPath),
-      cssPath,
-    };
-  } catch (error) {
-    logger.warn('Unable to resolve @vscode/codicons; watch panel icons will be unavailable.', error);
-    return undefined;
-  }
-}
 
 function getNonce(): string {
   // Cryptographically random nonce (matches editorPanelHtml). Math.random
