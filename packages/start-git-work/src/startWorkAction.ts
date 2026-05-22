@@ -126,7 +126,7 @@ export class StartWorkAction implements DevDocketAction {
       : undefined;
     const gitWork = await this.resolveGitWork(item);
     if (!gitWork) {
-      const unsupportedMessage = this.getUnsupportedMessage(item, providerItem);
+      const unsupportedMessage = this.getUnsupportedMessage(providerItem);
       if (unsupportedMessage) {
         void vscode.window.showInformationMessage(unsupportedMessage);
       } else {
@@ -170,17 +170,15 @@ export class StartWorkAction implements DevDocketAction {
     if (providerItem.capabilities?.gitWork) {
       return { canRun: true };
     }
-    if (this.getUnsupportedMessage(item, providerItem)) {
+    if (this.getUnsupportedMessage(providerItem)) {
       return { canRun: true };
     }
     return { canRun: false, reason: `provider item ${item.providerId}/${item.externalId} has no gitWork capability` };
   }
 
-  private getUnsupportedMessage(item: Readonly<WorkItem>, providerItem?: ProviderItem): string | undefined {
-    if (item.providerId === 'ado-work-items' && providerItem && !providerItem.capabilities?.gitWork) {
-      return 'DevDocket: This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.';
-    }
-    return undefined;
+  private getUnsupportedMessage(providerItem?: ProviderItem): string | undefined {
+    const reason = providerItem?.capabilities?.startGitWorkUnavailableReason;
+    return reason ? `DevDocket: ${reason}` : undefined;
   }
 
   private async resolveGitWork(item: Readonly<WorkItem>): Promise<GitWorkInfo | undefined> {

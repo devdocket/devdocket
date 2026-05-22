@@ -76,6 +76,11 @@ export interface ProviderItemCapabilities {
    * Returning `undefined` from the thunk means "not currently resolvable".
    */
   gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
+  /**
+   * Optional user-facing explanation for why Start Git Work cannot run even
+   * though the item should still surface the action in the UI.
+   */
+  startGitWorkUnavailableReason?: string;
 }
 
 export interface ProviderItemAuthor {

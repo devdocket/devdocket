@@ -117,6 +117,7 @@ describe('AdoWorkItemProvider', () => {
       reason: 'assigned',
       state: 'Active',
       itemType: 'issue',
+      capabilities: { startGitWorkUnavailableReason: 'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.' },
       badges: [{ label: 'Active', variant: 'info', show: 'editor' }],
     });
     expect(items[1]).toEqual({
@@ -128,6 +129,7 @@ describe('AdoWorkItemProvider', () => {
       reason: 'assigned',
       state: 'Active',
       itemType: 'issue',
+      capabilities: { startGitWorkUnavailableReason: 'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.' },
       badges: [{ label: 'Active', variant: 'info', show: 'editor' }],
     });
   });
@@ -158,6 +160,26 @@ describe('AdoWorkItemProvider', () => {
     expect(listener.mock.calls[0][0][0].author).toEqual({
       displayName: 'Jane Doe',
       handle: 'jane@example.com',
+    });
+  });
+
+  it('populates a Start Git Work explanation when a work item has no associated Git repo relation', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([1]) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Fix login bug')],
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0][0].capabilities).toEqual({
+      startGitWorkUnavailableReason: 'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.',
     });
   });
 

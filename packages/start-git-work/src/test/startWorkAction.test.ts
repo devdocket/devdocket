@@ -64,14 +64,20 @@ function createMockMemento() {
   };
 }
 
-function createAction(items: Record<string, { capabilities?: { gitWork?: GitWork } }> = {}) {
+function createAction(items: Record<string, { capabilities?: { gitWork?: GitWork; startGitWorkUnavailableReason?: string } }> = {}) {
   const memento = createMockMemento();
   const action = new StartWorkAction(memento as any, (providerId, externalId) => items[`${providerId}:${externalId}`] as any);
   return { action, memento };
 }
 
-function discovered(providerId: string, externalId: string, gitWork?: GitWork) {
-  return { [`${providerId}:${externalId}`]: { capabilities: gitWork ? { gitWork } : undefined } };
+function discovered(providerId: string, externalId: string, gitWork?: GitWork, startGitWorkUnavailableReason?: string) {
+  const capabilities = gitWork || startGitWorkUnavailableReason
+    ? {
+      ...(gitWork ? { gitWork } : {}),
+      ...(startGitWorkUnavailableReason ? { startGitWorkUnavailableReason } : {}),
+    }
+    : undefined;
+  return { [`${providerId}:${externalId}`]: { capabilities } };
 }
 
 function mockInputBox(repoPath: string | undefined, baseBranch = 'origin/dev') {
@@ -179,7 +185,12 @@ describe('StartWorkAction', () => {
 
     it('returns true for ADO work items without gitWork so the action can explain why it is unavailable', () => {
       const item = createWorkItem({ providerId: 'ado-work-items', externalId: 'myorg/MyProject/1' });
-      const { action } = createAction(discovered('ado-work-items', 'myorg/MyProject/1'));
+      const { action } = createAction(discovered(
+        'ado-work-items',
+        'myorg/MyProject/1',
+        undefined,
+        'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.',
+      ));
 
       expect(action.canRun(item)).toBe(true);
     });
@@ -212,7 +223,12 @@ describe('StartWorkAction', () => {
   describe('run', () => {
     it('explains why Start Git Work is unavailable for ADO work items without an associated repo', async () => {
       const item = createWorkItem({ providerId: 'ado-work-items', externalId: 'myorg/MyProject/1' });
-      const { action } = createAction(discovered('ado-work-items', 'myorg/MyProject/1'));
+      const { action } = createAction(discovered(
+        'ado-work-items',
+        'myorg/MyProject/1',
+        undefined,
+        'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.',
+      ));
 
       await action.run(item);
 

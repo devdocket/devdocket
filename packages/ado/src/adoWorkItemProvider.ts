@@ -324,7 +324,9 @@ export class AdoWorkItemProvider extends BaseProvider {
         reason: 'assigned',
         state,
         itemType: 'issue',
-        ...(gitWork ? { capabilities: { gitWork } } : {}),
+        capabilities: gitWork
+          ? { gitWork }
+          : { startGitWorkUnavailableReason: 'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.' },
         ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
       });
     }
