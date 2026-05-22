@@ -140,6 +140,9 @@ export function App() {
 
     window.addEventListener('message', handler);
 
+    // Signal that the webview is ready to receive extension messages.
+    postMessage({ type: 'webviewReady' });
+
     // Required: VS Code's keybinding service does NOT see keystrokes that
     // happen inside a sidebar webview view's iframe (registerWebviewViewProvider).
     // The package.json `devdocket.toggleSearch` keybinding only fires when focus
