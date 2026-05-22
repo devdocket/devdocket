@@ -13,6 +13,7 @@ export type ExtensionMessage =
   | { type: 'updateTitle'; title: string };
 
 export type WebviewMessage =
+  | { type: 'webviewReady' }
   | { type: 'openItem'; itemId: string; providerId?: string; externalId?: string }
   | { type: 'openSourceItem'; providerId: string; externalId: string }
   | { type: 'showProviderHealth'; providerId: string }

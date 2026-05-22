@@ -32,7 +32,7 @@ function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-function createMockWebviewView() {
+function createMockWebviewView(options: { autoReady?: boolean } = {}) {
   let messageHandler: MessageHandler | undefined;
   const webview = {
     html: '',
@@ -43,6 +43,9 @@ function createMockWebviewView() {
     })),
     onDidReceiveMessage: vi.fn((handler: MessageHandler) => {
       messageHandler = handler;
+      if (options.autoReady !== false) {
+        void messageHandler({ type: 'webviewReady' });
+      }
       return { dispose: vi.fn(() => { messageHandler = undefined; }) };
     }),
     postMessage: vi.fn(async () => true),
@@ -52,6 +55,7 @@ function createMockWebviewView() {
     view: { webview, badge: undefined } as any,
     webview,
     simulateMessage: (message: unknown) => messageHandler?.(message) ?? Promise.resolve(),
+    signalReady: () => messageHandler?.({ type: 'webviewReady' }) ?? Promise.resolve(),
     getMessages: () => webview.postMessage.mock.calls.map(([message]) => message),
   };
 }
@@ -877,6 +881,66 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('does not post refresh messages until the webview signals ready', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph([makeWorkItem({ id: 'queue-1', title: 'Queue 1', sortOrder: 0 })]),
+      createProviderRegistry({ github: [{ externalId: 'incoming-1', title: 'Incoming item', state: 'open' }] }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView({ autoReady: false });
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    provider.scheduleRefresh('state');
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(mockView.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('flushes buffered refresh reasons after the webview signals ready', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph([makeWorkItem({ id: 'queue-1', title: 'Queue 1', sortOrder: 0 })]),
+      createProviderRegistry({ github: [{ externalId: 'incoming-1', title: 'Incoming item', state: 'open' }] }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView({ autoReady: false });
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    provider.scheduleRefresh('state');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(mockView.webview.postMessage).not.toHaveBeenCalled();
+
+    await mockView.signalReady();
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(findPostedMessage(mockView, 'updateItems')).toBeDefined();
+    expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
+  });
+
+  it('falls back to posting buffered refresh messages after the ready timeout elapses', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph([makeWorkItem({ id: 'queue-1', title: 'Queue 1', sortOrder: 0 })]),
+      createProviderRegistry({ github: [{ externalId: 'incoming-1', title: 'Incoming item', state: 'open' }] }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView({ autoReady: false });
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    provider.scheduleRefresh('state');
+    await vi.advanceTimersByTimeAsync(50);
+    expect(mockView.webview.postMessage).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(2999);
+    expect(mockView.webview.postMessage).not.toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(51);
+    expect(findPostedMessage(mockView, 'updateItems')).toBeDefined();
+    expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
+  });
+
   it('skips sources updates for read-state-only refreshes', async () => {
     vi.useFakeTimers();
     const provider = createProvider(
@@ -911,6 +975,7 @@ describe('MainViewProvider', () => {
     const mockView = createMockWebviewView();
 
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    mockView.webview.postMessage.mockClear();
     provider.scheduleRefresh('workGraph');
     provider.scheduleRefresh('state');
 

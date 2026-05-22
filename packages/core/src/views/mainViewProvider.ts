@@ -40,10 +40,13 @@ export type RefreshReason =
 export class MainViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = 'devdocket.main';
   private static readonly REFRESH_DEBOUNCE_MS = 50;
+  private static readonly WEBVIEW_READY_TIMEOUT_MS = 3000;
 
   private view?: vscode.WebviewView;
   private refreshTimer?: ReturnType<typeof setTimeout>;
+  private webviewReadyTimer?: ReturnType<typeof setTimeout>;
   private pendingRefreshReasons = new Set<RefreshReason>();
+  private webviewReady = false;
   private disposed = false;
 
   constructor(
@@ -66,6 +69,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
     }
+    if (this.webviewReadyTimer) {
+      clearTimeout(this.webviewReadyTimer);
+      this.webviewReadyTimer = undefined;
+    }
     this.pendingRefreshReasons.clear();
   }
 
@@ -75,6 +82,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     _token: vscode.CancellationToken,
   ): void {
     this.view = webviewView;
+    this.webviewReady = false;
 
     webviewView.webview.options = {
       enableScripts: true,
@@ -85,6 +93,17 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     webviewView.webview.onDidReceiveMessage((message: WebviewMessage) => {
       void this.handleMessage(message);
     });
+
+    if (this.webviewReadyTimer) {
+      clearTimeout(this.webviewReadyTimer);
+    }
+    this.webviewReadyTimer = setTimeout(() => {
+      if (!this.webviewReady && this.view === webviewView && !this.disposed) {
+        this.webviewReady = true;
+        this.scheduleRefresh('discovered');
+      }
+      this.webviewReadyTimer = undefined;
+    }, MainViewProvider.WEBVIEW_READY_TIMEOUT_MS);
 
     this.scheduleRefresh('discovered');
   }
@@ -115,6 +134,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private refresh(reasons: ReadonlySet<RefreshReason>): void {
     if (!this.view) {
+      return;
+    }
+    if (!this.webviewReady) {
+      // The ready/fallback paths call scheduleRefresh('discovered') to re-arm
+      // the debounce timer and flush these buffered reasons once delivery is safe.
+      for (const reason of reasons) {
+        this.pendingRefreshReasons.add(reason);
+      }
       return;
     }
 
@@ -456,6 +483,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
     switch (message.type) {
+      case 'webviewReady':
+        this.webviewReady = true;
+        if (this.webviewReadyTimer) {
+          clearTimeout(this.webviewReadyTimer);
+          this.webviewReadyTimer = undefined;
+        }
+        this.scheduleRefresh('discovered');
+        break;
       case 'openItem': {
         const workItem = this.workGraph.getItem(message.itemId);
         if (workItem) {
