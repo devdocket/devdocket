@@ -33,21 +33,16 @@ export async function retryAdoWithAuth(
   signal?: AbortSignal,
   options: Omit<AdoAuthOptions, 'signal'> = {},
 ): Promise<Response | undefined> {
-  try {
-    const session = await getAdoSession({ ...options, signal });
-    if (session) {
-      const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
-      return await fetch(apiUrl, {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
-        signal: requestSignal,
-      });
-    }
-  } catch (error) {
-    if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
-      throw error;
-    }
+  const session = await getAdoSession({ ...options, signal });
+  if (!session) {
+    return undefined;
   }
-  return undefined;
+
+  const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
+  return await fetch(apiUrl, {
+    headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
+    signal: requestSignal,
+  });
 }
 
 /** Throw a descriptive error for a non-ok ADO API response. */
