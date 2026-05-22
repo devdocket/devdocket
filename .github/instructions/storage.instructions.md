@@ -41,10 +41,10 @@ return requiredString(obj, 'id', ctx)
 
 Four user-intent files and one `globalState` cache hold persisted data:
 
-- **`globalStorageUri\workitems.json`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
-- **`globalStorageUri\inbox-state.json`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
-- **`globalStorageUri\read-state.json`** — Set of inbox item IDs the user has viewed.
-- **`globalStorageUri\watches.json`** — User-configured watch entries. The store is file-backed, but live cross-window invalidation is currently only wired for work items, inbox state, and read state; watch changes are picked up on reload.
+- **`globalStorageUri/workitems.json`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
+- **`globalStorageUri/inbox-state.json`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+- **`globalStorageUri/read-state.json`** — Set of inbox item IDs the user has viewed.
+- **`globalStorageUri/watches.json`** — User-configured watch entries. The store is file-backed, but live cross-window invalidation is currently only wired for work items, inbox state, and read state; watch changes are picked up on reload.
 - **`globalState['devdocket.provider-labels']`** — Cached mapping of `providerId` → display label (for example, `"github"` → `"GitHub Issues"`). Provider labels are not part of cross-window propagation; startup staleness is acceptable.
 
 ## Provider Items Are References, Not Copies
