@@ -1,5 +1,15 @@
 # DevDocket
 
+## 0.3.0
+
+### Minor Changes
+
+- [#644 Migrate user-intent stores to file-backed storage for cross-window sync](https://github.com/devdocket/devdocket/pull/644) [`a3e46a3`](https://github.com/devdocket/devdocket/commit/a3e46a3a9c8f80e8988f1569bffc38dee2d84fea) - Migrate work items, inbox state, read state, and watches from globalState to file-backed storage so cross-window reloads can read fresh data from disk.
+
+### Patch Changes
+
+- [#643 Wait for webview to signal ready before posting initial sidebar data](https://github.com/devdocket/devdocket/pull/643) [`0822bbb`](https://github.com/devdocket/devdocket/commit/0822bbb85afe44adfa6225b266d7dc09d5a29c93) - Wait for the sidebar webview to signal it is ready before posting initial data, with a fallback timeout so first-open content still appears if the ready message never arrives.
+
 ## 0.2.0
 
 ### Minor Changes
