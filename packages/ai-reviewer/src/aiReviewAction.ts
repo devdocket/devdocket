@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { createAbortError } from '@devdocket/shared';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
 import { fenceDiff } from './diffFence';
@@ -54,6 +55,9 @@ export class AiReviewAction extends BasePrAction {
     let diff: string | undefined;
     if (adoParts) {
       try {
+        if (token.isCancellationRequested) {
+          throw createAbortError();
+        }
         const abortController = new AbortController();
         const cancelListener = token.onCancellationRequested?.(() => abortController.abort());
         try {
