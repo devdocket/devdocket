@@ -141,7 +141,7 @@ describe('JsonTaskStore', () => {
     });
   });
 
-  it('persists data to globalState', async () => {
+  it('persists data to the backing JSON file', async () => {
     await store.save(makeItem());
     const persisted = fileSystem.readJson<WorkItem[]>(fileUri);
     expect(persisted).toHaveLength(1);
