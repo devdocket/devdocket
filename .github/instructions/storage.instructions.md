@@ -10,7 +10,7 @@ User-intent stores persist to JSON files under `globalStorageUri` via `vscode.wo
 
 `JsonTaskStore`, `InboxStateStore`, and `ReadStateStore` keep in-memory caches plus merge-on-write logic: they re-read the backing file before each persist, merge remote changes with local edits, and then write the merged result back. `WatchStore` is also file-backed and merges against the latest on-disk snapshot while preserving remote-only entries the current window has not loaded.
 
-Because `vscode.workspace.fs.writeFile()` is not atomic, there is no file-locking or write queue. The merge-on-write logic is best-effort conflict reduction; callers should still keep writes scoped to user-intent mutations.
+Because there is no cross-process file-locking or write queue, merge-on-write is still best-effort conflict reduction even though `JsonFileStore` uses a temp-file plus rename pattern for atomic replacement of the final file. Callers should still keep writes scoped to user-intent mutations.
 
 ## One-time Migrations
 
