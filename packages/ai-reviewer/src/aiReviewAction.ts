@@ -72,7 +72,7 @@ export class AiReviewAction extends BasePrAction {
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
-          throw err;
+          return;
         }
         console.error(`${this.progressTitle}: failed to fetch diff:`, err);
         vscode.window.showWarningMessage(`${this.progressTitle}: Failed to fetch PR diff`);
