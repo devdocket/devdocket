@@ -1,19 +1,15 @@
 import * as vscode from 'vscode';
-import type { Memento } from 'vscode';
 import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
-
-const STORAGE_KEY = 'devdocket.read-state';
+import type { FileStore } from './fileStore';
 
 /**
  * Persists the set of inbox item IDs that the user has viewed ("read")
  * so read/unread state survives across VS Code restarts.
  *
- * Stored as a string array in VS Code globalState under the key
- * "devdocket.read-state".
+ * Stored as a string array in a JSON file under globalStorageUri.
  */
 export class ReadStateStore {
-  private readonly globalState: Memento;
   private readonly items = new Set<string>();
   private loaded = false;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
@@ -22,20 +18,18 @@ export class ReadStateStore {
   /** Keys removed locally since last load — prevents re-adding from stale remote data. */
   private readonly removedSinceLoad = new Set<string>();
 
-  constructor(globalState: Memento) {
-    this.globalState = globalState;
-  }
+  constructor(private readonly fileStore: FileStore<unknown[]>) {}
 
   has(key: string): boolean {
     return this.items.has(key);
   }
 
   /**
-   * Re-reads from globalState, unions with local set, excludes locally
-   * removed keys, and writes the merged result.
+   * Re-reads from disk, unions with the local set, excludes locally removed
+   * keys, and writes the merged result.
    */
   private async persist(): Promise<void> {
-    const remoteParsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+    const remoteParsed = await this.fileStore.read();
     const merged = new Set(this.items);
     if (Array.isArray(remoteParsed)) {
       for (const item of remoteParsed) {
@@ -44,7 +38,7 @@ export class ReadStateStore {
         }
       }
     }
-    await this.globalState.update(STORAGE_KEY, [...merged]);
+    await this.fileStore.write([...merged]);
     this.items.clear();
     for (const key of merged) {
       this.items.add(key);
@@ -145,7 +139,7 @@ export class ReadStateStore {
 
   async load(): Promise<void> {
     if (this.loaded) { return; }
-    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+    const parsed = await this.fileStore.read();
     this.items.clear();
     if (Array.isArray(parsed)) {
       let invalidCount = 0;
@@ -170,8 +164,8 @@ export class ReadStateStore {
   }
 
   /**
-   * Invalidates the in-memory cache so the next access re-reads from
-   * globalState. Used for cross-window change propagation.
+   * Invalidates the in-memory cache so the next access re-reads from disk.
+   * Used for cross-window change propagation.
    */
   invalidateCache(): void {
     this.items.clear();

@@ -4,17 +4,19 @@ applyTo: "**/storage/**"
 
 # Storage Conventions
 
-## Memento-backed Stores
+## File-backed Stores
 
-All stores persist data via VS Code's `Memento` (`globalState`) API. Each store takes a `Memento` in its constructor and writes via `this.globalState.update(key, data)`.
+User-intent stores persist to JSON files under `globalStorageUri` via `vscode.workspace.fs`, not `globalState`. Each file-backed store receives a `JsonFileStore` (or compatible `FileStore`) and re-reads from disk on load so cross-window invalidation can observe fresh data.
 
-Most stores (e.g., `JsonTaskStore`, `InboxStateStore`, `ReadStateStore`) maintain an in-memory cache populated on first load and expose a private `persist()` method. Simpler stores (e.g., `WatchStore`) read/write directly without a cache. Loading methods vary by store (`loadAll()`, `load()`).
+`JsonTaskStore`, `InboxStateStore`, and `ReadStateStore` keep in-memory caches plus merge-on-write logic: they re-read the backing file before each persist, merge remote changes with local edits, and then write the merged result back. `WatchStore` is also file-backed and merges against the latest on-disk snapshot while preserving remote-only entries the current window has not loaded.
 
-Because `globalState.update()` is atomic from the extension's perspective, there is no write-queue or file-level locking. Stores no longer extend a base class.
+Because `vscode.workspace.fs.writeFile()` is not atomic, there is no file-locking or write queue. The merge-on-write logic is best-effort conflict reduction; callers should still keep writes scoped to user-intent mutations.
 
-## One-time Migration
+## One-time Migrations
 
-`migrateToGlobalState()` in `migration.ts` handles the one-off migration from legacy JSON files (in `globalStorageUri`) to globalState. It is idempotent — guarded by the `devdocket.migrated` flag — and only marks migration complete when every file either migrated successfully or was confirmed absent.
+`migrateToGlobalState()` in `migration.ts` handles the older one-off migration from legacy JSON files (in `globalStorageUri`) to `globalState`. It is idempotent — guarded by the `devdocket.migrated` flag — and only marks migration complete when every file either migrated successfully or was confirmed absent.
+
+`migrateGlobalStateToFiles()` handles the follow-up migration from `globalState` into the new file-backed stores. It is guarded by `devdocket.migrated-to-files`, skips files that already exist so retries do not clobber newer file-backed data, and deliberately leaves the old `globalState` keys in place as rollback fallback.
 
 ### Field Validators
 
@@ -37,14 +39,14 @@ return requiredString(obj, 'id', ctx)
 
 ## Data Stores
 
-Five globalState keys hold persisted data:
+Four user-intent files and one `globalState` cache hold persisted data:
 
-- **`devdocket.workitems`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
-- **`devdocket.inbox-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
-- **`devdocket.read-state`** — Set of inbox item IDs the user has viewed.
-- **`devdocket.provider-labels`** — Cached mapping of `providerId` → display label (for example, `"github"` → `"GitHub Issues"`).
-- **`devdocket.watches`** — User-configured watch entries.
+- **`globalStorageUri\workitems.json`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
+- **`globalStorageUri\inbox-state.json`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+- **`globalStorageUri\read-state.json`** — Set of inbox item IDs the user has viewed.
+- **`globalStorageUri\watches.json`** — User-configured watch entries. The store is file-backed, but live cross-window invalidation is currently only wired for work items, inbox state, and read state; watch changes are picked up on reload.
+- **`globalState['devdocket.provider-labels']`** — Cached mapping of `providerId` → display label (for example, `"github"` → `"GitHub Issues"`). Provider labels are not part of cross-window propagation; startup staleness is acceptable.
 
 ## Provider Items Are References, Not Copies
 
-Items in the Incoming tier and the Sources tab are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `devdocket.inbox-state` globalState entry.
+Items in the Incoming tier and the Sources tab are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `inbox-state.json` file-backed record.

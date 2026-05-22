@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { MockMemento } from 'vscode';
+import * as vscode from 'vscode';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { JsonTaskStore } from '../storage/jsonTaskStore';
+import { JsonFileStore } from '../storage/fileStore';
 import { ITaskStore } from '../storage/taskStore';
+import { useMockFileSystem } from './testFileSystem';
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
@@ -106,8 +108,9 @@ describe('WorkGraph', () => {
   });
 
   it('serializes concurrent mutations so state and field updates both survive', async () => {
-    const memento = new MockMemento();
-    const realStore = new JsonTaskStore(memento);
+    useMockFileSystem();
+    const fileUri = vscode.Uri.file('C:\\test\\workgraph-items.json');
+    const realStore = new JsonTaskStore(new JsonFileStore(fileUri, 'workgraph-items.json'));
     const realGraph = new WorkGraph(realStore);
     await realGraph.load();
     const item = await realGraph.createItem({ title: 'A' });
@@ -122,7 +125,7 @@ describe('WorkGraph', () => {
     expect(updated?.title).toBe('B');
     expect(updated?.activityLog?.map(entry => entry.type)).toEqual(['created', 'state-changed', 'updated']);
 
-    const freshGraph = new WorkGraph(new JsonTaskStore(memento));
+    const freshGraph = new WorkGraph(new JsonTaskStore(new JsonFileStore(fileUri, 'workgraph-items.json')));
     await freshGraph.load();
     const persisted = freshGraph.getItem(item.id);
     expect(persisted?.state).toBe(WorkItemState.InProgress);

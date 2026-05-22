@@ -1,15 +1,19 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MockMemento } from 'vscode';
+import * as vscode from 'vscode';
 import type { ProviderItem } from '../api/types';
 import { ReadStateStore } from '../storage/readStateStore';
+import { JsonFileStore } from '../storage/fileStore';
+import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 describe('ReadStateStore', () => {
-  let memento: InstanceType<typeof MockMemento>;
+  const fileUri = vscode.Uri.file('C:\\test\\read-state.json');
+  let fileSystem: MockFileSystem;
   let store: ReadStateStore;
 
   beforeEach(() => {
-    memento = new MockMemento();
-    store = new ReadStateStore(memento);
+    vi.clearAllMocks();
+    fileSystem = useMockFileSystem();
+    store = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
   });
 
   afterEach(() => {
@@ -25,7 +29,7 @@ describe('ReadStateStore', () => {
     await store.load();
     expect(await store.add('gh::issue-1')).toBe(true);
 
-    const persisted = memento.get<string[]>('devdocket.read-state');
+    const persisted = fileSystem.readJson<string[]>(fileUri);
     expect(persisted).toEqual(['gh::issue-1']);
   });
 
@@ -53,7 +57,7 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::2')).toBe(true);
     expect(store.has('gh::3')).toBe(false);
 
-    const persisted = memento.get<string[]>('devdocket.read-state');
+    const persisted = fileSystem.readJson<string[]>(fileUri);
     expect(persisted).toEqual(['gh::2']);
   });
 
@@ -78,7 +82,7 @@ describe('ReadStateStore', () => {
     await store.add('gh::1');
     await store.add('jira::2');
 
-    const store2 = new ReadStateStore(memento);
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
     await store2.load();
     expect(store2.has('gh::1')).toBe(true);
     expect(store2.has('jira::2')).toBe(true);
@@ -86,9 +90,9 @@ describe('ReadStateStore', () => {
   });
 
   it('should skip non-string elements in the array', async () => {
-    await memento.update('devdocket.read-state', ['valid::1', 42, null, true, 'valid::2', { obj: true }]);
+    fileSystem.writeJson(fileUri, ['valid::1', 42, null, true, 'valid::2', { obj: true }]);
 
-    const store2 = new ReadStateStore(memento);
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
     await store2.load();
     const keys = [...store2.keys()].sort();
     expect(keys).toEqual(['valid::1', 'valid::2']);
@@ -104,9 +108,9 @@ describe('ReadStateStore', () => {
   });
 
   it('should auto-load when deleteMany() is called before load()', async () => {
-    await memento.update('devdocket.read-state', ['gh::existing', 'gh::remove']);
+    fileSystem.writeJson(fileUri, ['gh::existing', 'gh::remove']);
 
-    const freshStore = new ReadStateStore(memento);
+    const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
     await freshStore.deleteMany(['gh::remove']);
 
     expect(freshStore.has('gh::existing')).toBe(true);
@@ -114,9 +118,9 @@ describe('ReadStateStore', () => {
   });
 
   it('should auto-load when add() is called before load()', async () => {
-    await memento.update('devdocket.read-state', ['gh::existing']);
+    fileSystem.writeJson(fileUri, ['gh::existing']);
 
-    const freshStore = new ReadStateStore(memento);
+    const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
     await freshStore.add('gh::new');
 
     expect(freshStore.has('gh::existing')).toBe(true);
@@ -143,24 +147,24 @@ describe('ReadStateStore', () => {
 
   describe('merge-on-write', () => {
     it('preserves remote additions while persisting local changes', async () => {
-      const windowA = new ReadStateStore(memento);
-      const windowB = new ReadStateStore(memento);
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       await windowA.load();
 
       await windowB.add('gh::remote');
       await windowA.add('gh::local');
 
-      expect(memento.get<string[]>('devdocket.read-state')?.sort()).toEqual(['gh::local', 'gh::remote']);
+      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::local', 'gh::remote']);
 
       windowA.dispose();
       windowB.dispose();
     });
 
     it('keeps locally removed keys deleted while preserving remote additions', async () => {
-      await memento.update('devdocket.read-state', ['gh::keep', 'gh::remove']);
+      fileSystem.writeJson(fileUri, ['gh::keep', 'gh::remove']);
 
-      const windowA = new ReadStateStore(memento);
-      const windowB = new ReadStateStore(memento);
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       await windowA.load();
       await windowB.load();
 
@@ -168,27 +172,27 @@ describe('ReadStateStore', () => {
       await windowA.deleteMany(['gh::remove']);
 
       expect([...windowA.keys()].sort()).toEqual(['gh::keep', 'gh::remote']);
-      expect(memento.get<string[]>('devdocket.read-state')?.sort()).toEqual(['gh::keep', 'gh::remote']);
+      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::keep', 'gh::remote']);
 
       windowA.dispose();
       windowB.dispose();
     });
 
     it('allows remote re-additions after a successful persist', async () => {
-      await memento.update('devdocket.read-state', ['gh::shared']);
+      fileSystem.writeJson(fileUri, ['gh::shared']);
 
-      const windowA = new ReadStateStore(memento);
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       await windowA.load();
 
       await windowA.deleteMany(['gh::shared']);
 
-      const windowB = new ReadStateStore(memento);
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       await windowB.load();
       await windowB.add('gh::shared');
 
       await windowA.add('gh::local');
 
-      expect(memento.get<string[]>('devdocket.read-state')?.sort()).toEqual(['gh::local', 'gh::shared']);
+      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::local', 'gh::shared']);
 
       windowA.dispose();
       windowB.dispose();
@@ -197,7 +201,7 @@ describe('ReadStateStore', () => {
     it('invalidateCache forces a re-read on next load', async () => {
       await store.add('gh::issue-1');
 
-      await memento.update('devdocket.read-state', ['gh::issue-2']);
+      fileSystem.writeJson(fileUri, ['gh::issue-2']);
 
       store.invalidateCache();
       await store.load();
@@ -287,9 +291,9 @@ describe('ReadStateStore', () => {
     });
 
     it('lazy-loads on first call', async () => {
-      await memento.update('devdocket.read-state', ['gh::keep', 'gh::stale']);
+      fileSystem.writeJson(fileUri, ['gh::keep', 'gh::stale']);
 
-      const freshStore = new ReadStateStore(memento);
+      const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
@@ -299,14 +303,14 @@ describe('ReadStateStore', () => {
       expect(pruned).toBe(1);
       expect(freshStore.has('gh::keep')).toBe(true);
       expect(freshStore.has('gh::stale')).toBe(false);
-      expect(memento.get<string[]>('devdocket.read-state')).toEqual(['gh::keep']);
+      expect(fileSystem.readJson<string[]>(fileUri)).toEqual(['gh::keep']);
       freshStore.dispose();
     });
 
     it('ignores legacy stored keys without the provider delimiter', async () => {
-      await memento.update('devdocket.read-state', ['legacy-key', 'gh::stale']);
+      fileSystem.writeJson(fileUri, ['legacy-key', 'gh::stale']);
 
-      const freshStore = new ReadStateStore(memento);
+      const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
@@ -315,7 +319,7 @@ describe('ReadStateStore', () => {
 
       expect(pruned).toBe(1);
       expect([...freshStore.keys()]).toEqual(['legacy-key']);
-      expect(memento.get<string[]>('devdocket.read-state')).toEqual(['legacy-key']);
+      expect(fileSystem.readJson<string[]>(fileUri)).toEqual(['legacy-key']);
       freshStore.dispose();
     });
 

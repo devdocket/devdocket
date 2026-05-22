@@ -1,7 +1,7 @@
-import type { Memento } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
+import type { FileStore } from './fileStore';
 import {
   validateObject,
   requiredString,
@@ -11,7 +11,6 @@ import {
   optionalFiniteNumber,
 } from './validation';
 
-const STORAGE_KEY = 'devdocket.workitems';
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
 const validItemTypes = new Set(['issue', 'pr']);
 
@@ -63,14 +62,13 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
 }
 
 /**
- * Persists {@link WorkItem} objects in VS Code globalState.
+ * Persists {@link WorkItem} objects in a JSON file under globalStorageUri.
  *
  * An in-memory cache is populated on first load and kept in sync with
- * every mutation. On persist, the store re-reads from globalState and
- * merges to avoid clobbering changes made by other VS Code windows.
+ * every mutation. On persist, the store re-reads from disk and merges to
+ * avoid clobbering changes made by other VS Code windows.
  */
 export class JsonTaskStore implements ITaskStore {
-  private readonly globalState: Memento;
   private cache: Map<string, WorkItem> | null = null;
   /** IDs modified locally since the last successful persist. */
   private dirtyIds = new Set<string>();
@@ -81,15 +79,13 @@ export class JsonTaskStore implements ITaskStore {
   /** Local delete tombstones used to suppress stale reintroductions from other windows. */
   private deletedUpdatedAt = new Map<string, number>();
 
-  constructor(globalState: Memento) {
-    this.globalState = globalState;
-  }
+  constructor(private readonly fileStore: FileStore<unknown[]>) {}
 
   async loadAll(): Promise<WorkItem[]> {
     if (this.cache !== null) {
       return Array.from(this.cache.values());
     }
-    const items = this.parseFromGlobalState();
+    const items = await this.parseFromFileStore();
     this.cache = new Map(items.map(item => [item.id, item]));
     this.syncedUpdatedAt = new Map(items.map(item => [item.id, item.updatedAt]));
     this.dirtyIds.clear();
@@ -105,17 +101,17 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   /**
-   * Re-reads from globalState, adopts untouched remote state, overlays local
-   * mutations, and writes the merged result. Local edits use `updatedAt`
-   * last-writer-wins for shared items, locally removed items stay deleted, and
-   * untouched local items disappear when another window deletes them remotely.
+   * Re-reads from disk, adopts untouched remote state, overlays local mutations,
+   * and writes the merged result. Local edits use `updatedAt` last-writer-wins
+   * for shared items, locally removed items stay deleted, and untouched local
+   * items disappear when another window deletes them remotely.
    */
   private async persist(): Promise<void> {
     if (this.cache === null) {
       await this.loadAll();
     }
     const local = this.getCache();
-    const remoteItems = this.parseFromGlobalState();
+    const remoteItems = await this.parseFromFileStore();
     const remoteById = new Map(remoteItems.map(item => [item.id, item]));
     const merged = new Map<string, WorkItem>();
 
@@ -162,7 +158,7 @@ export class JsonTaskStore implements ITaskStore {
       }
     }
 
-    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+    await this.fileStore.write(Array.from(merged.values()));
     this.cache = merged;
     this.syncedUpdatedAt = new Map(Array.from(merged.values(), item => [item.id, item.updatedAt]));
     for (const [id, deletedAt] of Array.from(this.deletedUpdatedAt.entries())) {
@@ -175,9 +171,9 @@ export class JsonTaskStore implements ITaskStore {
     this.removedIds.clear();
   }
 
-  /** Parse and validate work items from globalState. */
-  private parseFromGlobalState(): WorkItem[] {
-    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+  /** Parse and validate work items from the backing JSON file. */
+  private async parseFromFileStore(): Promise<WorkItem[]> {
+    const parsed = await this.fileStore.read();
     if (!Array.isArray(parsed)) {
       return [];
     }
@@ -225,8 +221,8 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   /**
-   * Invalidates the in-memory cache so the next access re-reads from
-   * globalState. Used for cross-window change propagation.
+   * Invalidates the in-memory cache so the next access re-reads from disk.
+   * Used for cross-window change propagation.
    */
   invalidateCache(): void {
     this.cache = null;

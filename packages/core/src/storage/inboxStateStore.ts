@@ -1,15 +1,13 @@
 import * as vscode from 'vscode';
-import type { Memento } from 'vscode';
 import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
+import type { FileStore } from './fileStore';
 import {
   validateObject,
   requiredString,
   optionalString,
   requiredEnum,
 } from './validation';
-
-const STORAGE_KEY = 'devdocket.inbox-state';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
@@ -47,13 +45,12 @@ function validateInboxStateRecord(value: unknown, index: number): string | undef
 
 /**
  * Persists inbox-state records (`unseen | accepted | dismissed`) for
- * provider-discovered items in VS Code globalState.
+ * provider-discovered items in a JSON file under globalStorageUri.
  *
  * Only the state enum is stored — item data (title, description, url) is
  * always read live from the provider.
  */
 export class InboxStateStore {
-  private readonly globalState: Memento;
   private readonly cache = new Map<string, InboxStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
@@ -63,9 +60,7 @@ export class InboxStateStore {
   /** Keys removed locally since the last load/persist. */
   private removedKeys = new Set<string>();
 
-  constructor(globalState: Memento) {
-    this.globalState = globalState;
-  }
+  constructor(private readonly fileStore: FileStore<unknown[]>) {}
 
   private key(providerId: string, externalId: string): string {
     return `${providerId}::${externalId}`;
@@ -93,14 +88,14 @@ export class InboxStateStore {
   }
 
   /**
-   * Re-reads from globalState, merges remote records with local mutations,
-   * and writes the merged result. Untouched keys adopt the remote view,
-   * locally changed keys win, and locally removed keys stay removed.
+   * Re-reads from disk, merges remote records with local mutations, and writes
+   * the merged result. Untouched keys adopt the remote view, locally changed
+   * keys win, and locally removed keys stay removed.
    */
   private async persist(): Promise<void> {
     const merged = new Map<string, InboxStateRecord>();
 
-    for (const remote of this.parseFromGlobalState()) {
+    for (const remote of await this.parseFromFileStore()) {
       merged.set(this.key(remote.providerId, remote.externalId), remote);
     }
 
@@ -115,7 +110,7 @@ export class InboxStateStore {
       }
     }
 
-    await this.globalState.update(STORAGE_KEY, Array.from(merged.values()));
+    await this.fileStore.write(Array.from(merged.values()));
     this.cache.clear();
     for (const [k, record] of merged) {
       this.cache.set(k, record);
@@ -124,9 +119,9 @@ export class InboxStateStore {
     this.removedKeys.clear();
   }
 
-  /** Parse and validate inbox state records from globalState. */
-  private parseFromGlobalState(): InboxStateRecord[] {
-    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
+  /** Parse and validate inbox state records from the backing JSON file. */
+  private async parseFromFileStore(): Promise<InboxStateRecord[]> {
+    const parsed = await this.fileStore.read();
     if (!Array.isArray(parsed)) { return []; }
     const records: InboxStateRecord[] = [];
     for (let i = 0; i < parsed.length; i++) {
@@ -141,7 +136,7 @@ export class InboxStateStore {
   }
 
   /**
-   * Sets the inbox state for a single discovered item and persists to globalState.
+   * Sets the inbox state for a single discovered item and persists to disk.
    *
    * Note: `resurfaceVersion` is only settable via `setStates()`, not here.
    * This method preserves any existing `resurfaceVersion` from the previous record.
@@ -195,7 +190,7 @@ export class InboxStateStore {
   }
 
   /**
-   * Returns all persisted state records, loading from globalState on first call.
+   * Returns all persisted state records, loading from disk on first call.
    */
   async loadAll(): Promise<InboxStateRecord[]> {
     await this.load();
@@ -203,12 +198,12 @@ export class InboxStateStore {
   }
 
   /**
-   * Loads state records from globalState into the cache. No-ops if already loaded.
+   * Loads state records from disk into the cache. No-ops if already loaded.
    */
   async load(): Promise<void> {
     if (this.loaded) { return; }
     this.cache.clear();
-    const records = this.parseFromGlobalState();
+    const records = await this.parseFromFileStore();
     for (const record of records) {
       this.cache.set(this.key(record.providerId, record.externalId), record);
     }
@@ -271,8 +266,8 @@ export class InboxStateStore {
   }
 
   /**
-   * Invalidates the in-memory cache so the next mutation re-reads from
-   * globalState. Used for cross-window change propagation.
+   * Invalidates the in-memory cache so the next mutation re-reads from disk.
+   * Used for cross-window change propagation.
    */
   invalidateCache(): void {
     this.cache.clear();

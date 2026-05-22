@@ -7,6 +7,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { MainViewProvider } from '../views/mainViewProvider';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 // Stub fs so migration never touches disk
 vi.mock('fs/promises', () => ({
@@ -20,7 +21,7 @@ function createExtensionContext(overrides?: Partial<vscode.ExtensionContext>): v
   const subs: { dispose(): void }[] = [];
   return {
     subscriptions: subs,
-    globalStorageUri: { fsPath: '/fake/storage' } as any,
+    globalStorageUri: vscode.Uri.file('C:\\fake\\storage') as any,
     globalState: new MockMemento(),
     ...overrides,
   } as unknown as vscode.ExtensionContext;
@@ -50,9 +51,11 @@ function getMainProvider(): MainViewProvider {
 
 describe('activate()', () => {
   let context: vscode.ExtensionContext;
+  let fileSystem: MockFileSystem;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    fileSystem = useMockFileSystem();
     context = createExtensionContext();
   });
 
@@ -283,7 +286,7 @@ describe('activate()', () => {
 
       await vi.waitFor(() => {
         expect(pruneSpy).toHaveBeenCalled();
-        expect(globalState.get<string[]>('devdocket.read-state')).toEqual([
+        expect(fileSystem.readJson<string[]>(vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual([
           'prune-provider::keep',
           'other-provider::stale',
         ]);
@@ -292,7 +295,7 @@ describe('activate()', () => {
       const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
       expect(active.get('prune-provider')).toEqual([activeItem]);
 
-      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state') ?? [];
+      const discoveredRecords = fileSystem.readJson<Array<{ providerId: string; externalId: string }>>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json')) ?? [];
       expect(discoveredRecords.map(record => `${record.providerId}::${record.externalId}`).sort()).toEqual([
         'other-provider::stale',
         'prune-provider::keep',
@@ -328,8 +331,8 @@ describe('activate()', () => {
 
       const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
       expect(active.get('empty-provider')).toEqual([]);
-      expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['empty-provider::stale']);
-      expect(globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state')).toEqual([
+      expect(fileSystem.readJson<string[]>(vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual(['empty-provider::stale']);
+      expect(fileSystem.readJson<Array<{ providerId: string; externalId: string }>>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json'))).toEqual([
         { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
       ]);
     } finally {
@@ -411,14 +414,14 @@ describe('activate()', () => {
       } as any);
 
       await vi.waitFor(() => {
-        const records = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state') ?? [];
+        const records = fileSystem.readJson<Array<{ providerId: string; externalId: string }>>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json')) ?? [];
         expect(records.some(record => record.providerId === 'truncated-provider' && record.externalId === 'one')).toBe(true);
       });
       await flushMicrotasks();
 
       expect(pruneSpy).not.toHaveBeenCalled();
-      expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['truncated-provider::stale']);
-      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state') ?? [];
+      expect(fileSystem.readJson<string[]>(vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual(['truncated-provider::stale']);
+      const discoveredRecords = fileSystem.readJson<Array<{ providerId: string; externalId: string }>>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json')) ?? [];
       expect(discoveredRecords.some(record => record.providerId === 'truncated-provider' && record.externalId === 'stale')).toBe(true);
     } finally {
       pruneSpy.mockRestore();
@@ -916,7 +919,7 @@ describe('activate()', () => {
     await activate(context);
 
     // The inbox state should contain the accepted state in globalState
-    const discoveredState = globalState.get<unknown[]>('devdocket.inbox-state');
+    const discoveredState = fileSystem.readJson<unknown[]>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json'));
     expect(discoveredState).toBeDefined();
     const acceptedRecord = (discoveredState as any[]).find(
       (r: any) => r.providerId === 'gh' && r.externalId === 'ext-99' && r.inboxState === 'accepted',
