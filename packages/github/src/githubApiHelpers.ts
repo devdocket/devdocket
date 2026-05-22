@@ -173,27 +173,21 @@ export async function retryWithAuth(
   signal?: AbortSignal,
   options: Omit<GitHubAuthOptions, 'signal'> = {},
 ): Promise<Response | undefined> {
-  try {
-    const session = await getGitHubSession(['repo'], { ...options, signal });
-    if (session) {
-      const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
-      return await fetch(apiUrl, {
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'User-Agent': 'DevDocket-VSCode',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'Authorization': `Bearer ${session.accessToken}`,
-        },
-        signal: requestSignal,
-      });
-    }
-  } catch (error) {
-    if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
-      throw error;
-    }
-    logger.debug('User declined GitHub authentication prompt');
+  const session = await getGitHubSession(['repo'], { ...options, signal });
+  if (!session) {
+    return undefined;
   }
-  return undefined;
+
+  const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
+  return await fetch(apiUrl, {
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'DevDocket-VSCode',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Authorization': `Bearer ${session.accessToken}`,
+    },
+    signal: requestSignal,
+  });
 }
 
 /**
