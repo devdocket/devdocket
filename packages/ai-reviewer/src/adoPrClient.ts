@@ -80,9 +80,6 @@ export class AdoPrClient {
   }
 
   async fetchDiffResult(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<AdoDiffResult | undefined> {
-    if (options.signal?.aborted) {
-      throw createAbortError();
-    }
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
