@@ -308,7 +308,10 @@ export class AdoWorkItemProvider extends BaseProvider {
       const wiType = wi.fields['System.WorkItemType'];
       const state = wi.fields['System.State'];
       const stateBadge: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
-      const gitWork = await this.resolveWorkItemGitWork(token, org, projectName, wi, signal);
+      const associatedRepoId = this.extractAssociatedRepoId(wi);
+      const gitWork = associatedRepoId
+        ? await this.resolveWorkItemGitWork(token, org, projectName, wi, associatedRepoId, signal)
+        : undefined;
       items.push({
         externalId: `${org}/${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
@@ -324,9 +327,11 @@ export class AdoWorkItemProvider extends BaseProvider {
         reason: 'assigned',
         state,
         itemType: 'issue',
-        capabilities: gitWork
-          ? { gitWork }
-          : { startGitWorkUnavailableReason: 'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.' },
+        ...(gitWork
+          ? { capabilities: { gitWork } }
+          : !associatedRepoId
+            ? { capabilities: { startGitWorkUnavailableReason: 'This Azure DevOps work item has no associated git repo, so Start Git Work is unavailable.' } }
+            : {}),
         ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
       });
     }
@@ -340,13 +345,9 @@ export class AdoWorkItemProvider extends BaseProvider {
     org: string,
     project: string,
     workItem: AdoWorkItem,
+    repoId: string,
     signal?: AbortSignal,
   ): Promise<GitWorkInfo | undefined> {
-    const repoId = this.extractAssociatedRepoId(workItem);
-    if (!repoId) {
-      return undefined;
-    }
-
     const repo = await this.fetchGitRepository(token, org, project, repoId, signal);
     if (!repo) {
       return undefined;
