@@ -635,7 +635,7 @@ describe('InboxStateStore', () => {
       expect(store.getResurfaceVersion('gh', 'pr-1')).toBe('rv-new');
     });
 
-    it('should persist resurfaceVersion to globalState', async () => {
+    it('should persist resurfaceVersion to the backing JSON file', async () => {
       await store.setStates([
         { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
       ]);
