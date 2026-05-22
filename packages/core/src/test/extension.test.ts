@@ -918,7 +918,7 @@ describe('activate()', () => {
 
     await activate(context);
 
-    // The inbox state should contain the accepted state in globalState
+    // The inbox state should contain the accepted state in inbox-state.json
     const discoveredState = fileSystem.readJson<unknown[]>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json'));
     expect(discoveredState).toBeDefined();
     const acceptedRecord = (discoveredState as any[]).find(
