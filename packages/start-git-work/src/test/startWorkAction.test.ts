@@ -210,6 +210,15 @@ describe('StartWorkAction', () => {
       expect(mockLogger.debug).toHaveBeenCalledWith('Start Git Work unavailable for item wc-test-1: live provider item provider/item-1 was not found');
     });
 
+    it('logs each false canRun reason only once per item', () => {
+      const item = createWorkItem();
+      const { action } = createAction({});
+
+      expect(action.canRun(item)).toBe(false);
+      expect(action.canRun(item)).toBe(false);
+      expect(mockLogger.debug).toHaveBeenCalledTimes(1);
+    });
+
     it('returns false for non-InProgress items', () => {
       const item = createWorkItem({ state: 'New' });
       const { action } = createAction(discovered('provider', 'item-1', {

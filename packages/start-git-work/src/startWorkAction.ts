@@ -104,6 +104,7 @@ export class StartWorkAction implements DevDocketAction {
   readonly label = 'Start Git Work';
 
   private readonly globalState: vscode.Memento;
+  private readonly loggedCanRunFailures = new Set<string>();
 
   constructor(
     globalState: vscode.Memento,
@@ -115,7 +116,12 @@ export class StartWorkAction implements DevDocketAction {
   canRun(item: Readonly<WorkItem>): boolean {
     const decision = this.getCanRunDecision(item);
     if (!decision.canRun) {
-      logger.debug(`Start Git Work unavailable for item ${item.id}: ${decision.reason ?? 'unknown reason'}`);
+      const reason = decision.reason ?? 'unknown reason';
+      const logKey = `${item.id}\0${reason}`;
+      if (!this.loggedCanRunFailures.has(logKey)) {
+        this.loggedCanRunFailures.add(logKey);
+        logger.debug(`Start Git Work unavailable for item ${item.id}: ${reason}`);
+      }
     }
     return decision.canRun;
   }
