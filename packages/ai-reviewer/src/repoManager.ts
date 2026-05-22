@@ -381,15 +381,14 @@ export class RepoManager {
     const abortController = new AbortController();
     const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
-      if (token?.isCancellationRequested) {
-        throw createAbortError();
-      }
+      this.throwIfCancelled(token, abortController.signal);
 
       const session = await getAdoSession({ interactive: true, signal: abortController.signal });
       if (!session) {
         this.log.error('Microsoft authentication not available');
         throw new Error('Azure DevOps authentication required');
       }
+      this.throwIfCancelled(token, abortController.signal);
 
       const details = await new AdoPrClient(fetch, async () => session).fetchPullRequestDetails(
         { org, project, repo, prId: prNumber },
@@ -398,6 +397,7 @@ export class RepoManager {
       if (!details) {
         throw new Error('Azure DevOps authentication required');
       }
+      this.throwIfCancelled(token, abortController.signal);
 
       const sourceRef = details.sourceRefName;
       const targetRef = details.targetRefName;
@@ -433,8 +433,10 @@ export class RepoManager {
         );
         this.log.info('ADO clone complete');
       }
+      this.throwIfCancelled(token, abortController.signal);
       await configureLongPaths(clonePath);
 
+      this.throwIfCancelled(token, abortController.signal);
       const headRef = `refs/devdocket/ado/pr-${prNumber}-head`;
       const baseRef = `refs/devdocket/ado/pr-${prNumber}-base`;
       // Force-update DevDocket-owned refs so force-pushed PR branches are reflected accurately.
@@ -451,6 +453,7 @@ export class RepoManager {
         gitAdoAuth(['fetch', 'origin', `+${targetRef}:${baseRef}`], clonePath, session.accessToken, 300_000),
       );
 
+      this.throwIfCancelled(token, abortController.signal);
       const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath);
       if (worktreeExists) {
         this.log.info('Updating existing ADO worktree');
