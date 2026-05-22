@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { createAbortError } from '@devdocket/shared';
+import { combineSignals, createAbortError } from '@devdocket/shared';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { parseAdoPrUrl, parsePrUrl } from './prUrl';
@@ -228,15 +228,14 @@ export class RepoManager {
     const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
       this.log.info('Requesting GitHub auth session');
-      if (token?.isCancellationRequested) {
-        throw createAbortError();
-      }
+      this.throwIfCancelled(token, abortController.signal);
       const session = await getGitHubSession({ interactive: true, signal: abortController.signal });
       if (!session) {
         this.log.error('GitHub authentication not available');
         throw new Error('GitHub authentication required');
       }
       this.log.debug(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
+      this.throwIfCancelled(token, abortController.signal);
 
       const cloneUrl = `https://github.com/${org}/${repo}.git`;
       const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository');
@@ -264,10 +263,12 @@ export class RepoManager {
         );
         this.log.info('Clone complete');
       }
+      this.throwIfCancelled(token, abortController.signal);
       await configureLongPaths(clonePath);
 
+      this.throwIfCancelled(token, abortController.signal);
       this.log.info('Fetching PR metadata from GitHub API');
-      const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken);
+      const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken, abortController.signal);
       const baseRef = prMeta.baseRef;
       const headRef = `pr-${prNumber}`;
       const diffHeadRef = 'HEAD';
@@ -278,6 +279,7 @@ export class RepoManager {
         throw new Error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
       }
       this.log.info(`PR metadata — baseRef: ${baseRef}, headSha: ${prMeta.headSha}, local headRef: ${headRef}`);
+      this.throwIfCancelled(token, abortController.signal);
 
       const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath);
       this.log.debug(`Worktree directory exists and is valid: ${worktreeExists}`);
@@ -307,6 +309,7 @@ export class RepoManager {
         this.log.info('PR head fetched');
       }
 
+      this.throwIfCancelled(token, abortController.signal);
       this.log.info(`Fetching base branch: ${baseRef}`);
       await withPathContext(
         'Failed to fetch base branch',
@@ -320,6 +323,7 @@ export class RepoManager {
         ),
       );
       this.log.info('Base branch fetched');
+      this.throwIfCancelled(token, abortController.signal);
 
       if (!worktreeExists) {
         if (cloneExists) {
@@ -571,6 +575,12 @@ export class RepoManager {
     return undefined;
   }
 
+  private throwIfCancelled(token?: vscode.CancellationToken, signal?: AbortSignal): void {
+    if (token?.isCancellationRequested || signal?.aborted) {
+      throw createAbortError();
+    }
+  }
+
   private githubKey(org: string, repo: string, prNumber: string): string {
     return `github:${org}/${repo}#${prNumber}`;
   }
@@ -628,6 +638,7 @@ export class RepoManager {
     repo: string,
     prNumber: string,
     token: string,
+    signal?: AbortSignal,
   ): Promise<{ baseRef: string; headSha: string }> {
     const response = await fetch(
       `https://api.github.com/repos/${org}/${repo}/pulls/${prNumber}`,
@@ -637,7 +648,7 @@ export class RepoManager {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
