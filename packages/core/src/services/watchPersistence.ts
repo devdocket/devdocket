@@ -2,6 +2,12 @@ import * as vscode from 'vscode';
 import { WatchStore } from '../storage/watchStore';
 import type { WatchedPR, WatchedRun } from './watcherService';
 
+function clonePersistedSnapshot(runs: WatchedRun[], prs: WatchedPR[]): { runs: WatchedRun[]; prs: WatchedPR[] } {
+  // Watch persistence is JSON-backed, so cloning through JSON preserves the queued
+  // snapshot without keeping references to later in-memory mutations.
+  return JSON.parse(JSON.stringify({ runs, prs })) as { runs: WatchedRun[]; prs: WatchedPR[] };
+}
+
 type WatcherLogger = {
   info: (msg: string) => void;
   warn: (msg: string) => void;
@@ -15,6 +21,7 @@ export class WatchPersistence {
   private persistedPRWatchKeys: Set<string> | undefined;
   private readonly pendingPRWatchKeys = new Set<string>();
   private persistFailureNotified = false;
+  private pendingSave: Promise<void> = Promise.resolve();
 
   constructor(
     private readonly watchStore: WatchStore,
@@ -55,23 +62,43 @@ export class WatchPersistence {
   }
 
   saveAll(runs: WatchedRun[], prs: WatchedPR[]): void {
-    this.watchStore.saveAll(runs, prs).then(
-      () => {
-        if (this.persistFailureNotified) {
-          this.persistFailureNotified = false;
-          this.logger.info('Watch persistence recovered.');
-        }
-      },
-      err => {
-        this.logger.error(`Failed to persist watches: ${err}`);
-        if (!this.persistFailureNotified) {
-          this.persistFailureNotified = true;
-          void vscode.window.showWarningMessage(
-            'DevDocket could not save watch state. Watches may be lost when the window reloads.',
-          );
-        }
-      },
-    );
+    const snapshot = clonePersistedSnapshot(runs, prs);
+    this.pendingSave = this.pendingSave
+      .catch(() => undefined)
+      .then(() => this.persistSnapshot(snapshot));
+  }
+
+  async flush(): Promise<void> {
+    while (true) {
+      const pendingSave = this.pendingSave;
+      try {
+        await pendingSave;
+      } catch {
+        // saveAll already surfaced the failure; flushing is best-effort.
+      }
+      if (pendingSave === this.pendingSave) {
+        return;
+      }
+    }
+  }
+
+  private async persistSnapshot(snapshot: { runs: WatchedRun[]; prs: WatchedPR[] }): Promise<void> {
+    try {
+      await this.watchStore.saveAll(snapshot.runs, snapshot.prs);
+      if (this.persistFailureNotified) {
+        this.persistFailureNotified = false;
+        this.logger.info('Watch persistence recovered.');
+      }
+    } catch (err) {
+      this.logger.error(`Failed to persist watches: ${err}`);
+      if (!this.persistFailureNotified) {
+        this.persistFailureNotified = true;
+        void vscode.window.showWarningMessage(
+          'DevDocket could not save watch state. Watches may be lost when the window reloads.',
+        );
+      }
+      throw err;
+    }
   }
 
   dispose(): void {

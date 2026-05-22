@@ -35,6 +35,8 @@ import { performance } from 'perf_hooks';
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
 export { logger } from './services/logger';
 
+let watcherServiceForDeactivation: WatcherService | undefined;
+
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
 function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void | Promise<void>): (...args: T) => void {
   return (...args: T) => {
@@ -475,6 +477,7 @@ function wireEvents(
  */
 export async function activate(context: vscode.ExtensionContext): Promise<DevDocketApi> {
   const activationStart = performance.now();
+  watcherServiceForDeactivation = undefined;
   const log = initializeLogging(context);
   log.info('DevDocket activating...');
 
@@ -644,6 +647,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider, editorPanelDependencies, incomingPreviewPanelManager, () => mainProvider.toggleSearch());
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
+  watcherServiceForDeactivation = ws;
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
 }
@@ -651,9 +655,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 /**
  * Deactivate the DevDocket extension.
  *
- * All resources are disposed automatically via `context.subscriptions`,
- * so this function is intentionally a no-op.
+ * Flush queued watch persistence before VS Code disposes subscriptions so
+ * dismissals survive window reloads.
  */
-export function deactivate(): void {
-  // All resources are disposed automatically via context.subscriptions.
+export async function deactivate(): Promise<void> {
+  const watcherService = watcherServiceForDeactivation;
+  watcherServiceForDeactivation = undefined;
+  watcherService?.beginShutdown();
+  await watcherService?.flushPersistence();
 }

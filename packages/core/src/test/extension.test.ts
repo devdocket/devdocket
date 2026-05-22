@@ -2,8 +2,13 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
+import { JsonFileStore } from '../storage/fileStore';
 import { ReadStateStore } from '../storage/readStateStore';
+import { WatchStore } from '../storage/watchStore';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { PRWatcherRegistry } from '../services/prWatcherRegistry';
+import { WatcherRegistry } from '../services/watcherRegistry';
+import { WatcherService } from '../services/watcherService';
 import { MainViewProvider } from '../views/mainViewProvider';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -849,6 +854,67 @@ describe('activate()', () => {
     expect(watcherService.startPRWatch).not.toHaveBeenCalled();
   });
 
+  it('does not re-add dismissed PR watches after a persistence round-trip', async () => {
+    const identifier = {
+      providerId: 'github-prs',
+      prId: '42',
+      displayName: 'PR #42',
+      url: 'https://github.com/owner/repo/pull/42',
+      repo: 'owner/repo',
+    };
+    const watchFile = vscode.Uri.file('C:\\fake\\storage\\watches.json');
+    const loggerStub = { info: vi.fn(), warn: vi.fn(), error: vi.fn() };
+    const firstStore = new WatchStore(new JsonFileStore(watchFile, 'watches.json'));
+    const firstRunRegistry = new WatcherRegistry(loggerStub);
+    const firstPRRegistry = new PRWatcherRegistry(loggerStub);
+    const prWatcher = {
+      id: 'github-prs',
+      label: 'GitHub PRs',
+      canWatch: vi.fn((url: string) => url.includes('/pull/42')),
+      parsePRUrl: vi.fn().mockReturnValue(identifier),
+      getPRRunsSnapshot: vi.fn().mockResolvedValue({ prState: 'open', runs: [] }),
+    };
+    firstPRRegistry.register(prWatcher as any);
+    const firstSession = new WatcherService(firstRunRegistry, firstPRRegistry, firstStore, loggerStub);
+
+    await firstSession.startPRWatch(identifier);
+    firstSession.dismissPRWatch(identifier);
+    await firstSession.flushPersistence();
+    firstSession.dispose();
+
+    const secondStore = new WatchStore(new JsonFileStore(watchFile, 'watches.json'));
+    const secondRunRegistry = new WatcherRegistry(loggerStub);
+    const secondPRRegistry = new PRWatcherRegistry(loggerStub);
+    secondPRRegistry.register(prWatcher as any);
+    const secondSession = new WatcherService(secondRunRegistry, secondPRRegistry, secondStore, loggerStub);
+    await secondSession.loadPersistedWatches();
+
+    const providerRegistry = {
+      getProviderItems: vi.fn().mockReturnValue([
+        {
+          externalId: 'owner/repo#42',
+          title: '#42: Authored PR',
+          url: 'https://github.com/owner/repo/pull/42',
+          authored: true,
+        },
+      ]),
+    } as any;
+    const startPRWatchSpy = vi.spyOn(secondSession, 'startPRWatch');
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      secondPRRegistry,
+      secondSession,
+      new AbortController().signal,
+    );
+
+    await expect(secondSession.isPRWatched(identifier)).resolves.toBe(true);
+    expect(startPRWatchSpy).not.toHaveBeenCalled();
+    expect(secondSession.getActivePRWatches()).toHaveLength(0);
+    secondSession.dispose();
+  });
+
   it('logs auto-watch failures with URL context and error details', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const providerRegistry = {
@@ -990,12 +1056,13 @@ describe('activate()', () => {
 });
 
 describe('deactivate()', () => {
-  it('does not throw', () => {
-    expect(() => deactivate()).not.toThrow();
+  it('resolves without throwing', async () => {
+    await expect(deactivate()).resolves.toBeUndefined();
   });
 
-  it('is a synchronous void function', () => {
+  it('returns a promise', async () => {
     const result = deactivate();
-    expect(result).toBeUndefined();
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).resolves.toBeUndefined();
   });
 });

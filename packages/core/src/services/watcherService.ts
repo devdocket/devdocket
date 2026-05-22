@@ -507,10 +507,22 @@ export class WatcherService implements vscode.Disposable {
     this.persistence.saveAll(this.getAllWatches(), this.getAllPRWatches());
   }
 
-  dispose(): void {
+  beginShutdown(): void {
+    if (this.disposed) {
+      return;
+    }
     this.disposed = true;
     this.configSubscription?.dispose();
+    this.configSubscription = undefined;
     this.stopPolling();
+  }
+
+  async flushPersistence(): Promise<void> {
+    await this.persistence.flush();
+  }
+
+  dispose(): void {
+    this.beginShutdown();
     for (const subscription of this.poolSubscriptions) {
       subscription.dispose();
     }
