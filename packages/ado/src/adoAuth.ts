@@ -33,13 +33,13 @@ export async function retryAdoWithAuth(
   signal?: AbortSignal,
   options: Omit<AdoAuthOptions, 'signal'> = {},
 ): Promise<Response | undefined> {
-  const authSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
   try {
-    const session = await getAdoSession({ ...options, signal: authSignal });
+    const session = await getAdoSession({ ...options, signal });
     if (session) {
+      const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
       return await fetch(apiUrl, {
         headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
-        signal: authSignal,
+        signal: requestSignal,
       });
     }
   } catch (error) {
