@@ -1,15 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { MockMemento } from 'vscode';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import * as vscode from 'vscode';
 import { JsonTaskStore } from '../storage/jsonTaskStore';
+import { JsonFileStore } from '../storage/fileStore';
 import { WorkItem, WorkItemState } from '../models/workItem';
+import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 describe('JsonTaskStore', () => {
-  let memento: InstanceType<typeof MockMemento>;
+  const fileUri = vscode.Uri.file('C:\\test\\workitems.json');
+  let fileSystem: MockFileSystem;
   let store: JsonTaskStore;
 
   beforeEach(() => {
-    memento = new MockMemento();
-    store = new JsonTaskStore(memento);
+    vi.clearAllMocks();
+    fileSystem = useMockFileSystem();
+    store = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
   });
 
   function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -114,13 +118,13 @@ describe('JsonTaskStore', () => {
       expect(items.find(i => i.id === 'new-item')!.title).toBe('Brand New');
     });
 
-    it('persists all items to globalState', async () => {
+    it('persists all items to the backing JSON file', async () => {
       await store.saveAll([
         makeItem({ id: 'x', title: 'X' }),
         makeItem({ id: 'y', title: 'Y' }),
       ]);
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems');
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri);
       expect(persisted).toHaveLength(2);
       expect(persisted!.map((i: WorkItem) => i.id).sort()).toEqual(['x', 'y']);
     });
@@ -137,92 +141,92 @@ describe('JsonTaskStore', () => {
     });
   });
 
-  it('persists data to globalState', async () => {
+  it('persists data to the backing JSON file', async () => {
     await store.save(makeItem());
-    const persisted = memento.get<WorkItem[]>('devdocket.workitems');
+    const persisted = fileSystem.readJson<WorkItem[]>(fileUri);
     expect(persisted).toHaveLength(1);
     expect(persisted![0].id).toBe('test-1');
   });
 
-  it('loads from a fresh store instance sharing same Memento', async () => {
+  it('loads from a fresh store instance sharing the same file', async () => {
     await store.save(makeItem({ id: 'a' }));
     await store.save(makeItem({ id: 'b' }));
 
-    const store2 = new JsonTaskStore(memento);
+    const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
     const items = await store2.loadAll();
     expect(items).toHaveLength(2);
   });
 
   describe('schema validation', () => {
     it('skips items missing an id', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { title: 'No ID', state: 'New', createdAt: 1000, updatedAt: 1000 },
         makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items missing a title', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { id: 'no-title', state: 'New', createdAt: 1000, updatedAt: 1000 },
         makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with an invalid state', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { id: 'bad-state', title: 'Bad', state: 'InvalidState', createdAt: 1000, updatedAt: 1000 },
         makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips non-object entries', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         'a string', 42, null, makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
-    it('returns empty when globalState contains a non-array', async () => {
-      await memento.update('devdocket.workitems', { not: 'an array' });
+    it('returns empty when the backing JSON file contains a non-array', async () => {
+      fileSystem.writeJson(fileUri, { not: 'an array' });
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toEqual([]);
     });
 
     it('skips items missing createdAt', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { id: 'no-created', title: 'Missing ts', state: 'New', updatedAt: 1000 },
         makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with invalid optional fields', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { ...makeItem({ id: 'bad-url' }), url: 123 },
         { ...makeItem({ id: 'bad-provider' }), providerId: 42 },
         { ...makeItem({ id: 'bad-external' }), externalId: true },
@@ -231,26 +235,26 @@ describe('JsonTaskStore', () => {
         makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with non-array activityLog', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { ...makeItem({ id: 'bad-log' }), activityLog: 'not an array' },
         makeItem({ id: 'valid' }),
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with malformed activityLog entries', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         { ...makeItem({ id: 'bad-entry' }), activityLog: [{ timestamp: 'not-a-number', type: 'created' }] },
         { ...makeItem({ id: 'missing-type' }), activityLog: [{ timestamp: 1000 }] },
         { ...makeItem({ id: 'null-entry' }), activityLog: [null] },
@@ -258,14 +262,14 @@ describe('JsonTaskStore', () => {
         { ...makeItem({ id: 'good' }), activityLog: [{ timestamp: 1000, type: 'created' }] },
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('good');
     });
 
     it('accepts items with valid activityLog', async () => {
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         {
           ...makeItem({ id: 'with-log' }),
           activityLog: [
@@ -275,7 +279,7 @@ describe('JsonTaskStore', () => {
         },
       ]);
 
-      const store2 = new JsonTaskStore(memento);
+      const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].activityLog).toHaveLength(2);
@@ -287,9 +291,9 @@ describe('JsonTaskStore', () => {
       // Window A creates item1
       await store.save(makeItem({ id: 'item1', title: 'Window A item', updatedAt: 1000 }));
 
-      // Simulate another window adding item2 directly to globalState
-      const current = memento.get<WorkItem[]>('devdocket.workitems') ?? [];
-      await memento.update('devdocket.workitems', [
+      // Simulate another window adding item2 directly to the shared JSON file
+      const current = fileSystem.readJson<WorkItem[]>(fileUri) ?? [];
+      fileSystem.writeJson(fileUri, [
         ...current,
         makeItem({ id: 'item2', title: 'Window B item', updatedAt: 2000 }),
       ]);
@@ -297,7 +301,7 @@ describe('JsonTaskStore', () => {
       // Window A saves item3 — should preserve item2 from remote
       await store.save(makeItem({ id: 'item3', title: 'Another A item', updatedAt: 3000 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(3);
       expect(persisted.map(i => i.id).sort()).toEqual(['item1', 'item2', 'item3']);
     });
@@ -306,14 +310,14 @@ describe('JsonTaskStore', () => {
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
 
       // Another window writes an older version
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         makeItem({ id: 'shared', title: 'Remote older', updatedAt: 500 }),
       ]);
 
       // Window A updates the item
       await store.save(makeItem({ id: 'shared', title: 'Local newer', updatedAt: 2000 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
       expect(persisted[0].title).toBe('Local newer');
     });
@@ -322,14 +326,14 @@ describe('JsonTaskStore', () => {
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
 
       // Another window writes a newer version
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         makeItem({ id: 'shared', title: 'Remote newer', updatedAt: 5000 }),
       ]);
 
       // Window A saves an unrelated item — merge should pick up remote's newer version
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       const shared = persisted.find(i => i.id === 'shared');
       expect(shared?.title).toBe('Remote newer');
     });
@@ -339,14 +343,14 @@ describe('JsonTaskStore', () => {
       await store.delete('to-delete');
 
       // Remote still has the item (from before the delete)
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         makeItem({ id: 'to-delete', title: 'Still here', updatedAt: 1000 }),
       ]);
 
       // Window A saves something else — should not restore deleted item
       await store.save(makeItem({ id: 'new', title: 'New', updatedAt: 2000 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
       expect(persisted[0].id).toBe('new');
     });
@@ -357,14 +361,14 @@ describe('JsonTaskStore', () => {
 
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
 
-      const windowB = new JsonTaskStore(memento);
+      const windowB = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       await windowB.loadAll();
       await windowB.save(makeItem({ id: 'shared', title: 'Remote update', updatedAt: 2000 }));
 
       await store.delete('shared');
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted.map(item => item.id).sort()).toEqual(['other']);
 
       vi.useRealTimers();
@@ -374,12 +378,12 @@ describe('JsonTaskStore', () => {
       await store.save(makeItem({ id: 'shared', title: 'Shared', updatedAt: 1000 }));
 
       // Another window deletes the item entirely.
-      await memento.update('devdocket.workitems', []);
+      fileSystem.writeJson(fileUri, []);
 
       // This window only changes an unrelated item, so the deleted item should stay deleted.
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 2000 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
       expect(persisted[0].id).toBe('other');
     });
@@ -391,13 +395,13 @@ describe('JsonTaskStore', () => {
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
       await store.delete('shared');
 
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         makeItem({ id: 'shared', title: 'Remote newer', updatedAt: Date.now() + 1 }),
       ]);
 
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: Date.now() + 2 }));
 
-      const persisted = memento.get<WorkItem[]>('devdocket.workitems')!;
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted.map(item => item.id).sort()).toEqual(['other', 'shared']);
       expect(persisted.find(item => item.id === 'shared')?.title).toBe('Remote newer');
 
@@ -408,7 +412,7 @@ describe('JsonTaskStore', () => {
       await store.save(makeItem({ id: 'a', title: 'Original' }));
 
       // Another window modifies the data
-      await memento.update('devdocket.workitems', [
+      fileSystem.writeJson(fileUri, [
         makeItem({ id: 'a', title: 'Modified by other window' }),
       ]);
 

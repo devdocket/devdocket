@@ -6,7 +6,8 @@ import { JsonTaskStore } from './storage/jsonTaskStore';
 import { InboxStateStore } from './storage/inboxStateStore';
 import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
-import { migrateToGlobalState } from './storage/migration';
+import { migrateGlobalStateToFiles, migrateToGlobalState } from './storage/migration';
+import { createJsonFileStore, createMementoStore, type FileStore } from './storage/fileStore';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
@@ -53,17 +54,33 @@ function initializeLogging(context: vscode.ExtensionContext): vscode.LogOutputCh
   return log;
 }
 
-async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: InboxStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
-  const store = new JsonTaskStore(globalState);
+function createUserIntentStore<T>(
+  useFileBackedStorage: boolean,
+  globalState: vscode.Memento,
+  globalStorageUri: vscode.Uri,
+  stateKey: string,
+  filename: string,
+): FileStore<T> {
+  return useFileBackedStorage
+    ? createJsonFileStore<T>(globalStorageUri, filename, filename)
+    : createMementoStore<T>(globalState, stateKey);
+}
+
+async function loadStores(
+  globalState: vscode.Memento,
+  globalStorageUri: vscode.Uri,
+  useFileBackedStorage: boolean,
+): Promise<{ workGraph: WorkGraph; stateStore: InboxStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
+  const store = new JsonTaskStore(createUserIntentStore(useFileBackedStorage, globalState, globalStorageUri, 'devdocket.workitems', 'workitems.json'));
   const wg = new WorkGraph(store);
   await wg.load();
   logger.debug(`Loaded ${wg.getAll().length} work items`);
 
-  const ss = new InboxStateStore(globalState);
+  const ss = new InboxStateStore(createUserIntentStore(useFileBackedStorage, globalState, globalStorageUri, 'devdocket.inbox-state', 'inbox-state.json'));
   await ss.load();
   logger.debug('Loaded inbox state');
 
-  const readStateStore = new ReadStateStore(globalState);
+  const readStateStore = new ReadStateStore(createUserIntentStore(useFileBackedStorage, globalState, globalStorageUri, 'devdocket.read-state', 'read-state.json'));
   await readStateStore.load();
   logger.debug('Loaded read state');
 
@@ -464,7 +481,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
-  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
+  const useFileBackedStorage = await migrateGlobalStateToFiles(context.globalState, context.globalStorageUri);
+  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState, context.globalStorageUri, useFileBackedStorage);
   await migrateInboxState(wg, ss);
 
   const pr = new ProviderRegistry(
@@ -479,7 +497,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const adrr = new ActivityDetailRendererRegistry();
   const wr = new WatcherRegistry(logger);
   const pwr = new PRWatcherRegistry(logger);
-  const watchStore = new WatchStore(context.globalState);
+  const watchStore = new WatchStore(createUserIntentStore(useFileBackedStorage, context.globalState, context.globalStorageUri, 'devdocket.watches', 'watches.json'));
   const ws = new WatcherService(wr, pwr, watchStore, logger);
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
@@ -496,14 +514,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     windowStateEmitter,
   );
 
-  // Cross-window state propagation for work-item and inbox/read-state stores.
+  // Cross-window state propagation for work-item, inbox-state, and read-state stores.
   const stateVersion = new StateVersionService(context.globalStorageUri);
   const bumpStateVersion = () => stateVersion.bump();
   let mainProvider: MainViewProvider | undefined;
   wg.onDidChange(safeHandler('sv:workGraph', (event) => event.source === 'externalReload' ? Promise.resolve() : bumpStateVersion()));
   ss.onDidChange(safeHandler('sv:stateStore', () => bumpStateVersion()));
   readStateStore.onDidChange(safeHandler('sv:readState', () => bumpStateVersion()));
-  labelCache.onDidChange(safeHandler('sv:labelCache', () => bumpStateVersion()));
   stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
     logger.debug('External state change detected — invalidating caches');
     await wg.invalidateAndReload();
@@ -511,8 +528,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     await ss.load();
     readStateStore.invalidateCache();
     await readStateStore.load();
-    labelCache.invalidateCache();
-    await labelCache.load();
     mainProvider?.scheduleRefresh('discovered');
   }));
 

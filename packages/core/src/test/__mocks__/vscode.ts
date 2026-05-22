@@ -225,6 +225,9 @@ const workspace = {
   fs: {
     readFile: vi.fn().mockRejectedValue(new Error('not found')),
     writeFile: vi.fn().mockResolvedValue(undefined),
+    createDirectory: vi.fn().mockResolvedValue(undefined),
+    rename: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
   },
 };
 

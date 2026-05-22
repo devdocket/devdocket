@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { MockMemento } from 'vscode';
+import * as vscode from 'vscode';
 import { InboxStateStore } from '../storage/inboxStateStore';
+import { JsonFileStore } from '../storage/fileStore';
+import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 describe('InboxStateStore', () => {
-  let memento: InstanceType<typeof MockMemento>;
+  const fileUri = vscode.Uri.file('C:\\test\\inbox-state.json');
+  let fileSystem: MockFileSystem;
   let store: InboxStateStore;
 
   beforeEach(() => {
-    memento = new MockMemento();
-    store = new InboxStateStore(memento);
+    vi.clearAllMocks();
+    fileSystem = useMockFileSystem();
+    store = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
   });
 
   afterEach(() => {
@@ -26,7 +30,7 @@ describe('InboxStateStore', () => {
   it('should create a record and persist on setState', async () => {
     await store.setState('gh', 'issue-1', 'unseen');
 
-    const persisted = memento.get<unknown[]>('devdocket.inbox-state');
+    const persisted = fileSystem.readJson<unknown[]>(fileUri);
     expect(persisted).toHaveLength(1);
     expect(persisted![0]).toEqual({
       providerId: 'gh',
@@ -92,7 +96,7 @@ describe('InboxStateStore', () => {
     await store.setState('gh', 'issue-1', 'accepted');
     await store.setState('gh', 'issue-2', 'dismissed');
 
-    const store2 = new InboxStateStore(memento);
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
     await store2.load();
 
     expect(store2.getState('gh', 'issue-1')).toBe('accepted');
@@ -104,12 +108,12 @@ describe('InboxStateStore', () => {
 
   describe('schema validation', () => {
     it('should skip records missing providerId', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { externalId: 'issue-1', inboxState: 'unseen' },
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(memento);
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -117,12 +121,12 @@ describe('InboxStateStore', () => {
     });
 
     it('should skip records missing externalId', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', inboxState: 'unseen' },
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(memento);
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -130,12 +134,12 @@ describe('InboxStateStore', () => {
     });
 
     it('should skip records with invalid inboxState', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'bogus' },
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(memento);
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -143,23 +147,23 @@ describe('InboxStateStore', () => {
     });
 
     it('should return empty for non-array data', async () => {
-      await memento.update('devdocket.inbox-state', { not: 'an array' });
+      fileSystem.writeJson(fileUri, { not: 'an array' });
 
-      const store2 = new InboxStateStore(memento);
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await store2.loadAll();
       expect(records).toEqual([]);
       store2.dispose();
     });
 
     it('should skip non-object entries', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         'a string',
         42,
         null,
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(memento);
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-1');
@@ -185,13 +189,13 @@ describe('InboxStateStore', () => {
       expect(records).toHaveLength(3);
     });
 
-    it('should persist all items to globalState', async () => {
+    it('should persist all items to the backing JSON file', async () => {
       await store.setStates([
         { providerId: 'gh', externalId: 'a', state: 'unseen' },
         { providerId: 'gh', externalId: 'b', state: 'accepted' },
       ]);
 
-      const persisted = memento.get<unknown[]>('devdocket.inbox-state');
+      const persisted = fileSystem.readJson<unknown[]>(fileUri);
       expect(persisted).toHaveLength(2);
     });
 
@@ -284,7 +288,7 @@ describe('InboxStateStore', () => {
     it('invalidateCache forces a re-read on next load', async () => {
       await store.setState('gh', 'issue-1', 'unseen');
 
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'dismissed' },
       ]);
 
@@ -297,8 +301,8 @@ describe('InboxStateStore', () => {
 
   describe('merge-on-write', () => {
     it('preserves remote additions while persisting local changes', async () => {
-      const windowA = new InboxStateStore(memento);
-      const windowB = new InboxStateStore(memento);
+      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await windowA.load();
 
       await windowB.setState('gh', 'remote', 'accepted');
@@ -317,12 +321,12 @@ describe('InboxStateStore', () => {
     });
 
     it('keeps remote updates for untouched keys', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
       ]);
 
-      const windowA = new InboxStateStore(memento);
-      const windowB = new InboxStateStore(memento);
+      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await windowA.load();
       await windowB.load();
 
@@ -337,12 +341,12 @@ describe('InboxStateStore', () => {
     });
 
     it('prefers local updates for keys changed in this window', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
       ]);
 
-      const windowA = new InboxStateStore(memento);
-      const windowB = new InboxStateStore(memento);
+      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await windowA.load();
       await windowB.load();
 
@@ -350,29 +354,34 @@ describe('InboxStateStore', () => {
       await windowA.setState('gh', 'shared', 'accepted');
 
       expect(windowA.getState('gh', 'shared')).toBe('accepted');
-      expect(memento.get<Array<{ inboxState: string }>>('devdocket.inbox-state')?.[0]?.inboxState).toBe('accepted');
+      expect(fileSystem.readJson<Array<{ inboxState: string }>>(fileUri)?.[0]?.inboxState).toBe('accepted');
 
       windowA.dispose();
       windowB.dispose();
     });
 
     it('retains dirty tracking when persist fails', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
       ]);
 
-      const failingMemento = {
-        get: (key: string) => memento.get(key),
-        update: vi.fn()
-          .mockRejectedValueOnce(new Error('quota exceeded'))
-          .mockImplementation((key: string, value: unknown) => memento.update(key, value)),
+      let failed = false;
+      const failingFileStore = {
+        read: vi.fn(async () => fileSystem.readJson<unknown[]>(fileUri)),
+        write: vi.fn(async (value: unknown[]) => {
+          if (!failed) {
+            failed = true;
+            throw new Error('quota exceeded');
+          }
+          fileSystem.writeJson(fileUri, value);
+        }),
       };
-      const failingStore = new InboxStateStore(failingMemento as any);
+      const failingStore = new InboxStateStore(failingFileStore);
       await failingStore.load();
 
       await expect(failingStore.setState('gh', 'shared', 'accepted')).rejects.toThrow('quota exceeded');
 
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'shared', inboxState: 'dismissed' },
       ]);
 
@@ -399,11 +408,11 @@ describe('InboxStateStore', () => {
     });
 
     it('setState triggers lazy load if not yet loaded', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pre-existing', inboxState: 'unseen' },
       ]);
 
-      const freshStore = new InboxStateStore(memento);
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await freshStore.setState('gh', 'new-item', 'accepted');
 
       expect(freshStore.getState('gh', 'pre-existing')).toBe('unseen');
@@ -412,11 +421,11 @@ describe('InboxStateStore', () => {
     });
 
     it('setStates triggers lazy load if not yet loaded', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pre-existing', inboxState: 'dismissed' },
       ]);
 
-      const freshStore = new InboxStateStore(memento);
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await freshStore.setStates([
         { providerId: 'gh', externalId: 'new-item', state: 'unseen' },
       ]);
@@ -491,7 +500,7 @@ describe('InboxStateStore', () => {
       expect(store.getState('gh', 'item-1199')).toBe('unseen');
 
       // Verify persistence by reloading from a fresh instance
-      const store2 = new InboxStateStore(memento);
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await store2.load();
       const reloaded = await store2.loadAll();
       expect(reloaded).toHaveLength(1200);
@@ -535,19 +544,19 @@ describe('InboxStateStore', () => {
       expect(store.getVersion('gh', 'pr-1')).toBe('sha-new');
     });
 
-    it('should persist version to globalState', async () => {
+    it('should persist version to the backing JSON file', async () => {
       await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
 
-      const persisted = memento.get<unknown[]>('devdocket.inbox-state');
+      const persisted = fileSystem.readJson<unknown[]>(fileUri);
       expect((persisted![0] as any).version).toBe('sha-abc');
     });
 
-    it('should load version from globalState', async () => {
-      await memento.update('devdocket.inbox-state', [
+    it('should load version from the backing JSON file', async () => {
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-disk' },
       ]);
 
-      const freshStore = new InboxStateStore(memento);
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await freshStore.load();
       expect(freshStore.getVersion('gh', 'pr-1')).toBe('sha-disk');
       freshStore.dispose();
@@ -570,12 +579,12 @@ describe('InboxStateStore', () => {
     });
 
     it('should skip records with non-string version during load', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 42 },
         { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', version: 'valid' },
       ]);
 
-      const freshStore = new InboxStateStore(memento);
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await freshStore.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('pr-2');
@@ -626,33 +635,33 @@ describe('InboxStateStore', () => {
       expect(store.getResurfaceVersion('gh', 'pr-1')).toBe('rv-new');
     });
 
-    it('should persist resurfaceVersion to globalState', async () => {
+    it('should persist resurfaceVersion to the backing JSON file', async () => {
       await store.setStates([
         { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
       ]);
 
-      const persisted = memento.get<unknown[]>('devdocket.inbox-state');
+      const persisted = fileSystem.readJson<unknown[]>(fileUri);
       expect((persisted![0] as any).resurfaceVersion).toBe('rv-abc');
     });
 
-    it('should load resurfaceVersion from globalState', async () => {
-      await memento.update('devdocket.inbox-state', [
+    it('should load resurfaceVersion from the backing JSON file', async () => {
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 'rv-disk' },
       ]);
 
-      const freshStore = new InboxStateStore(memento);
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await freshStore.load();
       expect(freshStore.getResurfaceVersion('gh', 'pr-1')).toBe('rv-disk');
       freshStore.dispose();
     });
 
     it('should skip records with non-string resurfaceVersion during load', async () => {
-      await memento.update('devdocket.inbox-state', [
+      fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 99 },
         { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', resurfaceVersion: 'valid' },
       ]);
 
-      const freshStore = new InboxStateStore(memento);
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       const records = await freshStore.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('pr-2');

@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MockMemento } from 'vscode';
+import * as vscode from 'vscode';
 import { WatchStore } from '../storage/watchStore';
+import { JsonFileStore } from '../storage/fileStore';
+import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 import type { WatchedRun, WatchedPR } from '../services/watcherService';
 
 vi.mock('../services/logger', () => ({
@@ -43,12 +45,14 @@ function createTestPRWatch(overrides?: Partial<WatchedPR>): WatchedPR {
 }
 
 describe('WatchStore', () => {
-  let memento: InstanceType<typeof MockMemento>;
+  const fileUri = vscode.Uri.file('C:\\test\\watches.json');
+  let fileSystem: MockFileSystem;
   let store: WatchStore;
 
   beforeEach(() => {
-    memento = new MockMemento();
-    store = new WatchStore(memento);
+    vi.clearAllMocks();
+    fileSystem = useMockFileSystem();
+    store = new WatchStore(new JsonFileStore(fileUri, 'watches.json'));
   });
 
   describe('loadAll', () => {
@@ -60,7 +64,7 @@ describe('WatchStore', () => {
     it('loads valid watches from new envelope format', async () => {
       const watch = createTestWatch();
       const prWatch = createTestPRWatch();
-      await memento.update('devdocket.watches', { runs: [watch], prs: [prWatch] });
+      fileSystem.writeJson(fileUri, { runs: [watch], prs: [prWatch] });
 
       const result = await store.loadAll();
       expect(result.runs).toHaveLength(1);
@@ -71,7 +75,7 @@ describe('WatchStore', () => {
 
     it('migrates legacy plain array format', async () => {
       const watch = createTestWatch();
-      await memento.update('devdocket.watches', [watch]);
+      fileSystem.writeJson(fileUri, [watch]);
 
       const result = await store.loadAll();
       expect(result.runs).toHaveLength(1);
@@ -80,7 +84,7 @@ describe('WatchStore', () => {
     });
 
     it('returns empty arrays for non-object/non-array data', async () => {
-      await memento.update('devdocket.watches', 'just a string');
+      fileSystem.writeJson(fileUri, 'just a string');
 
       const result = await store.loadAll();
       expect(result).toEqual({ runs: [], prs: [] });
@@ -89,7 +93,7 @@ describe('WatchStore', () => {
     it('filters out entries missing required fields', async () => {
       const valid = createTestWatch();
       const invalid = { foo: 'bar' };
-      await memento.update('devdocket.watches', { runs: [valid, invalid], prs: [] });
+      fileSystem.writeJson(fileUri, { runs: [valid, invalid], prs: [] });
 
       const result = await store.loadAll();
       expect(result.runs).toHaveLength(1);
@@ -99,13 +103,13 @@ describe('WatchStore', () => {
   describe('hasPRWatch', () => {
     it('returns true for persisted dismissed PR watches', async () => {
       const prWatch = createTestPRWatch({ dismissed: true });
-      await memento.update('devdocket.watches', { runs: [], prs: [prWatch] });
+      fileSystem.writeJson(fileUri, { runs: [], prs: [prWatch] });
 
       await expect(store.hasPRWatch(prWatch.identifier)).resolves.toBe(true);
     });
 
     it('returns false when the PR watch is not persisted', async () => {
-      await memento.update('devdocket.watches', { runs: [], prs: [] });
+      fileSystem.writeJson(fileUri, { runs: [], prs: [] });
 
       await expect(store.hasPRWatch(createTestPRWatch().identifier)).resolves.toBe(false);
     });
@@ -117,7 +121,7 @@ describe('WatchStore', () => {
       const prWatch = createTestPRWatch();
       await store.saveAll([watch], [prWatch]);
 
-      const persisted = memento.get<{ runs: WatchedRun[]; prs: WatchedPR[] }>('devdocket.watches');
+      const persisted = fileSystem.readJson<{ runs: WatchedRun[]; prs: WatchedPR[] }>(fileUri);
       expect(persisted!.runs).toHaveLength(1);
       expect(persisted!.runs[0].identifier.runId).toBe('123');
       expect(persisted!.prs).toHaveLength(1);

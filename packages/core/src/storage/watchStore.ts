@@ -1,9 +1,7 @@
-import type { Memento } from 'vscode';
 import type { PRIdentifier } from '@devdocket/shared';
 import { logger } from '../services/logger';
+import type { FileStore } from './fileStore';
 import type { WatchedRun, WatchedPR } from '../services/watcherService';
-
-const STORAGE_KEY = 'devdocket.watches';
 
 /**
  * Persisted shape: either a legacy plain array of WatchedRun, or the
@@ -14,26 +12,28 @@ interface WatchStoreData {
   prs: WatchedPR[];
 }
 
+function getRunKey(run: WatchedRun): string {
+  return `${run.identifier.providerId}::${run.identifier.repo}::${run.identifier.runId}`;
+}
+
+function getPRKey(pr: WatchedPR): string {
+  return `${pr.identifier.providerId}::${pr.identifier.repo}::${pr.identifier.prId}`;
+}
+
 /**
- * Persists watched pipeline runs and PR watches in VS Code globalState.
+ * Persists watched pipeline runs and PR watches in a JSON file under globalStorageUri.
  *
  * Supports the legacy plain-array format (runs only); legacy data is
  * transparently converted on read.
  */
 export class WatchStore {
-  private readonly globalState: Memento;
+  private lastSeenRunKeys = new Set<string>();
+  private lastSeenPRKeys = new Set<string>();
 
-  constructor(globalState: Memento) {
-    this.globalState = globalState;
-  }
+  constructor(private readonly fileStore: FileStore<unknown>) {}
 
-  /**
-   * Load all persisted data from globalState.
-   * Returns empty arrays if no data exists or data is invalid.
-   * Transparently supports the legacy plain-array format (runs only).
-   */
-  async loadAll(): Promise<WatchStoreData> {
-    const parsed = this.globalState.get<unknown>(STORAGE_KEY);
+  private async readFromFile(): Promise<WatchStoreData> {
+    const parsed = await this.fileStore.read();
     if (parsed === undefined) {
       return { runs: [], prs: [] };
     }
@@ -49,7 +49,7 @@ export class WatchStore {
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      logger.warn('Invalid watches data in globalState: expected an object or array');
+      logger.warn('Invalid watches data in file store: expected an object or array');
       return { runs: [], prs: [] };
     }
 
@@ -74,6 +74,18 @@ export class WatchStore {
   }
 
   /**
+   * Load all persisted data from disk.
+   * Returns empty arrays if no data exists or data is invalid.
+   * Transparently supports the legacy plain-array format (runs only).
+   */
+  async loadAll(): Promise<WatchStoreData> {
+    const data = await this.readFromFile();
+    this.lastSeenRunKeys = new Set(data.runs.map(getRunKey));
+    this.lastSeenPRKeys = new Set(data.prs.map(getPRKey));
+    return data;
+  }
+
+  /**
    * Check whether a PR watch exists in persisted state, including dismissed entries.
    */
   async hasPRWatch(identifier: PRIdentifier): Promise<boolean> {
@@ -86,10 +98,39 @@ export class WatchStore {
   }
 
   /**
-   * Save all watches to globalState.
+   * Save all watches to disk while preserving remote-only entries this window
+   * has not previously loaded.
    */
   async saveAll(runs: WatchedRun[], prs: WatchedPR[]): Promise<void> {
-    const data: WatchStoreData = { runs, prs };
-    await this.globalState.update(STORAGE_KEY, data);
+    const remote = await this.readFromFile();
+    const runKeys = new Set(runs.map(getRunKey));
+    const prKeys = new Set(prs.map(getPRKey));
+
+    const mergedRuns = new Map(remote.runs.map(run => [getRunKey(run), run]));
+    for (const key of this.lastSeenRunKeys) {
+      if (!runKeys.has(key)) {
+        mergedRuns.delete(key);
+      }
+    }
+    for (const run of runs) {
+      mergedRuns.set(getRunKey(run), run);
+    }
+
+    const mergedPRs = new Map(remote.prs.map(pr => [getPRKey(pr), pr]));
+    for (const key of this.lastSeenPRKeys) {
+      if (!prKeys.has(key)) {
+        mergedPRs.delete(key);
+      }
+    }
+    for (const pr of prs) {
+      mergedPRs.set(getPRKey(pr), pr);
+    }
+
+    await this.fileStore.write({
+      runs: Array.from(mergedRuns.values()),
+      prs: Array.from(mergedPRs.values()),
+    });
+    this.lastSeenRunKeys = runKeys;
+    this.lastSeenPRKeys = prKeys;
   }
 }
