@@ -186,7 +186,7 @@ Common causes:
 - **No `.changeset/*.md` files were present** (only `config.json` and `README.md`). The workflow correctly took the publish path instead — see next item.
 - **`CHANGELOG.md` missing for a package with a publish workflow.** Fixed in #591 — the script now warns and skips instead of throwing.
 
-### The bot couldn't push tags
+### The bot couldn't create tag refs
 
 Symptom: `changesets.yml` succeeds, but no `publish-*.yml` workflows fire. Verify:
 
