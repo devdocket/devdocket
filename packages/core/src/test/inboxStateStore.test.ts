@@ -644,7 +644,7 @@ describe('InboxStateStore', () => {
       expect((persisted![0] as any).resurfaceVersion).toBe('rv-abc');
     });
 
-    it('should load resurfaceVersion from globalState', async () => {
+    it('should load resurfaceVersion from the backing JSON file', async () => {
       fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 'rv-disk' },
       ]);
