@@ -930,6 +930,35 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 11. Error handling: activate succeeds even with no storage files
   // ------------------------------------------------------------------
+  it('falls back to globalState-backed stores when file migration fails', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    const workItems = [
+      {
+        id: 'fallback-1',
+        title: 'Fallback Item',
+        state: 'New',
+        providerId: 'gh',
+        externalId: 'ext-fallback',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      },
+    ];
+
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.workitems', workItems);
+
+    const writeFile = vscode.workspace.fs.writeFile as ReturnType<typeof vi.fn>;
+    writeFile.mockRejectedValueOnce(new Error('disk full'));
+
+    await activate(context);
+
+    expect(globalState.get('devdocket.migrated-to-files')).toBeUndefined();
+    expect(fileSystem.readJson(vscode.Uri.joinPath(context.globalStorageUri, 'workitems.json'))).toBeUndefined();
+    expect(globalState.get<Array<{ providerId: string; externalId: string; inboxState: string }>>('devdocket.inbox-state')).toEqual([
+      expect.objectContaining({ providerId: 'gh', externalId: 'ext-fallback', inboxState: 'accepted' }),
+    ]);
+  });
+
   it('activates successfully when storage files do not exist (ENOENT)', async () => {
     // Default mock already returns ENOENT — just verify no throw
     const api = await activate(context);

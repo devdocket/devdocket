@@ -7,7 +7,7 @@ import { InboxStateStore } from './storage/inboxStateStore';
 import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
 import { migrateGlobalStateToFiles, migrateToGlobalState } from './storage/migration';
-import { createJsonFileStore } from './storage/fileStore';
+import { createJsonFileStore, createMementoStore, type FileStore } from './storage/fileStore';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
@@ -54,17 +54,33 @@ function initializeLogging(context: vscode.ExtensionContext): vscode.LogOutputCh
   return log;
 }
 
-async function loadStores(globalState: vscode.Memento, globalStorageUri: vscode.Uri): Promise<{ workGraph: WorkGraph; stateStore: InboxStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
-  const store = new JsonTaskStore(createJsonFileStore(globalStorageUri, 'workitems.json', 'workitems.json'));
+function createUserIntentStore<T>(
+  useFileBackedStorage: boolean,
+  globalState: vscode.Memento,
+  globalStorageUri: vscode.Uri,
+  stateKey: string,
+  filename: string,
+): FileStore<T> {
+  return useFileBackedStorage
+    ? createJsonFileStore<T>(globalStorageUri, filename, filename)
+    : createMementoStore<T>(globalState, stateKey);
+}
+
+async function loadStores(
+  globalState: vscode.Memento,
+  globalStorageUri: vscode.Uri,
+  useFileBackedStorage: boolean,
+): Promise<{ workGraph: WorkGraph; stateStore: InboxStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
+  const store = new JsonTaskStore(createUserIntentStore(useFileBackedStorage, globalState, globalStorageUri, 'devdocket.workitems', 'workitems.json'));
   const wg = new WorkGraph(store);
   await wg.load();
   logger.debug(`Loaded ${wg.getAll().length} work items`);
 
-  const ss = new InboxStateStore(createJsonFileStore(globalStorageUri, 'inbox-state.json', 'inbox-state.json'));
+  const ss = new InboxStateStore(createUserIntentStore(useFileBackedStorage, globalState, globalStorageUri, 'devdocket.inbox-state', 'inbox-state.json'));
   await ss.load();
   logger.debug('Loaded inbox state');
 
-  const readStateStore = new ReadStateStore(createJsonFileStore(globalStorageUri, 'read-state.json', 'read-state.json'));
+  const readStateStore = new ReadStateStore(createUserIntentStore(useFileBackedStorage, globalState, globalStorageUri, 'devdocket.read-state', 'read-state.json'));
   await readStateStore.load();
   logger.debug('Loaded read state');
 
@@ -465,8 +481,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
-  await migrateGlobalStateToFiles(context.globalState, context.globalStorageUri);
-  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState, context.globalStorageUri);
+  const useFileBackedStorage = await migrateGlobalStateToFiles(context.globalState, context.globalStorageUri);
+  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState, context.globalStorageUri, useFileBackedStorage);
   await migrateInboxState(wg, ss);
 
   const pr = new ProviderRegistry(
@@ -481,7 +497,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const adrr = new ActivityDetailRendererRegistry();
   const wr = new WatcherRegistry(logger);
   const pwr = new PRWatcherRegistry(logger);
-  const watchStore = new WatchStore(createJsonFileStore(context.globalStorageUri, 'watches.json', 'watches.json'));
+  const watchStore = new WatchStore(createUserIntentStore(useFileBackedStorage, context.globalState, context.globalStorageUri, 'devdocket.watches', 'watches.json'));
   const ws = new WatcherService(wr, pwr, watchStore, logger);
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);

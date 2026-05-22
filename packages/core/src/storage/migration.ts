@@ -91,9 +91,9 @@ export async function migrateToGlobalState(globalState: Memento, storagePath: st
 export async function migrateGlobalStateToFiles(
   globalState: Memento,
   globalStorageUri: vscode.Uri,
-): Promise<void> {
+): Promise<boolean> {
   if (globalState.get<boolean>(FILE_MIGRATED_KEY)) {
-    return;
+    return true;
   }
 
   logger.info('Starting one-time migration from globalState to JSON files...');
@@ -105,7 +105,7 @@ export async function migrateGlobalStateToFiles(
     await vscode.workspace.fs.createDirectory(globalStorageUri);
   } catch (err) {
     logger.warn('Failed to create global storage directory for file migration', err);
-    return;
+    return false;
   }
 
   for (const { key, filename } of GLOBAL_STATE_FILE_MAP) {
@@ -148,7 +148,9 @@ export async function migrateGlobalStateToFiles(
   if (allSucceeded) {
     await globalState.update(FILE_MIGRATED_KEY, true);
     logger.info('Migration to file-backed storage complete');
-  } else {
-    logger.warn('File-backed migration incomplete — will retry on next activation');
+    return true;
   }
+
+  logger.warn('File-backed migration incomplete — will retry on next activation');
+  return false;
 }

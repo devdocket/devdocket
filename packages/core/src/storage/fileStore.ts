@@ -78,10 +78,29 @@ export class JsonFileStore<T> implements FileStore<T> {
   }
 }
 
+export class MementoStore<T> implements FileStore<T> {
+  constructor(
+    private readonly memento: vscode.Memento,
+    private readonly key: string,
+  ) {}
+
+  async read(): Promise<T | undefined> {
+    return this.memento.get<T>(this.key);
+  }
+
+  async write(value: T): Promise<void> {
+    await this.memento.update(this.key, value);
+  }
+}
+
 export function createJsonFileStore<T>(
   globalStorageUri: vscode.Uri,
   filename: string,
   label = filename,
 ): JsonFileStore<T> {
   return new JsonFileStore<T>(vscode.Uri.joinPath(globalStorageUri, filename), label);
+}
+
+export function createMementoStore<T>(memento: vscode.Memento, key: string): MementoStore<T> {
+  return new MementoStore<T>(memento, key);
 }
