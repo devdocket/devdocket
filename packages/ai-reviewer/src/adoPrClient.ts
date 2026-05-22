@@ -51,6 +51,13 @@ interface AdoCommitDiffResponse {
 type FetchLike = typeof fetch;
 type SessionProvider = (options?: AuthRequestOptions) => Promise<vscode.AuthenticationSession | undefined>;
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) {
+    return;
+  }
+  throw signal.reason instanceof Error ? signal.reason : createAbortError();
+}
+
 export class AdoPrClient {
   constructor(
     private readonly fetchImpl: FetchLike = fetch,
@@ -58,6 +65,7 @@ export class AdoPrClient {
   ) {}
 
   async fetchPullRequestDetails(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<AdoPullRequestDetails | undefined> {
+    throwIfAborted(options.signal);
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
@@ -80,6 +88,7 @@ export class AdoPrClient {
   }
 
   async fetchDiffResult(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<AdoDiffResult | undefined> {
+    throwIfAborted(options.signal);
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
@@ -132,6 +141,7 @@ export class AdoPrClient {
     comment: AdoThreadCommentInput,
     options: AuthRequestOptions = { interactive: true },
   ): Promise<void> {
+    throwIfAborted(options.signal);
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) {
       throw new Error('Azure DevOps authentication is required to post review comments');
