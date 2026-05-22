@@ -189,7 +189,7 @@ describe('InboxStateStore', () => {
       expect(records).toHaveLength(3);
     });
 
-    it('should persist all items to globalState', async () => {
+    it('should persist all items to the backing JSON file', async () => {
       await store.setStates([
         { providerId: 'gh', externalId: 'a', state: 'unseen' },
         { providerId: 'gh', externalId: 'b', state: 'accepted' },
