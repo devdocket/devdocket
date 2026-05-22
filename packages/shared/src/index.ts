@@ -14,4 +14,4 @@ export { combineSignals, createAbortError } from './signalUtils';
 export { runWorkerPool, runWorkerPoolSettled } from './concurrency';
 export { WorkItemState } from './workItem';
 export type { WorkItem, WorkItemInput, ActivityLogEntry, ActivityType } from './workItem';
-export type { DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent, ActivityDetailRender, ActivityDetailRenderer } from './apiTypes';
+export type { DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent, ProviderRefreshOptions, ActivityDetailRender, ActivityDetailRenderer } from './apiTypes';

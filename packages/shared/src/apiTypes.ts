@@ -53,6 +53,17 @@ export interface StateTransitionEvent {
 }
 
 /**
+ * Options that describe how a provider refresh was initiated.
+ */
+export interface ProviderRefreshOptions {
+  /**
+   * Whether the refresh was explicitly initiated by the user and may prompt
+   * for authentication when a cached session is unavailable.
+   */
+  readonly interactive?: boolean;
+}
+
+/**
  * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link DevDocketApi.registerProvider} and emit
@@ -89,7 +100,7 @@ export interface DevDocketProvider {
    * VS Code extensions typically pass a `vscode.CancellationToken` which
    * structurally satisfies {@link CancellationTokenLike}.
    */
-  refresh(token?: CancellationTokenLike): Promise<void>;
+  refresh(token?: CancellationTokenLike, options?: ProviderRefreshOptions): Promise<void>;
   /**
    * Attempt to resolve a URL into an item this provider can manage.
    *

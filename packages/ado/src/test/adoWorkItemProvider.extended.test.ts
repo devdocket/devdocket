@@ -852,7 +852,7 @@ describe('AdoWorkItemProvider — extended', () => {
       );
     });
 
-    it('uses createIfNone: true for user-triggered refresh', async () => {
+    it('checks for a cached session before prompting on user-triggered refresh', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => createWiqlResponse([]),
@@ -863,7 +863,7 @@ describe('AdoWorkItemProvider — extended', () => {
       expect(authentication.getSession).toHaveBeenCalledWith(
         'microsoft',
         ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
-        { createIfNone: true },
+        { silent: true },
       );
     });
   });

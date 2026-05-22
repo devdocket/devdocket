@@ -91,6 +91,7 @@ describe('WalkthroughParticipant', () => {
 
       expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
         'https://github.com/owner/repo/pull/42',
+        expect.anything(),
       );
     });
 
@@ -107,6 +108,7 @@ describe('WalkthroughParticipant', () => {
 
       expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
         'https://dev.azure.com/org/project/_git/repo/pullrequest/42',
+        expect.anything(),
       );
     });
 
@@ -208,6 +210,7 @@ describe('WalkthroughParticipant', () => {
 
       expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
         'https://github.com/owner/repo/pull/42',
+        expect.anything(),
       );
     });
 

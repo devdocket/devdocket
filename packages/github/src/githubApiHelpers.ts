@@ -2,6 +2,11 @@ import * as vscode from 'vscode';
 import { isValidGitHubRepo, combineSignals, createAbortError, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
 import { logger } from './logger';
 
+export interface GitHubAuthOptions {
+  interactive?: boolean;
+  signal?: AbortSignal;
+}
+
 export interface GitHubIssue {
   number: number;
   title: string;
@@ -150,10 +155,66 @@ export async function getHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-/** Retry a request with interactive auth (prompts user to sign in). */
-export async function retryWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(createAbortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      value => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+export async function getGitHubSession(
+  scopes: readonly string[],
+  options: GitHubAuthOptions = {},
+): Promise<vscode.AuthenticationSession | undefined> {
+  const { interactive = false, signal } = options;
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  const session = await raceWithAbort(
+    vscode.authentication.getSession('github', [...scopes], { silent: true }),
+    signal,
+  );
+  if (session || !interactive) {
+    return session;
+  }
+
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  return raceWithAbort(
+    vscode.authentication.getSession('github', [...scopes], { createIfNone: true }),
+    signal,
+  );
+}
+
+/** Retry a request with GitHub auth, prompting only for interactive callers. */
+export async function retryWithAuth(
+  apiUrl: string,
+  signal?: AbortSignal,
+  options: Omit<GitHubAuthOptions, 'signal'> = {},
+): Promise<Response | undefined> {
+  const authSignal = signal ? combineSignals(signal, 30_000) : undefined;
   try {
-    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+    const session = await getGitHubSession(['repo'], { ...options, signal: authSignal });
     if (session) {
       return await fetch(apiUrl, {
         headers: {
@@ -162,10 +223,13 @@ export async function retryWithAuth(apiUrl: string, signal?: AbortSignal): Promi
           'X-GitHub-Api-Version': '2022-11-28',
           'Authorization': `Bearer ${session.accessToken}`,
         },
-        signal,
+        signal: authSignal,
       });
     }
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
     logger.debug('User declined GitHub authentication prompt');
   }
   return undefined;

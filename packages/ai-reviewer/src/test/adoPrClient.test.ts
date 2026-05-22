@@ -1,4 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
+import { authentication } from 'vscode';
 import { AdoPrClient, normalizeAdoFilePath } from '../adoPrClient';
 
 const parts = {
@@ -12,6 +13,16 @@ function session() {
   return Promise.resolve({ accessToken: 'ado-token' } as never);
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 function response(body: unknown, ok = true, status = 200) {
   return {
     ok,
@@ -22,6 +33,64 @@ function response(body: unknown, ok = true, status = 200) {
 }
 
 describe('AdoPrClient', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('throws abort without requesting a session when already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const getSession = vi.fn();
+    const client = new AdoPrClient(vi.fn() as never, getSession as never);
+
+    await expect(client.fetchDiffResult(parts, { interactive: true, signal: controller.signal }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(getSession).not.toHaveBeenCalled();
+  });
+
+  it('checks for a silent session before prompting interactively', async () => {
+    vi.mocked(authentication.getSession)
+      .mockResolvedValueOnce(undefined as never)
+      .mockResolvedValueOnce({ accessToken: 'ado-token' } as never);
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        sourceRefName: 'refs/heads/feature',
+        targetRefName: 'refs/heads/main',
+        lastMergeSourceCommit: { commitId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+        lastMergeTargetCommit: { commitId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      }))
+      .mockResolvedValueOnce(response({ changes: [] }));
+    const client = new AdoPrClient(fetchMock as never);
+
+    await client.fetchDiffResult(parts, { interactive: true });
+
+    expect(authentication.getSession).toHaveBeenNthCalledWith(
+      1,
+      'microsoft',
+      ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+      { silent: true },
+    );
+    expect(authentication.getSession).toHaveBeenNthCalledWith(
+      2,
+      'microsoft',
+      ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+      { createIfNone: true },
+    );
+  });
+
+  it('rejects when cancellation fires while waiting for auth', async () => {
+    const controller = new AbortController();
+    const pending = deferred<any>();
+    const getSession = vi.fn().mockReturnValueOnce(pending.promise);
+    const client = new AdoPrClient(vi.fn() as never, getSession as never);
+
+    const promise = client.fetchDiffResult(parts, { interactive: true, signal: controller.signal });
+    controller.abort();
+    pending.resolve(undefined);
+
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('fetches PR metadata and commit diff from Azure DevOps', async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(response({

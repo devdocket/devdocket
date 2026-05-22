@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as vscode from 'vscode';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
 import { RepoManager, parsePrUrl, __testing } from '../repoManager';
 import { GitExecError } from '../tools/gitUtils';
@@ -124,6 +125,26 @@ async function rejectedMessage(promise: Promise<unknown>): Promise<string> {
   throw new Error('Expected promise to reject');
 }
 
+function createCancellationToken() {
+  let cancelled = false;
+  let listener: (() => void) | undefined;
+  return {
+    token: {
+      get isCancellationRequested() {
+        return cancelled;
+      },
+      onCancellationRequested: vi.fn((cb: () => void) => {
+        listener = cb;
+        return { dispose: vi.fn() };
+      }),
+    } as unknown as vscode.CancellationToken,
+    cancel() {
+      cancelled = true;
+      listener?.();
+    },
+  };
+}
+
 describe('parsePrUrl', () => {
   it('parses a valid GitHub PR URL', () => {
     const result = parsePrUrl('https://github.com/owner/repo/pull/42');
@@ -206,6 +227,41 @@ describe('RepoManager', () => {
   describe('ensureWorktree', () => {
     it('throws for invalid PR URLs', async () => {
       await expect(manager.ensureWorktree('not-a-url')).rejects.toThrow('Invalid PR URL');
+    });
+
+    it('throws abort before requesting auth when already cancelled', async () => {
+      const cancellation = createCancellationToken();
+      cancellation.cancel();
+
+      await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42', cancellation.token))
+        .rejects.toMatchObject({ name: 'AbortError' });
+      expect(authentication.getSession).not.toHaveBeenCalled();
+    });
+
+    it('checks for a silent GitHub session before prompting during worktree setup', async () => {
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as never)
+        .mockResolvedValueOnce({ accessToken: 'mock-token' } as never);
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(authentication.getSession).toHaveBeenNthCalledWith(1, 'github', ['repo'], { silent: true });
+      expect(authentication.getSession).toHaveBeenNthCalledWith(2, 'github', ['repo'], { createIfNone: true });
+    });
+
+    it('rejects when cancellation fires while waiting for GitHub auth', async () => {
+      const cancellation = createCancellationToken();
+      let resolveSession!: (value: unknown) => void;
+      const pendingSession = new Promise<unknown>(resolve => {
+        resolveSession = resolve;
+      });
+      vi.mocked(authentication.getSession).mockReturnValueOnce(pendingSession as never);
+
+      const promise = manager.ensureWorktree('https://github.com/owner/repo/pull/42', cancellation.token);
+      cancellation.cancel();
+      resolveSession(undefined);
+
+      await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
     });
 
     it('does not include query strings or fragments in invalid URL errors', async () => {
@@ -805,7 +861,7 @@ describe('RepoManager', () => {
       expect(authentication.getSession).toHaveBeenCalledWith(
         'microsoft',
         ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
-        { createIfNone: true },
+        { silent: true },
       );
       expect(info.provider).toBe('ado');
       expect(info.prUrl).toBe(url);

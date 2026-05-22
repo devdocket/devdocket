@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
+import { createAbortError } from '@devdocket/shared';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { parseAdoPrUrl, parsePrUrl } from './prUrl';
-import { ADO_AUTH_SCOPE, AdoPrClient } from './adoPrClient';
+import { AdoPrClient } from './adoPrClient';
+import { getAdoSession, getGitHubSession } from './auth';
 import { GitExecError, gitExec } from './tools/gitUtils';
 import { validWorktreePaths } from './tools/worktreeRegistry';
 import { isValidRef } from './tools/refValidation';
@@ -189,24 +191,30 @@ export class RepoManager {
   ) {}
 
   /** Clone repo if needed, create worktree if needed, fetch + checkout PR branch. */
-  async ensureWorktree(prUrl: string): Promise<WorktreeInfo> {
+  async ensureWorktree(prUrl: string, token?: vscode.CancellationToken): Promise<WorktreeInfo> {
     const logPrUrl = sanitizeUrlForLog(prUrl);
     this.log.debug(`ensureWorktree called — prUrl: ${logPrUrl}`);
     const github = parsePrUrl(prUrl);
     if (github) {
-      return this.ensureGitHubWorktree(prUrl, github.org, github.repo, github.prNumber);
+      return this.ensureGitHubWorktree(prUrl, github.org, github.repo, github.prNumber, token);
     }
 
     const ado = parseAdoPrUrl(prUrl);
     if (ado) {
-      return this.ensureAdoWorktree(prUrl, ado.org, ado.project, ado.repo, ado.prId);
+      return this.ensureAdoWorktree(prUrl, ado.org, ado.project, ado.repo, ado.prId, token);
     }
 
     this.log.error(`Invalid PR URL: ${logPrUrl}`);
     throw new Error(`Invalid PR URL: ${logPrUrl}`);
   }
 
-  private async ensureGitHubWorktree(prUrl: string, org: string, repo: string, prNumber: string): Promise<WorktreeInfo> {
+  private async ensureGitHubWorktree(
+    prUrl: string,
+    org: string,
+    repo: string,
+    prNumber: string,
+    token?: vscode.CancellationToken,
+  ): Promise<WorktreeInfo> {
     const key = this.githubKey(org, repo, prNumber);
     this.log.info(`Parsed GitHub PR: org=${org}, repo=${repo}, prNumber=${prNumber}`);
 
@@ -216,10 +224,13 @@ export class RepoManager {
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
     this.log.debug(`Paths — clonePath: ${clonePath}, worktreePath: ${worktreePath}`);
 
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     this.log.info('Requesting GitHub auth session');
-    const session = await vscode.authentication.getSession('github', ['repo'], {
-      createIfNone: true,
-    });
+    if (token?.isCancellationRequested) {
+      throw createAbortError();
+    }
+    const session = await getGitHubSession({ interactive: true, signal: abortController.signal });
     if (!session) {
       this.log.error('GitHub authentication not available');
       throw new Error('GitHub authentication required');
@@ -339,6 +350,7 @@ export class RepoManager {
     this.worktrees.set(key, info);
     validWorktreePaths.add(path.resolve(worktreePath));
     this.log.debug(`ensureWorktree complete — worktree ready at ${worktreePath}`);
+    cancelListener?.dispose();
     return info;
   }
 
@@ -348,6 +360,7 @@ export class RepoManager {
     project: string,
     repo: string,
     prNumber: string,
+    token?: vscode.CancellationToken,
   ): Promise<WorktreeInfo> {
     const key = this.adoKey(org, project, repo, prNumber);
     this.log.info(`Parsed ADO PR: org=${org}, project=${project}, repo=${repo}, prNumber=${prNumber}`);
@@ -358,15 +371,22 @@ export class RepoManager {
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
     this.log.debug(`ADO paths — clonePath: ${clonePath}, worktreePath: ${worktreePath}`);
 
-    const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
-      createIfNone: true,
-    });
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    if (token?.isCancellationRequested) {
+      throw createAbortError();
+    }
+
+    const session = await getAdoSession({ interactive: true, signal: abortController.signal });
     if (!session) {
       this.log.error('Microsoft authentication not available');
       throw new Error('Azure DevOps authentication required');
     }
 
-    const details = await new AdoPrClient(fetch, async () => session).fetchPullRequestDetails({ org, project, repo, prId: prNumber });
+    const details = await new AdoPrClient(fetch, async () => session).fetchPullRequestDetails(
+      { org, project, repo, prId: prNumber },
+      { interactive: true, signal: abortController.signal },
+    );
     if (!details) {
       throw new Error('Azure DevOps authentication required');
     }
@@ -460,6 +480,7 @@ export class RepoManager {
     this.worktrees.set(key, info);
     validWorktreePaths.add(path.resolve(worktreePath));
     this.log.debug(`ensureAdoWorktree complete — worktree ready at ${worktreePath}`);
+    cancelListener?.dispose();
     return info;
   }
 

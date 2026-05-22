@@ -54,16 +54,25 @@ export class AiReviewAction extends BasePrAction {
     let diff: string | undefined;
     if (adoParts) {
       try {
-        const adoDiff = await new AdoPrClient().fetchDiffResult(adoParts);
-        diff = adoDiff?.diff;
-        adoDiffWasSynthetic = adoDiff?.synthetic ?? false;
+        const abortController = new AbortController();
+        const cancelListener = token.onCancellationRequested?.(() => abortController.abort());
+        try {
+          const adoDiff = await new AdoPrClient().fetchDiffResult(adoParts, {
+            interactive: true,
+            signal: abortController.signal,
+          });
+          diff = adoDiff?.diff;
+          adoDiffWasSynthetic = adoDiff?.synthetic ?? false;
+        } finally {
+          cancelListener?.dispose();
+        }
       } catch (err) {
         console.error(`${this.progressTitle}: failed to fetch diff:`, err);
         vscode.window.showWarningMessage(`${this.progressTitle}: Failed to fetch PR diff`);
         return;
       }
     } else {
-      diff = await this.fetchDiff(item.url!);
+      diff = await this.fetchDiff(item.url!, token);
     }
     if (diff === undefined) {
       if (adoParts) {
@@ -86,7 +95,7 @@ export class AiReviewAction extends BasePrAction {
     progress.report({ message: 'Preparing repository...' });
     let worktreeInfo: WorktreeInfo | undefined;
     try {
-      worktreeInfo = await this.repoManager.ensureWorktree(item.url!);
+      worktreeInfo = await this.repoManager.ensureWorktree(item.url!, token);
       this.log.info('Worktree ready for code review');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

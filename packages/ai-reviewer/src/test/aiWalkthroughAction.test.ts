@@ -66,7 +66,7 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
-      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42', expect.anything());
       expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.newChat');
     });
 
@@ -85,7 +85,7 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
-      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42', expect.anything());
     });
 
     it('opens chat with correct query after preparing worktree', async () => {

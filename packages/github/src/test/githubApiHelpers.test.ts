@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, type GitHubIssue } from '../githubApiHelpers';
+import { authentication } from 'vscode';
+import { filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 import { makeErrorResponse } from './responseMocks';
 
@@ -74,6 +75,16 @@ describe('isMergedGitHubPr', () => {
   });
 });
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('filterMergedGitHubPrs', () => {
   it('fetches PR details for closed PR search results before filtering merged PRs', async () => {
     const openPr = createPr(1, 'open');
@@ -99,6 +110,56 @@ describe('filterMergedGitHubPrs', () => {
       'https://api.github.com/repos/owner/repo/pulls/2',
       'https://api.github.com/repos/owner/repo/pulls/3',
     ]);
+  });
+});
+
+describe('retryWithAuth', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('throws abort without requesting a session when already cancelled', async () => {
+    const controller = new AbortController();
+    controller.abort();
+
+    await expect(retryWithAuth('https://api.github.com/test', controller.signal, { interactive: true }))
+      .rejects.toMatchObject({ name: 'AbortError' });
+    expect(authentication.getSession).not.toHaveBeenCalled();
+  });
+
+  it('rejects when cancellation fires while waiting for getSession', async () => {
+    const controller = new AbortController();
+    const pending = deferred<any>();
+    vi.mocked(authentication.getSession).mockReturnValueOnce(pending.promise);
+
+    const promise = retryWithAuth('https://api.github.com/test', controller.signal, { interactive: true });
+    controller.abort();
+    pending.resolve(undefined);
+
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('checks for a silent session before skipping background retries', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValueOnce(undefined as never);
+
+    await expect(retryWithAuth('https://api.github.com/test', undefined, { interactive: false }))
+      .resolves.toBeUndefined();
+    expect(authentication.getSession).toHaveBeenCalledTimes(1);
+    expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo'], { silent: true });
+  });
+
+  it('falls back to createIfNone only for interactive callers', async () => {
+    vi.mocked(authentication.getSession)
+      .mockResolvedValueOnce(undefined as never)
+      .mockResolvedValueOnce({ accessToken: 'interactive-token' } as never);
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200 });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await retryWithAuth('https://api.github.com/test', undefined, { interactive: true });
+
+    expect(authentication.getSession).toHaveBeenNthCalledWith(1, 'github', ['repo'], { silent: true });
+    expect(authentication.getSession).toHaveBeenNthCalledWith(2, 'github', ['repo'], { createIfNone: true });
+    expect(fetchMock).toHaveBeenCalledOnce();
   });
 });
 

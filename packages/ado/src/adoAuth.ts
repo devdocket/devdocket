@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
+import { combineSignals, createAbortError } from '@devdocket/shared';
 
 export const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
+
+export interface AdoAuthOptions {
+  interactive?: boolean;
+  signal?: AbortSignal;
+}
 
 /** Get ADO API headers, attaching auth if a silent session is available. */
 export async function getAdoHeaders(): Promise<Record<string, string>> {
@@ -12,17 +18,74 @@ export async function getAdoHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-/** Retry a request with interactive ADO auth (prompts user to sign in). */
-export async function retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(createAbortError());
+  }
+
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(createAbortError());
+    signal.addEventListener('abort', onAbort, { once: true });
+    promise.then(
+      value => {
+        signal.removeEventListener('abort', onAbort);
+        resolve(value);
+      },
+      error => {
+        signal.removeEventListener('abort', onAbort);
+        reject(error);
+      },
+    );
+  });
+}
+
+export async function getAdoSession(options: AdoAuthOptions = {}): Promise<vscode.AuthenticationSession | undefined> {
+  const { interactive = false, signal } = options;
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  const session = await raceWithAbort(
+    vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true }),
+    signal,
+  );
+  if (session || !interactive) {
+    return session;
+  }
+
+  if (signal?.aborted) {
+    throw createAbortError();
+  }
+
+  return raceWithAbort(
+    vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true }),
+    signal,
+  );
+}
+
+/** Retry a request with ADO auth, prompting only for interactive callers. */
+export async function retryAdoWithAuth(
+  apiUrl: string,
+  signal?: AbortSignal,
+  options: Omit<AdoAuthOptions, 'signal'> = {},
+): Promise<Response | undefined> {
+  const authSignal = signal ? combineSignals(signal, 30_000) : undefined;
   try {
-    const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true });
+    const session = await getAdoSession({ ...options, signal: authSignal });
     if (session) {
       return await fetch(apiUrl, {
         headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
-        signal,
+        signal: authSignal,
       });
     }
-  } catch { /* user declined */ }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw error;
+    }
+  }
   return undefined;
 }
 

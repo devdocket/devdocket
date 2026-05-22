@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { BaseProvider, ProviderItem, type GitWorkInfo, type ProviderBadge, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, ProviderItem, type GitWorkInfo, type ProviderBadge, type ProviderRefreshOptions, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
+import { ADO_AUTH_SCOPE, getAdoHeaders, getAdoSession, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -80,7 +80,7 @@ export class AdoWorkItemProvider extends BaseProvider {
    * Performs a user-triggered refresh of assigned ADO work items.
    * Prompts for authentication if no session exists.
    */
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
+  async refresh(token?: vscode.CancellationToken, options?: ProviderRefreshOptions): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -88,15 +88,25 @@ export class AdoWorkItemProvider extends BaseProvider {
     this._isRefreshing = true;
     const abortController = new AbortController();
     const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    const interactive = options?.interactive ?? true;
     try {
       logger.info('Fetching assigned ADO work items...');
       if (token?.isCancellationRequested) {
         return;
       }
 
-      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
-        createIfNone: true,
-      }).catch(() => null);
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await getAdoSession({
+          interactive,
+          signal: abortController.signal,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
+        session = undefined;
+      }
 
       if (token?.isCancellationRequested) {
         return;
@@ -106,7 +116,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         return;
       }
 
-      await this.fetchAndPublishWorkItems(session.accessToken, true, abortController.signal);
+      await this.fetchAndPublishWorkItems(session.accessToken, interactive, abortController.signal);
       this.markRefreshSuccess();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
@@ -706,7 +716,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await retryAdoWithAuth(apiUrl, signal);
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: true });
       if (retryResponse) { response = retryResponse; }
     }
 

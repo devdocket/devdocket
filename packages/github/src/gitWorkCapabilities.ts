@@ -57,7 +57,7 @@ export function createGitHubPrGitWork(repoName: string, number: number, prApiUrl
     });
 
     if ((response.status === 401 || response.status === 403 || (response.status === 404 && !wasAuthenticated))) {
-      const retryResponse = await retryWithAuth(url);
+      const retryResponse = await retryWithAuth(url, undefined, { interactive: true });
       if (retryResponse) { response = retryResponse; }
     }
 
