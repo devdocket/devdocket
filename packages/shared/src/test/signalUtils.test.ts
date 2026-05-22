@@ -1,5 +1,15 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { combineSignals } from '../signalUtils';
+import { combineSignals, getSessionWithAuthFallback, raceWithAbort } from '../signalUtils';
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
 
 describe('combineSignals', () => {
   afterEach(() => {
@@ -94,5 +104,78 @@ describe('combineSignals', () => {
     const combined = combineSignals(cancelController.signal, 60_000);
     expect(combined.aborted).toBe(true);
     expect((combined.reason as Error).message).toBe('race condition');
+  });
+});
+
+describe('raceWithAbort', () => {
+  it('rejects with the signal reason when already aborted', async () => {
+    const controller = new AbortController();
+    const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+    controller.abort(timeoutError);
+
+    await expect(raceWithAbort(Promise.resolve('ok'), controller.signal)).rejects.toBe(timeoutError);
+  });
+
+  it('rejects with the signal reason when aborted during the race', async () => {
+    const controller = new AbortController();
+    const pending = deferred<string>();
+    const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+
+    const promise = raceWithAbort(pending.promise, controller.signal);
+    controller.abort(timeoutError);
+    pending.resolve('ok');
+
+    await expect(promise).rejects.toBe(timeoutError);
+  });
+});
+
+describe('getSessionWithAuthFallback', () => {
+  it('throws the signal reason when already aborted', async () => {
+    const controller = new AbortController();
+    const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+    controller.abort(timeoutError);
+
+    await expect(getSessionWithAuthFallback({
+      interactive: true,
+      signal: controller.signal,
+      getSilent: async () => undefined,
+      getInteractive: async () => 'session',
+    })).rejects.toBe(timeoutError);
+  });
+
+  it('throws the signal reason when aborted synchronously inside getSilent', async () => {
+    const controller = new AbortController();
+    const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+
+    await expect(getSessionWithAuthFallback({
+      interactive: true,
+      signal: controller.signal,
+      getSilent: async () => {
+        controller.abort(timeoutError);
+        return undefined;
+      },
+      getInteractive: async () => 'session',
+    })).rejects.toBe(timeoutError);
+  });
+
+  it('throws the signal reason when abort races the post-silent guard', async () => {
+    const controller = new AbortController();
+    const timeoutError = new DOMException('The operation timed out.', 'TimeoutError');
+    const silent = deferred<undefined>();
+
+    const result = getSessionWithAuthFallback({
+      interactive: true,
+      signal: controller.signal,
+      getSilent: () => silent.promise,
+      getInteractive: async () => 'session',
+    });
+
+    await Promise.resolve();
+    silent.resolve(undefined);
+    await Promise.resolve();
+    await Promise.resolve();
+    controller.abort(timeoutError);
+
+    await expect(result).rejects.toBe(timeoutError);
   });
 });

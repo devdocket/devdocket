@@ -11,16 +11,20 @@ export function createAbortError(): Error {
   return error;
 }
 
+function getAbortReason(signal: AbortSignal): Error {
+  return signal.reason instanceof Error ? signal.reason : createAbortError();
+}
+
 export function raceWithAbort<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
   if (!signal) {
     return promise;
   }
   if (signal.aborted) {
-    return Promise.reject(createAbortError());
+    return Promise.reject(getAbortReason(signal));
   }
 
   return new Promise<T>((resolve, reject) => {
-    const onAbort = () => reject(createAbortError());
+    const onAbort = () => reject(getAbortReason(signal));
     signal.addEventListener('abort', onAbort, { once: true });
     promise.then(
       value => {
@@ -43,7 +47,7 @@ export async function getSessionWithAuthFallback<T>(options: {
 }): Promise<T | undefined> {
   const { interactive = false, signal, getSilent, getInteractive } = options;
   if (signal?.aborted) {
-    throw createAbortError();
+    throw getAbortReason(signal);
   }
 
   const session = await raceWithAbort(getSilent(), signal);
@@ -52,7 +56,7 @@ export async function getSessionWithAuthFallback<T>(options: {
   }
 
   if (signal?.aborted) {
-    throw createAbortError();
+    throw getAbortReason(signal);
   }
 
   return raceWithAbort(getInteractive(), signal);
