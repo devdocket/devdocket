@@ -118,7 +118,7 @@ describe('JsonTaskStore', () => {
       expect(items.find(i => i.id === 'new-item')!.title).toBe('Brand New');
     });
 
-    it('persists all items to globalState', async () => {
+    it('persists all items to the backing JSON file', async () => {
       await store.saveAll([
         makeItem({ id: 'x', title: 'X' }),
         makeItem({ id: 'y', title: 'Y' }),
