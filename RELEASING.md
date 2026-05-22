@@ -9,7 +9,7 @@ For the contributor / agent perspective on how to add a `.changeset/*.md` file t
 DevDocket uses [Changesets](https://github.com/changesets/changesets) for per-package versioning and an automated tag-driven publish pipeline. The maintainer's day-to-day responsibility is to:
 
 1. Review and merge PRs that contain a `.changeset/*.md` file describing their user-facing change.
-2. Periodically review and merge the **Version Packages** PR that the Changesets bot keeps up to date on `dev`.
+2. Periodically review and merge the **Version Packages** PR that the dedicated `devdocket bot` GitHub App keeps up to date on `dev`.
 3. Optionally approve each per-package publish run via the `marketplace-publish` GitHub Environment.
 
 That's it. Version numbers, changelogs, git tags, marketplace publishes, and GitHub Releases are all produced automatically from those actions.
@@ -34,7 +34,7 @@ Are there pending .changeset/*.md files?
                         ▼
                     Fast-forward main to dev's HEAD
                     Create release tags on main (e.g., core-v0.1.0, shared-v0.1.0)
-                    Push main + tags via the Changesets GitHub App
+                    Push main + tags via the dedicated devdocket bot GitHub App
                         │
                         ▼ (each tag push triggers ONE workflow)
                     publish-shared.yml          → @devdocket/shared to GitHub Packages
@@ -64,7 +64,7 @@ When a PR's changeset describes the change incorrectly (wrong packages, wrong bu
 
 ### 2. Watch for the Version Packages PR
 
-Within ~1 minute of merging any PR that contained a `.changeset/*.md` file, the Changesets bot opens (or updates) a single open PR titled **"Version Packages"** against `dev`. There is always at most one such PR open at a time.
+Within ~1 minute of merging any PR that contained a `.changeset/*.md` file, the dedicated `devdocket bot` GitHub App opens (or updates) a single open PR titled **"Version Packages"** against `dev`. There is always at most one such PR open at a time.
 
 Its diff shows you **exactly what will publish** if you merge it:
 
@@ -89,7 +89,7 @@ The moment that PR merges, the publish path of `changesets.yml` runs:
 
 - `main` is fast-forwarded to `dev`'s HEAD (the script aborts if `main` has diverged — see [Recovery](#recovery)).
 - One git tag per bumped package is created on `main` (e.g., `core-v0.1.0`, `shared-v0.1.0`).
-- The Changesets GitHub App pushes `main` + tags. (The default `GITHUB_TOKEN` won't work here because tag pushes made with it don't trigger downstream workflows.)
+- The dedicated `devdocket bot` GitHub App pushes `main` + tags. (The default `GITHUB_TOKEN` won't work here because tag pushes made with it don't trigger downstream workflows.)
 
 ### 4. Approve each per-package publish (if you enabled required reviewers)
 
@@ -137,7 +137,7 @@ This is uncommon but supported. In the Version Packages PR's diff:
 3. Commit those edits to the Version PR branch.
 4. Merge.
 
-The Changesets bot will then re-open a new Version Packages PR containing the changes you removed, ready for the next release.
+The dedicated `devdocket bot` GitHub App will then re-open a new Version Packages PR containing the changes you removed, ready for the next release.
 
 ## Troubleshooting
 
@@ -160,7 +160,7 @@ Decide whether the `main`-only commits need to be preserved (rare — `main` sho
 - **Discard them:** `git reset --hard origin/dev && git push --force-with-lease origin main`. The next release will succeed.
 - **Preserve them:** merge `main` into `dev` (`git checkout dev && git merge main --no-ff && git push origin dev`). After that lands, the next push to `dev` will re-run the workflow and ff-merge will succeed because `main` is now reachable from `dev`.
 
-This shouldn't happen if you treat `main` as bot-owned (no direct human pushes). It's worth tightening `main` branch protection to disallow direct pushes from everyone except the Changesets App.
+This shouldn't happen if you treat `main` as bot-owned (no direct human pushes). It's worth tightening `main` branch protection to disallow direct pushes from everyone except the dedicated `devdocket bot` GitHub App.
 
 ### A publish workflow failed
 
@@ -190,8 +190,8 @@ Common causes:
 
 Symptom: `changesets.yml` succeeds, but no `publish-*.yml` workflows fire. Verify:
 
-- `CHANGESETS_APP_ID` and `CHANGESETS_APP_PRIVATE_KEY` repository secrets are set.
-- The Changesets App is installed on `devdocket/devdocket`.
+- `DEVDOCKET_BOT_APP_ID` and `DEVDOCKET_BOT_APP_PRIVATE_KEY` repository secrets are set.
+- The dedicated `devdocket bot` GitHub App is installed on `devdocket/devdocket`.
 - The App has `contents: write`, `pull-requests: write`, `workflows: write` repository permissions.
 - The App is in the `main` branch protection bypass list.
 - `scripts/create-release-tags.mjs` is still creating tags via the REST API (`gh api repos/.../git/refs --method POST ...`) rather than `git push`. Tags pushed via `git push` from inside an Actions run do NOT trigger downstream tag-triggered workflows, even when the push is authenticated as a GitHub App. The REST API path is the only reliable trigger.
@@ -219,12 +219,12 @@ git tag -d shared-v0.1.0
 
 This deletes the tag but **does not** un-publish anything that the tag's workflow already shipped. The corresponding GitHub Release also remains (delete it separately at https://github.com/devdocket/devdocket/releases).
 
-### Rotating the Changesets GitHub App private key
+### Rotating the devdocket bot GitHub App private key
 
-If `CHANGESETS_APP_PRIVATE_KEY` is leaked or expiring:
+If `DEVDOCKET_BOT_APP_PRIVATE_KEY` is leaked or expiring:
 
 1. Generate a new private key on the App's settings page → Private keys → Generate.
-2. Update the `CHANGESETS_APP_PRIVATE_KEY` repo secret with the new `.pem` contents.
+2. Update the `DEVDOCKET_BOT_APP_PRIVATE_KEY` repo secret with the new `.pem` contents.
 3. **Revoke the old private key** on the App settings page.
 
 The App ID stays the same; in-flight workflow runs continue with the old key until they finish.
