@@ -67,6 +67,8 @@ function isValidGitSshCloneUrl(url: string): boolean {
 const GIT_METADATA_TIMEOUT = 30_000;
 /** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
 const GIT_CHECKOUT_TIMEOUT = 300_000;
+/** Cap de-duplicated canRun failure logs so long-lived sessions do not retain unbounded history. */
+const MAX_LOGGED_CAN_RUN_FAILURES = 500;
 
 type GetProviderItem = (providerId: string, externalId: string) => ProviderItem | undefined;
 
@@ -120,6 +122,12 @@ export class StartWorkAction implements DevDocketAction {
       const logKey = `${item.id}\0${reason}`;
       if (!this.loggedCanRunFailures.has(logKey)) {
         this.loggedCanRunFailures.add(logKey);
+        if (this.loggedCanRunFailures.size > MAX_LOGGED_CAN_RUN_FAILURES) {
+          const oldestKey = this.loggedCanRunFailures.keys().next().value;
+          if (oldestKey) {
+            this.loggedCanRunFailures.delete(oldestKey);
+          }
+        }
         logger.debug(`Start Git Work unavailable for item ${item.id}: ${reason}`);
       }
     }
