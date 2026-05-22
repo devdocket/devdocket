@@ -1,5 +1,20 @@
 # DevDocket
 
+## 0.2.0
+
+### Minor Changes
+
+- [#619 Improve startup experience for new users and standardize "recognized" spelling](https://github.com/devdocket/devdocket/pull/619) [`ee77f2c`](https://github.com/devdocket/devdocket/commit/ee77f2cc08b5562951d6032d52e05bb4940885c6) - Improve the new-user startup experience. The **My Work** tab now shows the same friendly onboarding empty state as the **Sources** tab — both empty states now offer "Create Work Item", "Browse Provider Extensions", and "Open Walkthrough" buttons — instead of a bare "No items yet" placeholder on My Work. The walkthrough's extensions link and the new button both open the Extensions view filtered to the DevDocket publisher. The "No provider recognized this URL" error (spelling updated from the previous British form) now includes a "Browse Provider Extensions" action that opens the same filtered view, and a new `devdocket.browseProviderExtensions` command is registered.
+
+- [#628 Add merge-on-write and cross-window state propagation](https://github.com/devdocket/devdocket/pull/628) [`e8ba308`](https://github.com/devdocket/devdocket/commit/e8ba3081a3d9f265732eae4be162a7b3ad782f7e) - Add merge-on-write to work items, inbox state, read state, and provider labels plus cross-window change propagation via a version file, preventing silent data loss when multiple VS Code windows write concurrently.
+
+### Patch Changes
+
+- [#627 Throttle provider refreshes in unfocused windows](https://github.com/devdocket/devdocket/pull/627) [`3789ea0`](https://github.com/devdocket/devdocket/commit/3789ea05145bb8b1e5c037cb73375fe716e75db0) - Throttle background provider refreshes when the VS Code window is unfocused so background windows still poll for new notifications while reducing redundant API calls across multiple windows.
+
+- Updated dependencies [[`3789ea0`](https://github.com/devdocket/devdocket/commit/3789ea05145bb8b1e5c037cb73375fe716e75db0)]:
+  - @devdocket/shared@0.2.0
+
 ## 0.1.1
 
 ### Patch Changes

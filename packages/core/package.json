@@ -2,7 +2,7 @@
   "name": "devdocket",
   "displayName": "DevDocket",
   "description": "A central hub for managing work across pull requests, issues, investigations, and follow-ups.",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "publisher": "devdocket",
   "license": "MIT",
   "icon": "resources/icon.png",

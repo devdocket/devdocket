@@ -2,7 +2,7 @@
   "name": "devdocket-github",
   "displayName": "DevDocket GitHub",
   "description": "GitHub provider for DevDocket — discovers assigned issues, PR reviews, and authored PRs with status tracking.",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "devdocket",
   "license": "MIT",
   "icon": "resources/icon.png",
