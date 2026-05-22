@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authentication } from 'vscode';
 import { retryAdoWithAuth } from '../adoAuth';
 
@@ -15,6 +15,10 @@ function deferred<T>() {
 describe('retryAdoWithAuth', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('throws abort without requesting a session when already cancelled', async () => {
