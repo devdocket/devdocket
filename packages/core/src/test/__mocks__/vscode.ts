@@ -115,6 +115,8 @@ const window = {
     onDidChangeLogLevel: vi.fn(),
   })),
   createStatusBarItem: vi.fn((alignment?: number, priority?: number) => new MockStatusBarItem()),
+  state: { focused: true },
+  onDidChangeWindowState: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
 const commands = {

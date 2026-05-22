@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { runWorkerPool, type PRIdentifier } from '@devdocket/shared';
+import { runWorkerPool, type PRIdentifier, type WindowStateProvider } from '@devdocket/shared';
 import { DevDocketApi } from './api/types';
 import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
@@ -483,6 +483,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const ws = new WatcherService(wr, pwr, watchStore, logger);
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
+
+  // Wire window focus state so providers can throttle background refreshes when unfocused.
+  const windowStateEmitter = new vscode.EventEmitter<boolean>();
+  const windowState: WindowStateProvider = {
+    get isFocused() { return vscode.window.state.focused; },
+    onDidChangeFocus: windowStateEmitter.event,
+  };
+  pr.setWindowState(windowState);
+  context.subscriptions.push(
+    vscode.window.onDidChangeWindowState(state => windowStateEmitter.fire(state.focused)),
+    windowStateEmitter,
+  );
 
   // Cross-window state propagation for work-item and inbox/read-state stores.
   const stateVersion = new StateVersionService(context.globalStorageUri);

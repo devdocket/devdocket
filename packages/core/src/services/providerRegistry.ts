@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { DevDocketProvider, ProviderItem, type ResolvedItem } from '../api/types';
+import type { WindowStateProvider } from '@devdocket/shared';
 import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
@@ -29,6 +30,18 @@ export interface ProviderRefreshProgress {
 
 function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
   return state === WorkItemState.New || state === WorkItemState.InProgress || state === WorkItemState.Paused;
+}
+
+interface WindowStateAwareProvider {
+  setWindowState(windowState: WindowStateProvider): void | PromiseLike<void>;
+}
+
+function isPromiseLike<T>(value: unknown): value is PromiseLike<T> {
+  return typeof value === 'object' && value !== null && typeof (value as PromiseLike<T>).then === 'function';
+}
+
+function isWindowStateAwareProvider(provider: DevDocketProvider): provider is DevDocketProvider & WindowStateAwareProvider {
+  return typeof (provider as Partial<WindowStateAwareProvider>).setWindowState === 'function';
 }
 
 /**
@@ -87,6 +100,7 @@ export class ProviderRegistry {
    */
   private readonly _handleQueues = new Map<string, Promise<void>>();
   private _disposed = false;
+  private _windowState: WindowStateProvider | undefined;
 
   /** Whether any provider is currently performing its initial refresh. */
   get loading(): boolean {
@@ -107,6 +121,33 @@ export class ProviderRegistry {
   ) {}
 
   /**
+   * Sets the window state provider for focus-aware refresh throttling.
+   * Providers that extend BaseProvider (and expose setWindowState) will
+   * slow background refreshes when the window is unfocused.
+   */
+  setWindowState(windowState: WindowStateProvider): void {
+    this._windowState = windowState;
+    for (const provider of this.providers.values()) {
+      this.applyWindowState(provider);
+    }
+  }
+
+  private applyWindowState(provider: DevDocketProvider): void {
+    if (this._windowState && isWindowStateAwareProvider(provider)) {
+      try {
+        const result = provider.setWindowState(this._windowState);
+        if (isPromiseLike<void>(result)) {
+          void Promise.resolve(result).catch((error: unknown) => {
+            logger.warn(`Provider ${provider.id} rejected window state updates`, error);
+          });
+        }
+      } catch (error) {
+        logger.warn(`Provider ${provider.id} rejected window state updates`, error);
+      }
+    }
+  }
+
+  /**
    * Register a provider and trigger its initial refresh.
    *
    * The provider's {@link DevDocketProvider.onDidDiscoverItems} event is
@@ -122,6 +163,7 @@ export class ProviderRegistry {
     }
 
     this.providers.set(provider.id, provider);
+    this.applyWindowState(provider);
     if (this.labelCache) {
       void this.labelCache.set(provider.id, provider.label).catch(err => {
         logger.debug(`Failed to cache provider label for provider ${provider.id} (label: ${provider.label})`, err);

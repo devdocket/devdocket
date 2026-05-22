@@ -382,18 +382,18 @@ describe('AdoWorkItemProvider', () => {
     expect(listener).toHaveBeenCalledWith([]);
   });
 
-  it('startPeriodicRefresh schedules a repeating timer', () => {
+  it('startPeriodicRefresh schedules a repeating timer', async () => {
     vi.useFakeTimers();
 
-    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
+    const refreshSpy = vi.spyOn(provider as any, 'doBackgroundRefresh').mockResolvedValue(undefined);
     provider.startPeriodicRefresh(60);
 
     expect(refreshSpy).not.toHaveBeenCalled();
 
-    vi.advanceTimersByTime(60_000);
+    await vi.advanceTimersByTimeAsync(60_000);
     expect(refreshSpy).toHaveBeenCalledTimes(1);
 
-    vi.advanceTimersByTime(60_000);
+    await vi.advanceTimersByTimeAsync(61_000);
     expect(refreshSpy).toHaveBeenCalledTimes(2);
 
     vi.useRealTimers();

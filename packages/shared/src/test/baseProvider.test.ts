@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { BaseProvider, ProviderItem, EventEmitterLike } from '../baseProvider';
+import { BaseProvider, ProviderItem, EventEmitterLike, WindowStateProvider, Disposable } from '../baseProvider';
 
 
 /** Minimal EventEmitter stub for testing. */
@@ -12,6 +12,29 @@ function createMockEmitter(): EventEmitterLike<ProviderItem[]> {
     },
     fire: (data: ProviderItem[]) => { listeners.forEach(l => l(data)); },
     dispose: vi.fn(),
+  };
+}
+
+/** Creates a controllable WindowStateProvider for tests. */
+function createMockWindowState(focused = true): {
+  state: WindowStateProvider;
+  setFocused: (f: boolean) => void;
+} {
+  let isFocused = focused;
+  const listeners: Array<(f: boolean) => void> = [];
+  const onDidChangeFocus = vi.fn((listener: (f: boolean) => void): Disposable => {
+    listeners.push(listener);
+    return { dispose: () => { const i = listeners.indexOf(listener); if (i >= 0) listeners.splice(i, 1); } };
+  });
+  return {
+    state: {
+      get isFocused() { return isFocused; },
+      onDidChangeFocus,
+    },
+    setFocused: (f: boolean) => {
+      isFocused = f;
+      listeners.forEach(l => l(f));
+    },
   };
 }
 
@@ -137,6 +160,36 @@ describe('BaseProvider', () => {
       provider.dispose();
     });
 
+    it('does not immediately retrigger after an overlong refresh', async () => {
+      const provider = new TestProvider(createMockEmitter());
+
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(r => { resolveGate = r; }),
+        resolve: () => resolveGate(),
+      };
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(70_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      resolveGate();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.refreshGate = undefined;
+      await vi.advanceTimersByTimeAsync(49_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
     it('stops existing timer when called with invalid interval', async () => {
       const provider = new TestProvider(createMockEmitter());
 
@@ -227,6 +280,16 @@ describe('BaseProvider', () => {
 
       await provider.refreshInBackground();
       expect(provider.backgroundRefreshCalls).toBe(0);
+    });
+
+    it('does not subscribe to window state after dispose', () => {
+      const provider = new TestProvider(createMockEmitter());
+      const windowState = createMockWindowState();
+      provider.dispose();
+
+      provider.setWindowState(windowState.state);
+
+      expect(windowState.state.onDidChangeFocus).not.toHaveBeenCalled();
     });
   });
 
@@ -361,6 +424,150 @@ describe('BaseProvider', () => {
       const emitter = createMockEmitter();
       const provider = new TestProvider(emitter);
       expect(provider.onDidDiscoverItems).toBe(emitter.event);
+      provider.dispose();
+    });
+  });
+
+  describe('focus throttling via setWindowState', () => {
+    it('polls at focused interval when focused', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state } = createMockWindowState(true);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
+    it('polls at 2.5x interval when unfocused', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(149_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(149_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
+    it('refreshes on focus gain if last refresh was longer than focused interval ago', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('does not refresh on focus gain if last refresh was recent', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(true);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      setFocused(false);
+      await vi.advanceTimersByTimeAsync(30_000);
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('does not throttle explicit refreshInBackground calls', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      await provider.refreshInBackground();
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('works without window state set (backward compatible)', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
+
+    it('stopPeriodicRefresh clears state', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      provider.stopPeriodicRefresh();
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      await vi.advanceTimersByTimeAsync(180_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+
+      provider.dispose();
+    });
+
+    it('disposes window state subscription on dispose', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const { state, setFocused } = createMockWindowState(false);
+      provider.setWindowState(state);
+
+      provider.startPeriodicRefresh(60);
+      provider.dispose();
+
+      setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+    });
+
+    it('replaces previous window state when called again', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const first = createMockWindowState(false);
+      const second = createMockWindowState(true);
+
+      provider.setWindowState(first.state);
+      provider.setWindowState(second.state);
+      provider.startPeriodicRefresh(60);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      first.setFocused(true);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
       provider.dispose();
     });
   });

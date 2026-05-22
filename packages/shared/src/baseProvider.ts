@@ -199,6 +199,18 @@ export interface ResolvedItem {
   providerId: string;
 }
 
+/**
+ * Abstraction over window focus state, allowing BaseProvider to gate
+ * background refreshes without depending on the vscode module.
+ * The core extension provides the concrete implementation.
+ */
+export interface WindowStateProvider {
+  /** Whether the window is currently focused. */
+  readonly isFocused: boolean;
+  /** Fires when focus state changes. */
+  readonly onDidChangeFocus: Event<boolean>;
+}
+
 /** Matches the subset of vscode.EventEmitter used by providers. */
 export interface EventEmitterLike<T> {
   event: Event<T>;
@@ -211,19 +223,121 @@ export interface EventEmitterLike<T> {
  * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {
+  /** Multiplier for the unfocused-window polling interval. Matches the pattern
+   *  used by Microsoft's vscode-pull-request-github extension (2min focused,
+   *  5min unfocused = 2.5x). */
+  private static readonly UNFOCUSED_INTERVAL_MULTIPLIER = 2.5;
+
   protected readonly _onDidDiscoverItems: EventEmitterLike<ProviderItem[]>;
   readonly onDidDiscoverItems: Event<ProviderItem[]>;
 
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  private periodicRefreshIntervalMs: number | undefined;
+  private _lastRefreshTime = 0;
+  private _lastRefreshAttemptTime = 0;
   protected _isRefreshing = false;
   private _disposed = false;
+
+  private _windowState: WindowStateProvider | undefined;
+  private _windowStateSub: Disposable | undefined;
 
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
+  protected markRefreshSuccess(): void {
+    this._lastRefreshTime = Date.now();
+  }
+
+  private handleBackgroundRefreshError(error: unknown): void {
+    try {
+      this.onBackgroundRefreshError(error);
+    } catch {
+      // Prevent handler errors from becoming unhandled rejections
+    }
+  }
+
+  private triggerPeriodicRefresh(): void {
+    this._lastRefreshAttemptTime = Date.now();
+    this.refreshInBackground()
+      .catch((error: unknown) => {
+        this.handleBackgroundRefreshError(error);
+      })
+      .finally(() => {
+        this.scheduleNextPeriodicRefresh();
+      });
+  }
+
+  private getRequiredRefreshIntervalMs(): number | undefined {
+    const focusedIntervalMs = this.periodicRefreshIntervalMs;
+    if (!focusedIntervalMs) {
+      return undefined;
+    }
+    return this._windowState?.isFocused === false
+      ? focusedIntervalMs * BaseProvider.UNFOCUSED_INTERVAL_MULTIPLIER
+      : focusedIntervalMs;
+  }
+
+  private scheduleNextPeriodicRefresh(): void {
+    if (this._disposed) {
+      return;
+    }
+    const requiredIntervalMs = this.getRequiredRefreshIntervalMs();
+    if (!requiredIntervalMs) {
+      return;
+    }
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+    }
+    const elapsedMs = Date.now() - this._lastRefreshAttemptTime;
+    const intervalsElapsed = Math.floor(elapsedMs / requiredIntervalMs) + 1;
+    const delayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      if (this._disposed) {
+        return;
+      }
+      if (this._isRefreshing) {
+        this.scheduleNextPeriodicRefresh();
+        return;
+      }
+      this.triggerPeriodicRefresh();
+    }, delayMs);
+  }
+
+  private refreshOnFocusIfStale(): void {
+    const focusedIntervalMs = this.periodicRefreshIntervalMs;
+    if (this._disposed || !focusedIntervalMs || this._isRefreshing || !this._windowState?.isFocused) {
+      return;
+    }
+    if (Date.now() - this._lastRefreshTime <= focusedIntervalMs) {
+      return;
+    }
+    this.triggerPeriodicRefresh();
+  }
+
   constructor(emitter: EventEmitterLike<ProviderItem[]>) {
     this._onDidDiscoverItems = emitter;
     this.onDidDiscoverItems = emitter.event;
+  }
+
+  /**
+   * Provides window focus state so background refreshes can be throttled when
+   * the window is unfocused. On focus gain, an immediate refresh is triggered
+   * when the focused polling interval has already elapsed.
+   */
+  setWindowState(provider: WindowStateProvider): void {
+    if (this._disposed) {
+      return;
+    }
+    this._windowStateSub?.dispose();
+    this._windowState = provider;
+    this._windowStateSub = provider.onDidChangeFocus((focused) => {
+      if (focused) {
+        this.refreshOnFocusIfStale();
+      }
+      this.scheduleNextPeriodicRefresh();
+    });
+    this.scheduleNextPeriodicRefresh();
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
@@ -236,22 +350,19 @@ export abstract class BaseProvider {
       return;
     }
     const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((error: unknown) => {
-        try {
-          this.onBackgroundRefreshError(error);
-        } catch {
-          // Prevent handler errors from becoming unhandled rejections
-        }
-      });
-    }, clampedInterval * 1000);
+    const startTime = Date.now();
+    this.periodicRefreshIntervalMs = clampedInterval * 1000;
+    this._lastRefreshTime = startTime;
+    this._lastRefreshAttemptTime = startTime;
+    this.scheduleNextPeriodicRefresh();
   }
 
   stopPeriodicRefresh(): void {
     if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
+      clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
     }
+    this.periodicRefreshIntervalMs = undefined;
   }
 
   /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
@@ -262,6 +373,7 @@ export abstract class BaseProvider {
     this._isRefreshing = true;
     try {
       await this.doBackgroundRefresh();
+      this.markRefreshSuccess();
     } finally {
       this._isRefreshing = false;
     }
@@ -278,6 +390,7 @@ export abstract class BaseProvider {
     }
     this._disposed = true;
     this.stopPeriodicRefresh();
+    this._windowStateSub?.dispose();
     this._onDidDiscoverItems.dispose();
   }
 }
