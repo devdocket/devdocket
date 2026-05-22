@@ -188,7 +188,7 @@ export async function retryWithAuth(
       });
     }
   } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
+    if (error instanceof Error && (error.name === 'AbortError' || error.name === 'TimeoutError')) {
       throw error;
     }
     logger.debug('User declined GitHub authentication prompt');
