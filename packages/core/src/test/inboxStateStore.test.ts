@@ -544,7 +544,7 @@ describe('InboxStateStore', () => {
       expect(store.getVersion('gh', 'pr-1')).toBe('sha-new');
     });
 
-    it('should persist version to globalState', async () => {
+    it('should persist version to the backing JSON file', async () => {
       await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
 
       const persisted = fileSystem.readJson<unknown[]>(fileUri);
