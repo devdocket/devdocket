@@ -132,9 +132,6 @@ export class AdoPrClient {
     comment: AdoThreadCommentInput,
     options: AuthRequestOptions = { interactive: true },
   ): Promise<void> {
-    if (options.signal?.aborted) {
-      throw createAbortError();
-    }
     const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) {
       throw new Error('Azure DevOps authentication is required to post review comments');
