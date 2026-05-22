@@ -551,7 +551,7 @@ describe('InboxStateStore', () => {
       expect((persisted![0] as any).version).toBe('sha-abc');
     });
 
-    it('should load version from globalState', async () => {
+    it('should load version from the backing JSON file', async () => {
       fileSystem.writeJson(fileUri, [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-disk' },
       ]);
