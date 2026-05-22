@@ -277,6 +277,16 @@ describe('AdoPrClient', () => {
     expect(body.threadContext).toBeUndefined();
   });
 
+  it('defaults postThread to interactive auth', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(response({ id: 123 }));
+    const getSession = vi.fn().mockResolvedValue({ accessToken: 'ado-token' });
+    const client = new AdoPrClient(fetchMock as never, getSession as never);
+
+    await client.postThread(parts, { content: 'Overall review summary.' });
+
+    expect(getSession).toHaveBeenCalledWith({ interactive: true });
+  });
+
   it('normalizes ADO file paths', () => {
     expect(normalizeAdoFilePath('src\\app.ts')).toBe('/src/app.ts');
     expect(normalizeAdoFilePath('/src/app.ts')).toBe('/src/app.ts');

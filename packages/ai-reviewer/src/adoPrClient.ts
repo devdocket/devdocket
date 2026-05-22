@@ -133,7 +133,11 @@ export class AdoPrClient {
     return { diff: renderAdoDiffSummary(parts, details, parsed, synthetic), synthetic };
   }
 
-  async postThread(parts: AdoPrUrlParts, comment: AdoThreadCommentInput, options: AuthRequestOptions = {}): Promise<void> {
+  async postThread(
+    parts: AdoPrUrlParts,
+    comment: AdoThreadCommentInput,
+    options: AuthRequestOptions = { interactive: true },
+  ): Promise<void> {
     if (options.signal?.aborted) {
       throw createAbortError();
     }
