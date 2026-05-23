@@ -323,7 +323,7 @@ export class StartWorkAction implements DevDocketAction {
     } catch (worktreeErr) {
       if (this.isAbortError(worktreeErr)) {
         try {
-          await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+          await this.rollbackCreatedBranch(branchName, baseBranch, repoPath);
           cancellationState.cleanupActivity = undefined;
         } catch (rollbackErr) {
           const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
@@ -333,7 +333,7 @@ export class StartWorkAction implements DevDocketAction {
       }
 
       try {
-        await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+        await this.rollbackCreatedBranch(branchName, baseBranch, repoPath);
       } catch (rollbackErr) {
         const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
         void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
@@ -976,6 +976,24 @@ export class StartWorkAction implements DevDocketAction {
           `DevDocket: Command "${cmd.command}" failed — ${cmdMessage}`,
         );
       }
+    }
+  }
+
+  private async rollbackCreatedBranch(branchName: string, baseBranch: string, repoPath: string): Promise<void> {
+    try {
+      await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+      return;
+    } catch (deleteErr) {
+      const branchRef = `refs/heads/${branchName}`;
+      const [{ stdout: branchHead }, { stdout: baseHead }] = await Promise.all([
+        execFileAsync('git', ['rev-parse', '--verify', branchRef], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT }),
+        execFileAsync('git', ['rev-parse', '--verify', baseBranch], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT }),
+      ]);
+      if (branchHead.trim() === baseHead.trim()) {
+        await execFileAsync('git', ['branch', '-D', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+        return;
+      }
+      throw deleteErr;
     }
   }
 

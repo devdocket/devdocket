@@ -1185,10 +1185,53 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['branch', '-d', '--', 'issue123']);
       const rollbackCall = vi.mocked(execFile).mock.calls.find(call => call[1][0] === 'branch' && call[1][1] === '-d');
       expect(rollbackCall?.[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Start Git Work cancelled during creating worktree.'),
-        'Clean up',
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'DevDocket: Start Git Work cancelled during creating worktree.',
       );
+    });
+
+    it('force deletes rollback branches that still point at the base branch tip', async () => {
+      const cancellationListeners: Array<() => void> = [];
+      vi.mocked(window.withProgress).mockImplementation(async (_options: any, task: Function) => task(
+        { report: vi.fn() },
+        {
+          isCancellationRequested: false,
+          onCancellationRequested: (listener: () => void) => {
+            cancellationListeners.push(listener);
+            return { dispose: vi.fn() };
+          },
+        },
+      ));
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          cancellationListeners.forEach(listener => listener());
+          const err = new Error('The operation was aborted.');
+          err.name = 'AbortError';
+          cb(err, '', '');
+          return;
+        }
+        if (args[0] === 'branch' && args[1] === '-d') {
+          cb(new Error('not fully merged'), '', 'error: the branch is not fully merged');
+          return;
+        }
+        if (args[0] === 'rev-parse' && args[2] === 'refs/heads/issue123') {
+          cb(null, 'abc123\n', '');
+          return;
+        }
+        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
+          cb(null, 'abc123\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['branch', '-D', '--', 'issue123']);
     });
 
     it('accepts and routes a third-party provider without host or provider-id knowledge', async () => {
