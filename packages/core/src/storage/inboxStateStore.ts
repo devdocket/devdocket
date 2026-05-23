@@ -175,9 +175,11 @@ export class InboxStateStore {
       return { records: [], available: false };
     }
     const records: PersistedInboxStateRecord[] = [];
+    let invalidCount = 0;
     for (let i = 0; i < parsed.length; i++) {
       const error = validateInboxStateRecord(parsed[i], i);
       if (error) {
+        invalidCount++;
         logger.warn(`Skipping invalid inbox state record: ${error}`);
         continue;
       }
@@ -188,6 +190,7 @@ export class InboxStateStore {
       });
     }
 
+    const available = invalidCount === 0;
     const deduped = new Map<string, PersistedInboxStateRecord>();
     for (const record of records) {
       const key = this.key(record.providerId, record.externalId);
@@ -197,7 +200,7 @@ export class InboxStateStore {
       }
     }
 
-    return { records: Array.from(deduped.values()), available: true };
+    return { records: Array.from(deduped.values()), available };
   }
 
   /**
