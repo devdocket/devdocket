@@ -496,7 +496,7 @@ export class RepoManager {
       if (!details) {
         throw new Error('Azure DevOps authentication required');
       }
-      this.throwIfCancelled(token, cancellation.signal, 'fetch PR metadata');
+      this.throwIfCancelled(token, cancellation.signal, 'validate repository');
 
       const sourceRef = details.sourceRefName;
       const targetRef = details.targetRefName;
