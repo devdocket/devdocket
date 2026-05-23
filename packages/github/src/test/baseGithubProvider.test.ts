@@ -153,7 +153,7 @@ describe('BaseGitHubProvider repository filtering', () => {
     provider.dispose();
   });
 
-  it('deduplicates background SSO prompts until the user takes an action', async () => {
+  it('keeps background SSO prompts deduplicated after dismiss', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
     vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
     const provider = new TestGitHubProvider();
