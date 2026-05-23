@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authentication } from 'vscode';
-import { filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
+import { GitHubSsoError, filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 import { makeErrorResponse } from './responseMocks';
 
@@ -236,14 +236,25 @@ describe('throwApiError', () => {
       .rejects.toThrow(/secondary rate limit.*Retry after \d+s/i);
   });
 
-  it('throws an SSO message for 403 with x-github-sso header', async () => {
+  it('throws a GitHubSsoError with org name and SSO URL from the response header', async () => {
     const response = makeErrorResponse({
       status: 403,
-      headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso' },
+      headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso?authorization_request=abc123' },
       bodyJson: { message: 'Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization.' },
     });
-    await expect(throwApiError(response, 'GitHub issue org/repo#1'))
-      .rejects.toThrow(/SSO authorization required.*organization/i);
+
+    await expect(throwApiError(response, 'GitHub issue org/repo#1')).rejects.toMatchObject({
+      name: 'GitHubSsoError',
+      message: expect.stringMatching(/SSO authorization required.*organization/i),
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      orgName: 'example',
+    });
+
+    await expect(throwApiError(makeErrorResponse({
+      status: 403,
+      headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso?authorization_request=abc123' },
+      bodyJson: { message: 'Resource protected by organization SAML enforcement.' },
+    }), 'GitHub issue org/repo#1')).rejects.toBeInstanceOf(GitHubSsoError);
   });
 
   it('prefers SSO classification over a coincidental remaining=0', async () => {
@@ -256,7 +267,7 @@ describe('throwApiError', () => {
       bodyJson: { message: 'Resource protected by organization SAML enforcement.' },
     });
     await expect(throwApiError(response, 'GitHub issue org/repo#1'))
-      .rejects.toThrow(/SSO authorization required/i);
+      .rejects.toMatchObject({ name: 'GitHubSsoError', orgName: 'example' });
   });
 
   it('prefers secondary-rate-limit classification over a coincidental remaining=0', async () => {

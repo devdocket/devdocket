@@ -2,7 +2,7 @@ import { ProviderItem, ProviderBadge, combineSignals, createAbortError, runWorke
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getGitHubAuthHeaders, filterMergedGitHubPrs, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
+import { getGitHubAuthHeaders, filterMergedGitHubPrs, throwApiError, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
@@ -216,6 +216,9 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
 
     if (!response.ok) {
+      if (response.headers?.get?.('x-github-sso')) {
+        await throwApiError(response, `GitHub ${label} PR search`);
+      }
       logger.error(`Failed to fetch ${label} PRs: ${response.status}`);
       return { prs: [], failures: [searchLabel] };
     }

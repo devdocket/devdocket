@@ -70,6 +70,14 @@ function formatItemTitle(item: { group?: string; title: string }): string {
  * drift apart silently.
  */
 const BROWSE_PROVIDER_EXTENSIONS_ACTION = 'Browse Provider Extensions';
+const AUTHORIZE_IN_BROWSER_ACTION = 'Authorize in browser';
+const RETRY_ACTION = 'Retry';
+const DISMISS_ACTION = 'Dismiss';
+
+type GitHubSsoLikeError = Error & {
+  ssoUrl?: string;
+  orgName?: string;
+};
 
 /**
  * Open the VS Code Extensions view filtered to extensions published by the
@@ -78,6 +86,38 @@ const BROWSE_PROVIDER_EXTENSIONS_ACTION = 'Browse Provider Extensions';
  */
 async function browseProviderExtensions(): Promise<void> {
   await vscode.commands.executeCommand('workbench.extensions.search', '@publisher:"devdocket"');
+}
+
+function isGitHubSsoError(err: unknown): err is GitHubSsoLikeError {
+  return typeof err === 'object'
+    && err !== null
+    && 'name' in err
+    && (err as { name?: unknown }).name === 'GitHubSsoError';
+}
+
+async function handleGitHubSsoError(
+  err: GitHubSsoLikeError,
+  retry: () => Promise<void>,
+): Promise<void> {
+  const orgLabel = err.orgName
+    ? `the "${err.orgName}" organization`
+    : 'this organization';
+  const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
+  const action = await vscode.window.showErrorMessage(
+    message,
+    AUTHORIZE_IN_BROWSER_ACTION,
+    RETRY_ACTION,
+    DISMISS_ACTION,
+  );
+
+  if (action === AUTHORIZE_IN_BROWSER_ACTION && err.ssoUrl) {
+    await vscode.env.openExternal(vscode.Uri.parse(err.ssoUrl));
+    return;
+  }
+
+  if (action === RETRY_ACTION) {
+    await retry();
+  }
 }
 
 /** Log the error and show a user-facing message. */
@@ -89,13 +129,20 @@ function handleCommandError(context: string, err: unknown): void {
 
 /** Wrap a command handler so unhandled errors are logged and shown to the user. */
 function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Promise<void> | void): (...args: T) => Promise<void> {
-  return async (...args: T) => {
+  const wrapped = async (...args: T): Promise<void> => {
     try {
       await fn(...args);
     } catch (err: unknown) {
+      if (isGitHubSsoError(err)) {
+        logger.error(label, err);
+        await handleGitHubSsoError(err, () => wrapped(...args));
+        return;
+      }
       handleCommandError(label, err);
     }
   };
+
+  return wrapped;
 }
 
 // ---------------------------------------------------------------------------

@@ -700,6 +700,9 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     }
 
     if (!response.ok) {
+      if (response.headers?.get?.('x-github-sso')) {
+        await throwApiError(response, 'GitHub mentions');
+      }
       logger.error(`Failed to fetch mentions: ${response.status}`);
       return { results: [], failures: ['all repositories'] };
     }

@@ -1,11 +1,15 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { authentication, commands, window, workspace } from 'vscode';
+import { authentication, commands, env, window, workspace } from 'vscode';
 import { type ProviderItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
+import { GitHubSsoError } from '../githubApiHelpers';
 
 class TestGitHubProvider extends BaseGitHubProvider {
   readonly id = 'test-github';
   readonly label = 'Test GitHub';
+  readonly fetchImpl = vi.fn(async () => {
+    this.publishProviderItems([]);
+  });
 
   publishForTest(items: ProviderItem[]): void {
     this.publishProviderItems(items);
@@ -15,8 +19,8 @@ class TestGitHubProvider extends BaseGitHubProvider {
     this.warnOnFetchFailure(message, isUserTriggered);
   }
 
-  protected async fetchAndPublish(): Promise<void> {
-    this.publishProviderItems([]);
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+    await this.fetchImpl(accessToken, isUserTriggered, signal);
   }
 }
 
@@ -24,6 +28,8 @@ describe('BaseGitHubProvider repository filtering', () => {
   afterEach(() => {
     vi.mocked(authentication.getSession).mockReset();
     vi.mocked(commands.executeCommand).mockReset();
+    vi.mocked(env.openExternal).mockReset();
+    vi.mocked(window.showErrorMessage).mockReset();
     vi.mocked(window.showWarningMessage).mockReset();
     vi.mocked(workspace.getConfiguration).mockReset();
   });
@@ -98,6 +104,49 @@ describe('BaseGitHubProvider repository filtering', () => {
       { createIfNone: true },
     );
     expect(commands.executeCommand).not.toHaveBeenCalledWith('github.signin');
+
+    provider.dispose();
+  });
+
+  it('opens the organization SSO URL from background refresh errors', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    vi.mocked(window.showErrorMessage).mockResolvedValue('Authorize in browser' as any);
+    const provider = new TestGitHubProvider();
+    const error = new GitHubSsoError('GitHub SSO authorization required', {
+      orgName: 'example',
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    });
+    provider.fetchImpl.mockRejectedValue(error);
+
+    await expect(provider.refreshInBackground()).rejects.toThrow(error);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showErrorMessage).toHaveBeenCalledWith(
+      'DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore DevDocket can refresh items from it.',
+      'Authorize in browser',
+      'Retry',
+      'Dismiss',
+    );
+    expect(env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
+
+    provider.dispose();
+  });
+
+  it('deduplicates background SSO prompts until the user takes an action', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    const provider = new TestGitHubProvider();
+    const error = new GitHubSsoError('GitHub SSO authorization required', {
+      orgName: 'example',
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    });
+    provider.fetchImpl.mockRejectedValue(error);
+
+    await expect(provider.refreshInBackground()).rejects.toThrow(error);
+    await expect(provider.refreshInBackground()).rejects.toThrow(error);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showErrorMessage).toHaveBeenCalledTimes(1);
 
     provider.dispose();
   });

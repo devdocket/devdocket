@@ -447,6 +447,63 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
     });
 
+    it('shows SSO recovery actions when URL resolution requires GitHub authorization', async () => {
+      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
+        name: 'GitHubSsoError',
+        orgName: 'example',
+        ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      });
+      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore this item can be loaded.',
+        'Authorize in browser',
+        'Retry',
+        'Dismiss',
+      );
+    });
+
+    it('opens the GitHub SSO authorization URL in the browser when requested', async () => {
+      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
+        name: 'GitHubSsoError',
+        orgName: 'example',
+        ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      });
+      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Authorize in browser');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://github.com/orgs/example/sso?authorization_request=abc123');
+      expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
+    });
+
+    it('retries the command when the user selects Retry from the SSO notification', async () => {
+      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
+        name: 'GitHubSsoError',
+        orgName: 'example',
+        ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      });
+      providerRegistry.resolveUrl
+        .mockRejectedValueOnce(ssoError)
+        .mockResolvedValueOnce(fakeDetails);
+      (vscode.window.showInputBox as Mock)
+        .mockResolvedValueOnce('https://github.com/owner/repo/pull/42')
+        .mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValueOnce('Retry');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(2);
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Created'),
+      );
+    });
+
     it('propagates non-abort fetch errors to wrapCommand handler', async () => {
       providerRegistry.resolveUrl.mockRejectedValue(new Error('GitHub PR owner/repo#42 not found. It may be private or deleted.'));
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');

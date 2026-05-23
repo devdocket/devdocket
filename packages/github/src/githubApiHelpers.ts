@@ -37,6 +37,19 @@ export interface GitHubPrMergeFields {
   merged?: boolean;
 }
 
+export class GitHubSsoError extends Error {
+  readonly ssoUrl: string | undefined;
+  readonly orgName: string | undefined;
+
+  constructor(message: string, opts: { ssoUrl?: string; orgName?: string } = {}) {
+    super(message);
+    this.name = 'GitHubSsoError';
+    this.ssoUrl = opts.ssoUrl;
+    this.orgName = opts.orgName;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 export function isMergedGitHubPr(item: GitHubPrMergeFields): boolean {
   if (item.merged_at) {
     return true;
@@ -240,10 +253,12 @@ export async function throwApiError(response: Response, label: string): Promise<
     // Order matters: prefer the most specific signature so a coincidental
     // `remaining===0` doesn't mask SSO or secondary-rate-limit responses.
     if (sso) {
-      throw new Error(
+      const { ssoUrl, orgName } = parseGitHubSsoInfo(sso);
+      throw new GitHubSsoError(
         `GitHub SSO authorization required for ${label}` +
         `${apiMessage ? `: ${apiMessage}` : '.'}` +
         ' Authorize the token for the organization, then retry.',
+        { ssoUrl, orgName },
       );
     }
     if (isSecondaryRateLimited(retryAfter, apiMessage)) {
@@ -276,6 +291,34 @@ async function safeReadResponseBody(response: Response): Promise<string> {
     return text ?? '';
   } catch {
     return '';
+  }
+}
+
+function parseGitHubSsoInfo(headerValue: string | null): { ssoUrl?: string; orgName?: string } {
+  if (!headerValue) {
+    return {};
+  }
+
+  const ssoUrl = headerValue
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.toLowerCase().startsWith('url='))
+    ?.slice(4)
+    .trim();
+
+  if (!ssoUrl) {
+    return {};
+  }
+
+  try {
+    const parsed = new URL(ssoUrl);
+    const match = parsed.pathname.match(/^\/orgs\/([^/]+)\/sso\/?$/i);
+    return {
+      ssoUrl,
+      orgName: match?.[1] ? decodeURIComponent(match[1]) : undefined,
+    };
+  } catch {
+    return { ssoUrl };
   }
 }
 

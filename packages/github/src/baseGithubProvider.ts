@@ -1,14 +1,18 @@
 import * as vscode from 'vscode';
 import { BaseProvider, ProviderItem, createAbortError, runWorkerPool, type ProviderRefreshOptions, type RelatedItemRef } from '@devdocket/shared';
 import { fetchPrCrossReferencesBatch } from './githubGraphql';
-import { getGitHubSession } from './githubApiHelpers';
+import { GitHubSsoError, getGitHubSession } from './githubApiHelpers';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
 
 const RELATED_ITEMS_BATCH_SIZE = 10;
 const OPEN_SETTINGS = 'Open Settings';
 const SIGN_IN = 'Sign in';
+const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
+const RETRY = 'Retry';
+const DISMISS = 'Dismiss';
 const GITHUB_SETTINGS_QUERY = '@ext:devdocket.devdocket-github';
+const notifiedGitHubSsoOrgs = new Set<string>();
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -79,6 +83,9 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`${this.label} fetch aborted due to cancellation`);
       } else {
+        if (err instanceof GitHubSsoError) {
+          this.showGitHubSsoNotification(err, () => this.refresh(undefined, { interactive: true }));
+        }
         logger.error(`Failed to fetch ${this.label}`, err);
       }
     } finally {
@@ -103,7 +110,14 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       return;
     }
 
-    await this.fetchAndPublish(session.accessToken, false);
+    try {
+      await this.fetchAndPublish(session.accessToken, false);
+    } catch (err) {
+      if (err instanceof GitHubSsoError) {
+        this.showGitHubSsoNotification(err, () => this.refreshInBackground(), true);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -235,6 +249,46 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       if (action === SIGN_IN) {
         void vscode.authentication.getSession('github', this.getAuthenticationScopes(), { createIfNone: true })
           .catch(err => logger.error('GitHub sign-in failed', err));
+      }
+    });
+  }
+
+  private showGitHubSsoNotification(error: GitHubSsoError, retry: (() => Promise<void> | void) | undefined, dedupeByOrg = false): void {
+    const dedupeKey = error.orgName ?? error.ssoUrl ?? error.message;
+    if (dedupeByOrg && notifiedGitHubSsoOrgs.has(dedupeKey)) {
+      return;
+    }
+    if (dedupeByOrg) {
+      notifiedGitHubSsoOrgs.add(dedupeKey);
+    }
+
+    const orgLabel = error.orgName
+      ? `the "${error.orgName}" organization`
+      : 'this organization';
+    const message = dedupeByOrg
+      ? `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`
+      : `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
+    const actions = retry
+      ? [AUTHORIZE_IN_BROWSER, RETRY, DISMISS] as const
+      : [AUTHORIZE_IN_BROWSER, DISMISS] as const;
+
+    void Promise.resolve(vscode.window.showErrorMessage(message, ...actions)).then(async action => {
+      if (action === AUTHORIZE_IN_BROWSER && error.ssoUrl) {
+        if (dedupeByOrg) {
+          notifiedGitHubSsoOrgs.delete(dedupeKey);
+        }
+        await vscode.env.openExternal(vscode.Uri.parse(error.ssoUrl));
+        return;
+      }
+      if (action === RETRY && retry) {
+        if (dedupeByOrg) {
+          notifiedGitHubSsoOrgs.delete(dedupeKey);
+        }
+        try {
+          await retry();
+        } catch (retryError) {
+          logger.error('GitHub SSO retry failed', retryError);
+        }
       }
     });
   }
