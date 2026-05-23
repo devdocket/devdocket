@@ -79,18 +79,22 @@ describe('InboxStateStore', () => {
 
     const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
     store2.onDidChange(listener);
-    await store2.load();
-    await store2.setState('gh', 'issue-1', 'accepted');
 
-    expect(listener).not.toHaveBeenCalled();
-    expect(persistedRecords()[0]).toEqual(expect.objectContaining({
-      providerId: 'gh',
-      externalId: 'issue-1',
-      inboxState: 'accepted',
-      createdAt: 321,
-    }));
-    nowSpy.mockRestore();
-    store2.dispose();
+    try {
+      await store2.load();
+      await store2.setState('gh', 'issue-1', 'accepted');
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'issue-1',
+        inboxState: 'accepted',
+        createdAt: 321,
+      }));
+    } finally {
+      nowSpy.mockRestore();
+      store2.dispose();
+    }
   });
 
   it('should return all records from loadAll', async () => {
