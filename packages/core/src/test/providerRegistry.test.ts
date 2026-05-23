@@ -181,7 +181,7 @@ describe('ProviderRegistry', () => {
     const reg = new ProviderRegistry(
       stateStore,
       undefined,
-      undefined,
+      () => WorkItemState.InProgress,
       undefined,
       () => [{
         providerId: 'ado-pr-reviews',
@@ -195,6 +195,43 @@ describe('ProviderRegistry', () => {
       expect.objectContaining({ externalId: 'myorg/MyProject/myrepo/42', itemType: 'pr' }),
     ));
     expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42', undefined, { interactive: false });
+  });
+
+  it('rehydrates only active imported work items', async () => {
+    const provider = {
+      ...createMockProvider('ado-pr-reviews'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported PR',
+        notes: 'Imported notes',
+        url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+        externalId: 'myorg/MyProject/myrepo/42',
+        providerId: 'ado-pr-reviews',
+        itemType: 'pr' as const,
+        capabilities: { gitWork: { kind: 'pr' as const, cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix' } },
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      (_providerId, externalId) => externalId === 'myorg/MyProject/myrepo/42' ? WorkItemState.Archived : WorkItemState.InProgress,
+      undefined,
+      () => [
+        {
+          providerId: 'ado-pr-reviews',
+          externalId: 'myorg/MyProject/myrepo/42',
+          url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+        },
+        {
+          providerId: 'ado-pr-reviews',
+          externalId: 'myorg/MyProject/myrepo/43',
+          url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/43',
+        },
+      ],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/43', undefined, { interactive: false });
   });
 
   it('throws on duplicate provider id', () => {

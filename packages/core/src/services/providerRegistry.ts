@@ -352,7 +352,13 @@ export class ProviderRegistry {
     }
 
     for (const importedItem of this.getImportedWorkItems()) {
+      if (this._disposed || !this.providers.has(provider.id)) {
+        return;
+      }
       if (importedItem.providerId !== provider.id || !importedItem.externalId || !importedItem.url) {
+        continue;
+      }
+      if (this.getWorkItemState && !isActiveWorkItemState(this.getWorkItemState(provider.id, importedItem.externalId))) {
         continue;
       }
       if (this.findProviderItem(provider.id, importedItem.externalId)) {
