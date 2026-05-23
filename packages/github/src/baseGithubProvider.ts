@@ -12,8 +12,9 @@ const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
 const RETRY = 'Retry';
 const DISMISS = 'Dismiss';
 const GITHUB_SETTINGS_QUERY = '@ext:devdocket.devdocket-github';
-// Background refreshes are deduplicated per org for the lifetime of this session
-// so polling does not resurface the same SSO prompt every few minutes.
+// Background refreshes are deduplicated per org until the user chooses
+// Authorize or Retry, so polling does not resurface the same SSO prompt
+// every few minutes while they have not acted on it.
 const notifiedGitHubSsoOrgs = new Set<string>();
 
 export function resetGitHubSsoNotificationDedupeForTests(): void {
