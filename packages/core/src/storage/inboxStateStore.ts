@@ -170,7 +170,10 @@ export class InboxStateStore {
   private async parseFromFileStore(): Promise<InboxStateSnapshot> {
     const parsed = await this.fileStore.read();
     if (parsed === undefined) { return { records: [], available: false }; }
-    if (!Array.isArray(parsed)) { return { records: [], available: true }; }
+    if (!Array.isArray(parsed)) {
+      logger.warn('Inbox state snapshot is not an array; falling back to the in-memory snapshot');
+      return { records: [], available: false };
+    }
     const records: PersistedInboxStateRecord[] = [];
     for (let i = 0; i < parsed.length; i++) {
       const error = validateInboxStateRecord(parsed[i], i);

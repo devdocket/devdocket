@@ -229,6 +229,26 @@ describe('InboxStateStore', () => {
     store2.dispose();
   });
 
+  it('keeps cached inbox records when the remote snapshot is malformed', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted', createdAt: 1 },
+    ]);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    await store2.load();
+    fileSystem.writeJson(fileUri, { invalid: true });
+    await store2.setState('gh', 'fresh', 'dismissed');
+
+    expect((await store2.loadAll()).sort((a, b) => a.externalId.localeCompare(b.externalId))).toEqual([
+      { providerId: 'gh', externalId: 'fresh', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted' },
+    ]);
+    expect(warnSpy).toHaveBeenCalledWith('Inbox state snapshot is not an array; falling back to the in-memory snapshot');
+    warnSpy.mockRestore();
+    store2.dispose();
+  });
+
   // ── Schema validation ─────────────────────────────────────────────
 
   describe('schema validation', () => {
