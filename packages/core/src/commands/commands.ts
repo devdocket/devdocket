@@ -95,23 +95,35 @@ function isGitHubSsoError(err: unknown): err is GitHubSsoLikeError {
     && (err as { name?: unknown }).name === 'GitHubSsoError';
 }
 
+function getGitHubSsoAuthorizationUrl(err: GitHubSsoLikeError): string | undefined {
+  if (err.ssoUrl) {
+    return err.ssoUrl;
+  }
+  if (err.orgName) {
+    return `https://github.com/orgs/${encodeURIComponent(err.orgName)}/sso`;
+  }
+  return undefined;
+}
+
 async function handleGitHubSsoError(
   err: GitHubSsoLikeError,
   retry: () => Promise<void>,
 ): Promise<void> {
+  const authorizationUrl = getGitHubSsoAuthorizationUrl(err);
   const orgLabel = err.orgName
     ? `the "${err.orgName}" organization`
     : 'this organization';
+  const actions = authorizationUrl
+    ? [AUTHORIZE_IN_BROWSER_ACTION, RETRY_ACTION, DISMISS_ACTION] as const
+    : [RETRY_ACTION, DISMISS_ACTION] as const;
   const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
   const action = await vscode.window.showErrorMessage(
     message,
-    AUTHORIZE_IN_BROWSER_ACTION,
-    RETRY_ACTION,
-    DISMISS_ACTION,
+    ...actions,
   );
 
-  if (action === AUTHORIZE_IN_BROWSER_ACTION && err.ssoUrl) {
-    await vscode.env.openExternal(vscode.Uri.parse(err.ssoUrl));
+  if (action === AUTHORIZE_IN_BROWSER_ACTION && authorizationUrl) {
+    await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
     return;
   }
 

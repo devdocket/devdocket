@@ -482,6 +482,20 @@ describe('registerCommands', () => {
       expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
     });
 
+    it('falls back to the org SSO page when the error has no direct authorization URL', async () => {
+      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
+        name: 'GitHubSsoError',
+        orgName: 'example-fallback',
+      });
+      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Authorize in browser');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://github.com/orgs/example-fallback/sso');
+      expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
+    });
+
     it('retries the command when the user selects Retry from the SSO notification', async () => {
       const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
         name: 'GitHubSsoError',
