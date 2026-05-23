@@ -57,6 +57,8 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       externalId: 'myorg/MyProject/myrepo/42',
       group: 'MyProject/myrepo',
       providerId: 'ado-pr-reviews',
+      itemType: 'pr',
+      capabilities: { gitWork: expect.any(Function) },
     });
   });
 

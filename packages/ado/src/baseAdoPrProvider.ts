@@ -367,10 +367,15 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       throwAdoApiError(response, `ADO PR ${org}/${project}/${repo}#${id}`);
     }
 
-    const data = await response.json() as {
+    const data = await response.json() as AdoPullRequest & {
       title: string;
       description: string | null;
-      repository: { name: string; project: { name: string } };
+      repository: {
+        name: string;
+        project: { name: string };
+        webUrl?: string;
+        remoteUrl?: string;
+      };
     };
     const projectName = data.repository.project.name;
     const repoName = data.repository.name;
@@ -382,6 +387,18 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       externalId: `${org}/${projectName}/${repoName}/${id}`,
       group: `${projectName}/${repoName}`,
       providerId: this.id,
+      itemType: 'pr',
+      capabilities: {
+        gitWork: this.createPrGitWork({
+          ...data,
+          pullRequestId: id,
+          repository: {
+            ...data.repository,
+            name: repoName,
+            project: { name: projectName },
+          },
+        }, org),
+      },
     };
   }
 

@@ -197,6 +197,22 @@ export interface ResolvedItem {
   externalId: string;
   group?: string;
   providerId: string;
+  /** Optional provider-declared item kind for synthetic provider items created from URL imports. */
+  itemType?: 'issue' | 'pr';
+  /** Optional metadata about who created the underlying item upstream. */
+  author?: ProviderItemAuthor;
+  /** Optional flag indicating the current user authored the item. */
+  authored?: boolean;
+  /** Optional badges, canonical identity, and state-like metadata for synthetic provider items. */
+  badges?: ProviderBadge[];
+  canonicalId?: string;
+  reason?: string;
+  relatedItems?: RelatedItemRef[];
+  resurfaceVersion?: string;
+  state?: string;
+  version?: string;
+  /** Optional capabilities for URL-imported items that are not yet live in provider discovery. */
+  capabilities?: ProviderItemCapabilities;
 }
 
 /**

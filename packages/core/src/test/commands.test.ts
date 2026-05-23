@@ -96,7 +96,7 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders' | 'registerSyntheticResolvedItem'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
@@ -109,6 +109,7 @@ function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods
       { id: 'github', label: 'GitHub' },
       { id: 'ado', label: 'Azure DevOps' },
     ]),
+    registerSyntheticResolvedItem: vi.fn(),
   };
 }
 
@@ -370,6 +371,15 @@ describe('registerCommands', () => {
       externalId: 'owner/repo#42',
       group: 'owner/repo',
       providerId: 'github-pr-reviews',
+      itemType: 'pr',
+      capabilities: {
+        gitWork: vi.fn(async () => ({
+          kind: 'pr',
+          cloneUrl: 'https://github.com/owner/repo.git',
+          ref: 'feature/topic',
+          repoLabel: 'owner/repo',
+        })),
+      },
     };
 
     beforeEach(() => {
@@ -383,6 +393,14 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).toHaveBeenCalled();
+      expect(providerRegistry.registerSyntheticResolvedItem).toHaveBeenCalledWith(
+        'github-pr-reviews',
+        expect.objectContaining({
+          externalId: 'owner/repo#42',
+          itemType: 'pr',
+          capabilities: expect.objectContaining({ gitWork: expect.any(Function) }),
+        }),
+      );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('Created'),
       );

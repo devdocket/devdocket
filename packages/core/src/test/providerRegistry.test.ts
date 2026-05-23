@@ -106,6 +106,77 @@ describe('ProviderRegistry', () => {
     expect(typeof disposable.dispose).toBe('function');
   });
 
+  it('exposes synthetic provider items registered from URL resolution', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      externalId: 'owner/repo#42',
+      title: '#42: Imported PR',
+      itemType: 'pr',
+      capabilities: { gitWork: { kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic' } },
+    });
+
+    expect(registry.getProviderItems('gh')).toEqual([
+      expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'pr' }),
+    ]);
+    expect(registry.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42' }),
+    );
+  });
+
+  it('prefers live provider items over synthetic URL-imported items with the same external id', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      externalId: 'owner/repo#42',
+      title: '#42: Imported PR',
+      itemType: 'pr',
+      capabilities: { gitWork: { kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic' } },
+    });
+    provider.fireItems([{ externalId: 'owner/repo#42', title: '#42: Live PR' }]);
+
+    await vi.waitFor(() => expect(registry.findProviderItem('gh', 'owner/repo#42')?.title).toBe('#42: Live PR'));
+    expect(registry.getProviderItems('gh')).toEqual([
+      expect.objectContaining({ externalId: 'owner/repo#42', title: '#42: Live PR' }),
+    ]);
+  });
+
+  it('rehydrates synthetic URL-imported items for registered providers on startup', async () => {
+    const provider = {
+      ...createMockProvider('ado-pr-reviews'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported PR',
+        notes: 'Imported notes',
+        url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+        externalId: 'myorg/MyProject/myrepo/42',
+        providerId: 'ado-pr-reviews',
+        itemType: 'pr' as const,
+        capabilities: { gitWork: { kind: 'pr' as const, cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix' } },
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      undefined,
+      undefined,
+      () => [{
+        providerId: 'ado-pr-reviews',
+        externalId: 'myorg/MyProject/myrepo/42',
+        url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(reg.findProviderItem('ado-pr-reviews', 'myorg/MyProject/myrepo/42')).toEqual(
+      expect.objectContaining({ externalId: 'myorg/MyProject/myrepo/42', itemType: 'pr' }),
+    ));
+    expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42');
+  });
+
   it('throws on duplicate provider id', () => {
     const provider1 = createMockProvider('dup');
     const provider2 = createMockProvider('dup');

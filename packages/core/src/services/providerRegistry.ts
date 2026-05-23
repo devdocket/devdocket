@@ -44,6 +44,31 @@ function isWindowStateAwareProvider(provider: DevDocketProvider): provider is De
   return typeof (provider as Partial<WindowStateAwareProvider>).setWindowState === 'function';
 }
 
+function toSyntheticProviderItem(details: ResolvedItem): ProviderItem | undefined {
+  if (!details.itemType && !details.capabilities && !details.author && details.authored === undefined) {
+    return undefined;
+  }
+
+  return {
+    externalId: details.externalId,
+    title: details.title,
+    description: details.notes || undefined,
+    url: details.url,
+    group: details.group,
+    ...(details.author ? { author: details.author } : {}),
+    ...(details.authored !== undefined ? { authored: details.authored } : {}),
+    ...(details.badges ? { badges: details.badges } : {}),
+    ...(details.canonicalId ? { canonicalId: details.canonicalId } : {}),
+    ...(details.capabilities ? { capabilities: details.capabilities } : {}),
+    ...(details.itemType ? { itemType: details.itemType } : {}),
+    ...(details.reason ? { reason: details.reason } : {}),
+    ...(details.relatedItems ? { relatedItems: details.relatedItems } : {}),
+    ...(details.resurfaceVersion ? { resurfaceVersion: details.resurfaceVersion } : {}),
+    ...(details.state ? { state: details.state } : {}),
+    ...(details.version ? { version: details.version } : {}),
+  };
+}
+
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
@@ -61,6 +86,7 @@ export class ProviderRegistry {
   private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly providerItems = new Map<string, ProviderItem[]>();
+  private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
   private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
   /** Fired whenever any provider's provider items change. */
   readonly onDidChangeProviderItems = this._onDidChangeProviderItems.event;
@@ -118,6 +144,7 @@ export class ProviderRegistry {
     private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
     // Kept for constructor compatibility; suppressed version bumps no longer log activity.
     _addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
+    private readonly getImportedWorkItems?: () => Array<{ providerId?: string; externalId?: string; url?: string }>,
   ) {}
 
   /**
@@ -172,6 +199,9 @@ export class ProviderRegistry {
     if (!this.providerItems.has(provider.id)) {
       this.providerItems.set(provider.id, []);
     }
+    if (!this.syntheticProviderItems.has(provider.id)) {
+      this.syntheticProviderItems.set(provider.id, new Map());
+    }
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
@@ -210,6 +240,7 @@ export class ProviderRegistry {
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
           this._onDidChangeProviderItems.fire();
+          void this.rehydrateSyntheticProviderItems(provider);
         }
       });
 
@@ -219,6 +250,7 @@ export class ProviderRegistry {
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
       this.providerItems.delete(provider.id);
+      this.syntheticProviderItems.delete(provider.id);
       this.previousDiscoveredIds.delete(provider.id);
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
@@ -275,13 +307,79 @@ export class ProviderRegistry {
   }
 
   /**
+   * Cache a provider item synthesized from URL resolution so actions can use its
+   * capabilities before the provider rediscovers it naturally.
+   */
+  registerSyntheticProviderItem(providerId: string, item: ProviderItem): void {
+    if (!this.providers.has(providerId)) {
+      return;
+    }
+
+    let syntheticItems = this.syntheticProviderItems.get(providerId);
+    if (!syntheticItems) {
+      syntheticItems = new Map<string, ProviderItem>();
+      this.syntheticProviderItems.set(providerId, syntheticItems);
+    }
+
+    syntheticItems.set(item.externalId, { ...item });
+    this._onDidChangeProviderItems.fire();
+  }
+
+  registerSyntheticResolvedItem(providerId: string, details: ResolvedItem): void {
+    const item = toSyntheticProviderItem(details);
+    if (!item) {
+      return;
+    }
+
+    this.registerSyntheticProviderItem(providerId, item);
+  }
+
+  private async rehydrateSyntheticProviderItems(provider: DevDocketProvider): Promise<void> {
+    if (typeof provider.resolveUrl !== 'function' || !this.getImportedWorkItems) {
+      return;
+    }
+
+    for (const importedItem of this.getImportedWorkItems()) {
+      if (importedItem.providerId !== provider.id || !importedItem.externalId || !importedItem.url) {
+        continue;
+      }
+      if (this.findProviderItem(provider.id, importedItem.externalId)) {
+        continue;
+      }
+
+      try {
+        const resolved = await provider.resolveUrl(importedItem.url);
+        if (!resolved || resolved.externalId !== importedItem.externalId) {
+          continue;
+        }
+
+        this.registerSyntheticResolvedItem(provider.id, resolved);
+      } catch (error) {
+        logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);
+      }
+    }
+  }
+
+  /**
    * Get the provider items for a specific provider.
    *
    * @param providerId - The provider identifier.
    * @returns The array of provider items, or an empty array if the provider has none.
    */
   getProviderItems(providerId: string): ProviderItem[] {
-    return this.providerItems.get(providerId) ?? [];
+    const liveItems = this.providerItems.get(providerId) ?? [];
+    const syntheticItems = this.syntheticProviderItems.get(providerId);
+    if (!syntheticItems || syntheticItems.size === 0) {
+      return liveItems;
+    }
+
+    const merged = [...liveItems];
+    for (const [externalId, item] of syntheticItems) {
+      if (!liveItems.some(liveItem => liveItem.externalId === externalId)) {
+        merged.push(item);
+      }
+    }
+    return merged;
   }
 
   /**
@@ -290,7 +388,7 @@ export class ProviderRegistry {
    * @returns A map keyed by provider ID, with each value being the provider's provider items.
    */
   getAllProviderItems(): Map<string, ProviderItem[]> {
-    return this.providerItems;
+    return new Map(Array.from(this.providers.keys(), providerId => [providerId, this.getProviderItems(providerId)]));
   }
 
   /**

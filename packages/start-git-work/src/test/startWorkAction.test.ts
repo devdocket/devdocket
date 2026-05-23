@@ -169,6 +169,15 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
+    it('returns true for a URL-imported ADO PR when a synthetic provider item supplies gitWork', () => {
+      const item = createWorkItem({ providerId: 'ado-pr-reviews', externalId: 'myorg/MyProject/myrepo/42' });
+      const { action } = createAction(discovered('ado-pr-reviews', 'myorg/MyProject/myrepo/42', async () => ({
+        kind: 'pr', cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix', repoLabel: 'MyProject/myrepo',
+      })));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
     it('returns false when no capability is present', () => {
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1'));
@@ -804,6 +813,24 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
       expect(window.showInputBox).not.toHaveBeenCalled();
       expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('accepts Azure DevOps HTTPS clone URLs that include a username', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr', cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix', repoLabel: 'MyProject/myrepo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).not.toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['remote', 'add', 'devdocket-fork-MyProject-myrepo', 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo'],
+        ['fetch', 'devdocket-fork-MyProject-myrepo', '+refs/heads/users/me/fix:refs/remotes/devdocket-fork-MyProject-myrepo/users/me/fix'],
+        ['rev-parse', '--verify', 'refs/heads/users/me/fix'],
+        ['worktree', 'add', '--detach', path.join('/mock', 'myrepo-pr-1'), 'devdocket-fork-MyProject-myrepo/users/me/fix'],
+      ]);
     });
 
     it('rejects an invalid ref returned by a lazy resolver', async () => {

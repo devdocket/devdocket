@@ -389,6 +389,8 @@ async function handleCreateItemFromUrl(
     { providerId: details.providerId, externalId: details.externalId, url: details.url, ...(group ? { group } : {}) },
   );
 
+  providerRegistry.registerSyntheticResolvedItem(details.providerId, details);
+
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
