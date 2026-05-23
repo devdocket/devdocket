@@ -1,3 +1,5 @@
+import type { CancellationTokenLike } from './runWatcher';
+
 /**
  * Creates an AbortError with the standard 'The operation was aborted.' message.
  * Use this instead of the three-line pattern for consistency:
@@ -11,6 +13,10 @@ export function createAbortError(): Error {
   return error;
 }
 
+type CancellationTokenWithEvents = CancellationTokenLike & {
+  readonly onCancellationRequested?: (listener: () => void) => { dispose(): void };
+};
+
 /**
  * Bridges a VS Code-style cancellation token to an AbortController.
  *
@@ -19,10 +25,7 @@ export function createAbortError(): Error {
  * later fires. If the controller is aborted externally, the token subscription
  * is disposed to avoid leaking listeners.
  */
-export function abortFromToken(token?: {
-  readonly isCancellationRequested: boolean;
-  readonly onCancellationRequested?: (listener: () => void) => { dispose(): void };
-}): AbortController {
+export function abortFromToken(token?: CancellationTokenWithEvents): AbortController {
   const controller = new AbortController();
   if (!token) {
     return controller;
