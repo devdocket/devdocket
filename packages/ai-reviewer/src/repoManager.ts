@@ -417,9 +417,9 @@ export class RepoManager {
         ),
       );
       this.log.info('Base branch fetched');
-      this.throwIfCancelled(token, cancellation.signal, 'fetch base branch');
 
       if (!worktreeExists) {
+        this.throwIfCancelled(token, cancellation.signal, cloneExists ? 'prune worktree metadata' : 'create worktree');
         if (cloneExists) {
           await this.runStep('prune worktree metadata', () => this.pruneWorktreeMetadata(clonePath, undefined, cancellation.signal));
         }
