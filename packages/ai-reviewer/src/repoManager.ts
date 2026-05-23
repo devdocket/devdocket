@@ -663,9 +663,9 @@ export class RepoManager {
 
     const cancellation = abortFromToken(token);
     try {
+      this.throwIfCancelled(token, cancellation.signal, 'remove worktree');
       const repoBases = new Set<string>();
       for (const [key, info] of toRemove) {
-        this.throwIfCancelled(token, cancellation.signal, 'remove worktree');
         repoBases.add(path.dirname(info.clonePath));
         try {
           await this.runStep('remove worktree', () =>
@@ -691,7 +691,6 @@ export class RepoManager {
       }
 
       for (const repoBase of repoBases) {
-        this.throwIfCancelled(token, cancellation.signal, 'delete repository directory');
         try {
           await vscode.workspace.fs.delete(vscode.Uri.file(repoBase), {
             recursive: true,
@@ -733,9 +732,11 @@ export class RepoManager {
       return await work();
     } catch (err) {
       if (isAbortError(err)) {
-        const abortStep = err.step ?? step;
-        this.log.info(`Cancellation received during ${abortStep}`);
-        throw createStepAbortError(abortStep);
+        if (err.step) {
+          throw err;
+        }
+        this.log.info(`Cancellation received during ${step}`);
+        throw createStepAbortError(step);
       }
       throw err;
     }

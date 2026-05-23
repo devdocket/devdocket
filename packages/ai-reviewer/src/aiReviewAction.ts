@@ -16,6 +16,22 @@ export { sanitizePrUrl };
 /** Maximum tool-use loop iterations for the tool-enabled review flow. */
 const MAX_TOOL_ITERATIONS = 15;
 
+type CancellationStepError = Error & { step?: string };
+
+function getCancellationStep(err: CancellationStepError): string | undefined {
+  if (err.step) {
+    return err.step;
+  }
+
+  const prefix = 'Cancelled during ';
+  return err.message.startsWith(prefix) ? err.message.slice(prefix.length) : undefined;
+}
+
+export function formatCancellationDetail(prefix: string, err: CancellationStepError, genericDetail: string): string {
+  const step = getCancellationStep(err);
+  return step ? `${prefix} cancelled during ${step}.` : genericDetail;
+}
+
 export class AiReviewAction extends BasePrAction {
   readonly id = 'ai-reviewer.review';
   readonly label = 'AI Code Review';
@@ -107,9 +123,11 @@ export class AiReviewAction extends BasePrAction {
       this.log.info('Worktree ready for code review');
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        const detail = err.message === 'The operation was aborted.'
-          ? 'AI code review cancelled during repository preparation.'
-          : `AI code review ${err.message.charAt(0).toLowerCase()}${err.message.slice(1)}.`;
+        const detail = formatCancellationDetail(
+          'AI code review',
+          err,
+          'AI code review cancelled during repository preparation.',
+        );
         this.log.info(detail);
         await this.api?.addActivity?.(item.id, 'action-executed', detail);
         throw err;
