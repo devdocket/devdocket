@@ -134,7 +134,7 @@ export class ReadStateStore {
     return true;
   }
 
-  /** Adds multiple keys in a single write. Returns keys that were newly added. */
+  /** Adds multiple keys in a single write. Returns newly added keys that remain persisted after capacity trimming. */
   async addMany(keys: string[]): Promise<string[]> {
     if (keys.length === 0) { return []; }
     if (!this.loaded) { await this.load(); }
@@ -151,7 +151,7 @@ export class ReadStateStore {
       await this.persist();
       this._onDidChange.fire();
     }
-    return newlyAdded;
+    return newlyAdded.filter(key => this.items.has(key));
   }
 
   keys(): IterableIterator<string> {

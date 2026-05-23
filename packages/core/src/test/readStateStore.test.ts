@@ -186,6 +186,21 @@ describe('ReadStateStore', () => {
     expect(result).toEqual([]);
   });
 
+  it('addMany only returns newly added keys that remain after capacity trimming', async () => {
+    let currentTime = 0;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime++);
+
+    try {
+      await store.load();
+      await store.addMany(Array.from({ length: 4_999 }, (_, i) => `gh::seed-${i}`));
+      const retained = await store.addMany(Array.from({ length: 10 }, (_, i) => `gh::new-${i}`));
+
+      expect(retained).toEqual(Array.from({ length: 10 }, (_, i) => `gh::new-${i}`));
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   describe('merge-on-write', () => {
     it('preserves remote additions while persisting local changes', async () => {
       const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
@@ -258,7 +273,9 @@ describe('ReadStateStore', () => {
 
       try {
         await store.load();
-        await store.addMany(Array.from({ length: 6_000 }, (_, i) => `gh::issue-${i}`));
+        const retained = await store.addMany(Array.from({ length: 6_000 }, (_, i) => `gh::issue-${i}`));
+
+        expect(retained).toEqual(Array.from({ length: 5_000 }, (_, i) => `gh::issue-${i + 1_000}`));
       } finally {
         nowSpy.mockRestore();
       }
