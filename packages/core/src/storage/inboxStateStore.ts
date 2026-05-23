@@ -34,6 +34,11 @@ interface PersistedInboxStateRecord extends InboxStateRecord {
   createdAt: number;
 }
 
+interface InboxStateSnapshot {
+  records: PersistedInboxStateRecord[];
+  available: boolean;
+}
+
 function trimInboxStateRecords(records: PersistedInboxStateRecord[]): PersistedInboxStateRecord[] {
   if (records.length <= MAX_TOTAL_ENTRIES) {
     return records;
@@ -127,10 +132,17 @@ export class InboxStateStore {
    * keys win, and locally removed keys stay removed.
    */
   private async persist(): Promise<void> {
+    const snapshot = await this.parseFromFileStore();
     const merged = new Map<string, PersistedInboxStateRecord>();
 
-    for (const remote of await this.parseFromFileStore()) {
-      merged.set(this.key(remote.providerId, remote.externalId), remote);
+    if (snapshot.available) {
+      for (const remote of snapshot.records) {
+        merged.set(this.key(remote.providerId, remote.externalId), remote);
+      }
+    } else {
+      for (const [key, record] of this.cache) {
+        merged.set(key, record);
+      }
     }
 
     for (const k of this.removedKeys) {
@@ -155,9 +167,10 @@ export class InboxStateStore {
   }
 
   /** Parse and validate inbox state records from the backing JSON file. */
-  private async parseFromFileStore(): Promise<PersistedInboxStateRecord[]> {
+  private async parseFromFileStore(): Promise<InboxStateSnapshot> {
     const parsed = await this.fileStore.read();
-    if (!Array.isArray(parsed)) { return []; }
+    if (parsed === undefined) { return { records: [], available: false }; }
+    if (!Array.isArray(parsed)) { return { records: [], available: true }; }
     const records: PersistedInboxStateRecord[] = [];
     for (let i = 0; i < parsed.length; i++) {
       const error = validateInboxStateRecord(parsed[i], i);
@@ -181,7 +194,7 @@ export class InboxStateStore {
       }
     }
 
-    return Array.from(deduped.values());
+    return { records: Array.from(deduped.values()), available: true };
   }
 
   /**
@@ -279,7 +292,8 @@ export class InboxStateStore {
   async load(): Promise<void> {
     if (this.loaded) { return; }
     this.cache.clear();
-    const records = await this.parseFromFileStore();
+    const snapshot = await this.parseFromFileStore();
+    const records = snapshot.records;
     const trimmedRecords = trimInboxStateRecords(records);
     if (trimmedRecords.length !== records.length) {
       await this.fileStore.write(trimmedRecords);

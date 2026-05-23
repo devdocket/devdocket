@@ -212,6 +212,23 @@ describe('InboxStateStore', () => {
     store2.dispose();
   });
 
+  it('keeps cached inbox records when the remote snapshot is temporarily unavailable', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted', createdAt: 1 },
+    ]);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    await store2.load();
+    await vscode.workspace.fs.delete(fileUri);
+    await store2.setState('gh', 'fresh', 'dismissed');
+
+    expect((await store2.loadAll()).sort((a, b) => a.externalId.localeCompare(b.externalId))).toEqual([
+      { providerId: 'gh', externalId: 'fresh', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted' },
+    ]);
+    store2.dispose();
+  });
+
   // ── Schema validation ─────────────────────────────────────────────
 
   describe('schema validation', () => {
