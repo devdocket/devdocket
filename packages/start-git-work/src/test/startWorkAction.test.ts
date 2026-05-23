@@ -1152,6 +1152,44 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('offers cleanup and rolls back the branch when issue worktree creation is cancelled', async () => {
+      const cancellationListeners: Array<() => void> = [];
+      vi.mocked(window.withProgress).mockImplementation(async (_options: any, task: Function) => task(
+        { report: vi.fn() },
+        {
+          isCancellationRequested: false,
+          onCancellationRequested: (listener: () => void) => {
+            cancellationListeners.push(listener);
+            return { dispose: vi.fn() };
+          },
+        },
+      ));
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          cancellationListeners.forEach(listener => listener());
+          const err = new Error('The operation was aborted.');
+          err.name = 'AbortError';
+          cb(err, '', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['branch', '-D', 'issue123']);
+      const rollbackCall = vi.mocked(execFile).mock.calls.find(call => call[1][0] === 'branch' && call[1][1] === '-D');
+      expect(rollbackCall?.[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'DevDocket: Start Git Work cancelled during creating worktree.',
+      );
+    });
+
     it('accepts and routes a third-party provider without host or provider-id knowledge', async () => {
       const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'work-42' });
       const { action } = createAction(discovered('fake-vendor', 'work-42', {

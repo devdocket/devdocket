@@ -306,6 +306,11 @@ export class StartWorkAction implements DevDocketAction {
 
     await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT, signal });
     logger.info(`Starting work: creating branch ${branchName}`);
+    cancellationState.cleanupActivity = {
+      timestamp: Date.now(),
+      type: 'work-started',
+      detail: encodeWorkStartedDetail({ branchName, repoPath }),
+    };
 
     this.reportStep(progress, cancellationState, 'Creating worktree...', 'creating worktree');
 
@@ -316,8 +321,19 @@ export class StartWorkAction implements DevDocketAction {
         signal,
       });
     } catch (worktreeErr) {
+      if (this.isAbortError(worktreeErr)) {
+        try {
+          await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+          cancellationState.cleanupActivity = undefined;
+        } catch (rollbackErr) {
+          const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+          void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
+        }
+        throw worktreeErr;
+      }
+
       try {
-        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT, signal });
+        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
       } catch (rollbackErr) {
         const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
         void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
@@ -570,6 +586,11 @@ export class StartWorkAction implements DevDocketAction {
     let createdBranch = false;
 
     if (hasLocalBranch && trackingRef) {
+      cancellationState.cleanupActivity = {
+        timestamp: Date.now(),
+        type: 'work-started',
+        detail: encodeWorkStartedDetail({ worktreePath, repoPath }),
+      };
       // PR with an existing local branch — the local branch may be stale or
       // tracking a different remote. Create a detached worktree from the PR ref.
       logger.info(
@@ -583,6 +604,11 @@ export class StartWorkAction implements DevDocketAction {
         signal,
       });
     } else if (hasLocalBranch && conflictingWorktree) {
+      cancellationState.cleanupActivity = {
+        timestamp: Date.now(),
+        type: 'work-started',
+        detail: encodeWorkStartedDetail({ worktreePath, repoPath }),
+      };
       logger.info(
         `Branch ${branchName} is already held by worktree at ${conflictingWorktree}; creating detached worktree from ${worktreeSourceRef}`,
       );
@@ -594,12 +620,22 @@ export class StartWorkAction implements DevDocketAction {
         signal,
       });
     } else if (hasLocalBranch) {
+      cancellationState.cleanupActivity = {
+        timestamp: Date.now(),
+        type: 'work-started',
+        detail: encodeWorkStartedDetail({ worktreePath, repoPath }),
+      };
       await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
         cwd: repoPath,
         timeout: GIT_CHECKOUT_TIMEOUT,
         signal,
       });
     } else {
+      cancellationState.cleanupActivity = {
+        timestamp: Date.now(),
+        type: 'work-started',
+        detail: encodeWorkStartedDetail({ branchName, worktreePath, repoPath }),
+      };
       await execFileAsync('git', ['worktree', 'add', '-b', branchName, worktreePath, worktreeSourceRef], {
         cwd: repoPath,
         timeout: GIT_CHECKOUT_TIMEOUT,
@@ -979,8 +1015,12 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     if (cancellationState.cleanupActivity) {
+      const cleanupDetail = cancellationState.cleanupActivity.detail;
+      const cleanupTarget = cleanupDetail && cleanupDetail.includes('"worktreePath"')
+        ? 'The created worktree may need cleanup.'
+        : 'A partially created branch may need cleanup.';
       const choice = await vscode.window.showWarningMessage(
-        `DevDocket: ${detail} The created worktree may need cleanup.`,
+        `DevDocket: ${detail} ${cleanupTarget}`,
         'Remove worktree',
       );
       if (choice === 'Remove worktree') {
