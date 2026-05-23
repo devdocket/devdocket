@@ -349,6 +349,18 @@ describe('ReadStateStore', () => {
       windowA.dispose();
       windowB.dispose();
     });
+
+    it('keeps cached keys when the remote snapshot is temporarily unavailable', async () => {
+      fileSystem.writeJson(fileUri, ['gh::keep']);
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+      await vscode.workspace.fs.delete(fileUri);
+
+      await store2.add('gh::fresh');
+
+      expect(persistedKeys().sort()).toEqual(['gh::fresh', 'gh::keep']);
+      store2.dispose();
+    });
   });
 
   describe('prune', () => {

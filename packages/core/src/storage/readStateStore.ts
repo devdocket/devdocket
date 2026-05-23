@@ -11,6 +11,11 @@ interface PersistedReadStateRecord {
   createdAt: number;
 }
 
+interface ReadStateSnapshot {
+  records: PersistedReadStateRecord[];
+  available: boolean;
+}
+
 function trimReadStateRecords(records: PersistedReadStateRecord[]): PersistedReadStateRecord[] {
   if (records.length <= MAX_TOTAL_ENTRIES) {
     return records;
@@ -56,18 +61,26 @@ export class ReadStateStore {
    * keys, and writes the merged result.
    */
   private async persist(): Promise<void> {
-    const remoteRecords = await this.parseFromFileStore();
-    const remoteKeys = new Set(remoteRecords.map(record => record.key));
+    const snapshot = await this.parseFromFileStore();
+    const remoteKeys = new Set(snapshot.records.map(record => record.key));
     const merged = new Map<string, number>();
 
-    for (const remote of remoteRecords) {
-      if (!this.removedSinceLoad.has(remote.key)) {
-        merged.set(remote.key, remote.createdAt);
+    if (snapshot.available) {
+      for (const remote of snapshot.records) {
+        if (!this.removedSinceLoad.has(remote.key)) {
+          merged.set(remote.key, remote.createdAt);
+        }
+      }
+    } else {
+      for (const [key, createdAt] of this.items) {
+        if (!this.removedSinceLoad.has(key)) {
+          merged.set(key, createdAt);
+        }
       }
     }
 
     for (const [key, createdAt] of this.items) {
-      if (!this.removedSinceLoad.has(key) && (this.addedSinceLoad.has(key) || remoteKeys.has(key))) {
+      if (!this.removedSinceLoad.has(key) && (!snapshot.available || this.addedSinceLoad.has(key) || remoteKeys.has(key))) {
         merged.set(key, createdAt);
       }
     }
@@ -84,10 +97,13 @@ export class ReadStateStore {
     this.removedSinceLoad.clear();
   }
 
-  private async parseFromFileStore(): Promise<PersistedReadStateRecord[]> {
+  private async parseFromFileStore(): Promise<ReadStateSnapshot> {
     const parsed = await this.fileStore.read();
+    if (parsed === undefined) {
+      return { records: [], available: false };
+    }
     if (!Array.isArray(parsed)) {
-      return [];
+      return { records: [], available: true };
     }
 
     const records: PersistedReadStateRecord[] = [];
@@ -128,7 +144,7 @@ export class ReadStateStore {
       }
     }
 
-    return Array.from(deduped.values());
+    return { records: Array.from(deduped.values()), available: true };
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */
@@ -229,7 +245,8 @@ export class ReadStateStore {
 
   async load(): Promise<void> {
     if (this.loaded) { return; }
-    const records = await this.parseFromFileStore();
+    const snapshot = await this.parseFromFileStore();
+    const records = snapshot.records;
     const trimmedRecords = trimReadStateRecords(records);
     this.items.clear();
     if (trimmedRecords.length !== records.length) {
