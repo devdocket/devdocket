@@ -129,7 +129,12 @@ export class AiReviewAction extends BasePrAction {
           'AI code review cancelled during repository preparation.',
         );
         this.log.info(detail);
-        await this.api?.addActivity?.(item.id, 'action-executed', detail);
+        try {
+          await this.api?.addActivity?.(item.id, 'action-executed', detail);
+        } catch (activityErr) {
+          const activityMsg = activityErr instanceof Error ? activityErr.message : String(activityErr);
+          this.log.warn(`Failed to record cancellation activity: ${activityMsg}`);
+        }
         throw err;
       }
       const msg = err instanceof Error ? err.message : String(err);
