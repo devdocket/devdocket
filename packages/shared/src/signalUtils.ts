@@ -11,6 +11,41 @@ export function createAbortError(): Error {
   return error;
 }
 
+/**
+ * Bridges a VS Code-style cancellation token to an AbortController.
+ *
+ * The returned controller is aborted immediately when the token is already
+ * cancelled, and otherwise aborts with a standard AbortError when the token
+ * later fires. If the controller is aborted externally, the token subscription
+ * is disposed to avoid leaking listeners.
+ */
+export function abortFromToken(token?: {
+  readonly isCancellationRequested: boolean;
+  readonly onCancellationRequested?: (listener: () => void) => { dispose(): void };
+}): AbortController {
+  const controller = new AbortController();
+  if (!token) {
+    return controller;
+  }
+
+  if (token.isCancellationRequested) {
+    controller.abort(createAbortError());
+    return controller;
+  }
+
+  const subscription = token.onCancellationRequested?.(() => {
+    if (!controller.signal.aborted) {
+      controller.abort(createAbortError());
+    }
+  });
+
+  if (subscription) {
+    controller.signal.addEventListener('abort', () => subscription.dispose(), { once: true });
+  }
+
+  return controller;
+}
+
 function getAbortReason(signal: AbortSignal): Error {
   return signal.reason instanceof Error ? signal.reason : createAbortError();
 }

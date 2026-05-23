@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { window, workspace } from 'vscode';
+import { commands, window, workspace } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
 import type { ProviderItemCapabilities } from '@devdocket/shared';
@@ -767,6 +767,31 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('propagates AbortError when PR fetch is cancelled', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'fetch') {
+          const err = new Error('The operation was aborted.');
+          err.name = 'AbortError';
+          cb(err, '', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const { action } = createAction();
+
+      await expect((action as any).fetchPrBranch(
+        { kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo' },
+        '/mock/workspace',
+        undefined,
+        new AbortController().signal,
+      )).rejects.toMatchObject({ name: 'AbortError', message: 'The operation was aborted.' });
+      expect(window.showErrorMessage).not.toHaveBeenCalled();
+    });
+
     it('rejects an invalid cloneUrl returned by a lazy resolver', async () => {
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1', async () => ({
@@ -1037,6 +1062,31 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('keeps start-work progress cancellable and passes abort signals to git commands', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(window.withProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ cancellable: true, title: 'Starting git work for issue' }),
+        expect.any(Function),
+      );
+      const gitOptions = vi.mocked(execFile).mock.calls
+        .filter(call => call[0] === 'git')
+        .map(call => call[2]);
+      expect(gitOptions).toHaveLength(3);
+      expect(gitOptions.every(options => options.signal instanceof AbortSignal)).toBe(true);
+      expect(vi.mocked(commands.executeCommand).mock.calls).toContainEqual([
+        'devdocket.addActivity',
+        'wc-test-1',
+        'work-started',
+        expect.any(String),
+      ]);
+    });
+
     it('runs configured post-worktree commands with the created worktree path', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => key === 'commands'
@@ -1051,7 +1101,54 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(vi.mocked(execFile).mock.calls.map(call => [call[0], call[1], call[2]])).toContainEqual([
-        'npm', ['install', '--prefix', path.join('/mock', 'repo-issue-1')], { cwd: path.join('/mock', 'repo-issue-1'), timeout: 60_000 },
+        'npm', ['install', '--prefix', path.join('/mock', 'repo-issue-1')], expect.objectContaining({ cwd: path.join('/mock', 'repo-issue-1'), timeout: 60_000, signal: expect.any(AbortSignal) }),
+      ]);
+    });
+
+    it('logs cancellation and offers worktree cleanup when cancelled after worktree creation', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => key === 'commands'
+          ? [{ command: 'npm', args: ['install'] }]
+          : defaultValue),
+      } as any);
+      const cancellationListeners: Array<() => void> = [];
+      vi.mocked(window.withProgress).mockImplementation(async (_options: any, task: Function) => task(
+        { report: vi.fn() },
+        {
+          isCancellationRequested: false,
+          onCancellationRequested: (listener: () => void) => {
+            cancellationListeners.push(listener);
+            return { dispose: vi.fn() };
+          },
+        },
+      ));
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (cmd === 'npm') {
+          cancellationListeners.forEach(listener => listener());
+          const err = new Error('The operation was aborted.');
+          err.name = 'AbortError';
+          cb(err, '', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Start Git Work cancelled during running npm.'),
+        'Remove worktree',
+      );
+      expect(vi.mocked(commands.executeCommand).mock.calls).toContainEqual([
+        'devdocket.addActivity',
+        'wc-test-1',
+        'updated',
+        'Start Git Work cancelled during running npm.',
       ]);
     });
 
