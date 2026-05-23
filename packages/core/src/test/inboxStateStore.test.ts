@@ -910,6 +910,22 @@ describe('InboxStateStore', () => {
       store2.dispose();
       infoSpy.mockRestore();
     });
+
+    it('keeps trimmed inbox entries in memory when persisting the load-time trim fails', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const failingStore = new InboxStateStore({
+        read: vi.fn(async () => Array.from({ length: 6_000 }, (_, i) => ({ providerId: 'gh', externalId: `issue-${i}`, inboxState: 'accepted', createdAt: i }))),
+        write: vi.fn(async () => { throw new Error('disk full'); }),
+      });
+
+      await expect(failingStore.load()).resolves.toBeUndefined();
+      expect((await failingStore.loadAll())).toHaveLength(5_000);
+      expect(failingStore.getState('gh', 'issue-0')).toBeUndefined();
+      expect(failingStore.getState('gh', 'issue-1000')).toBe('accepted');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist trimmed inbox state while loading; continuing with 5000 in-memory entries'), expect.any(Error));
+      warnSpy.mockRestore();
+      failingStore.dispose();
+    });
   });
 
   describe('prune', () => {

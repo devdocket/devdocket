@@ -296,8 +296,12 @@ export class InboxStateStore {
     const records = snapshot.records;
     const trimmedRecords = trimInboxStateRecords(records);
     if (trimmedRecords.length !== records.length) {
-      await this.fileStore.write(trimmedRecords);
-      logger.info(`Trimmed inbox-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+      try {
+        await this.fileStore.write(trimmedRecords);
+        logger.info(`Trimmed inbox-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+      } catch (err) {
+        logger.warn(`Failed to persist trimmed inbox state while loading; continuing with ${trimmedRecords.length} in-memory entries`, err);
+      }
     }
     for (const record of trimmedRecords) {
       this.cache.set(this.key(record.providerId, record.externalId), record);
