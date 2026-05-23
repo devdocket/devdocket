@@ -126,6 +126,26 @@ describe('ProviderRegistry', () => {
     );
   });
 
+  it('keeps synthetic items when only metadata fields like state or reason are present', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticResolvedItem('gh', {
+      title: '#42: Imported PR',
+      notes: '',
+      url: 'https://example.com/42',
+      externalId: 'owner/repo#42',
+      providerId: 'gh',
+      reason: 'review_requested',
+      state: 'open',
+    });
+
+    expect(registry.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', reason: 'review_requested', state: 'open' }),
+    );
+  });
+
   it('prefers live provider items over synthetic URL-imported items with the same external id', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);

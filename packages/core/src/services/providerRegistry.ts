@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, ProviderItem, type ResolvedItem } from '../api/types';
+import { DevDocketProvider, ProviderItem, type ResolveUrlOptions, type ResolvedItem } from '../api/types';
 import type { WindowStateProvider } from '@devdocket/shared';
 import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
@@ -45,7 +45,19 @@ function isWindowStateAwareProvider(provider: DevDocketProvider): provider is De
 }
 
 function toSyntheticProviderItem(details: ResolvedItem): ProviderItem | undefined {
-  if (!details.itemType && !details.capabilities && !details.author && details.authored === undefined) {
+  if (
+    !details.itemType
+    && !details.capabilities
+    && !details.author
+    && details.authored === undefined
+    && !details.badges
+    && !details.canonicalId
+    && !details.reason
+    && !details.relatedItems
+    && !details.resurfaceVersion
+    && !details.state
+    && !details.version
+  ) {
     return undefined;
   }
 
