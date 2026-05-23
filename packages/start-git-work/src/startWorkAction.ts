@@ -986,8 +986,8 @@ export class StartWorkAction implements DevDocketAction {
     } catch (deleteErr) {
       const branchRef = `refs/heads/${branchName}`;
       const [{ stdout: branchHead }, { stdout: baseHead }] = await Promise.all([
-        execFileAsync('git', ['rev-parse', '--verify', branchRef], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT }),
-        execFileAsync('git', ['rev-parse', '--verify', baseBranch], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT }),
+        execFileAsync('git', ['rev-parse', '--verify', '--', branchRef], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT }),
+        execFileAsync('git', ['rev-parse', '--verify', '--', baseBranch], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT }),
       ]);
       if (branchHead.trim() === baseHead.trim()) {
         await execFileAsync('git', ['branch', '-D', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });

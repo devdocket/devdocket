@@ -1214,11 +1214,11 @@ describe('StartWorkAction', () => {
           cb(new Error('not fully merged'), '', 'error: the branch is not fully merged');
           return;
         }
-        if (args[0] === 'rev-parse' && args[2] === 'refs/heads/issue123') {
+        if (args[0] === 'rev-parse' && args[3] === 'refs/heads/issue123') {
           cb(null, 'abc123\n', '');
           return;
         }
-        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
+        if (args[0] === 'rev-parse' && args[3] === 'origin/dev') {
           cb(null, 'abc123\n', '');
           return;
         }
