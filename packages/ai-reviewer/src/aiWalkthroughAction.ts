@@ -27,7 +27,7 @@ export class AiWalkthroughAction extends BasePrAction {
     this.log.info('Preparing worktree for walkthrough');
 
     try {
-      await this.repoManager.ensureWorktree(item.url!);
+      await this.repoManager.ensureWorktree(item.url!, token);
       this.log.info('Worktree ready');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);

@@ -205,7 +205,7 @@ export class ProviderRegistry {
     this._loadingProviders.add(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeProviderItems.fire();
-    this.refreshWithTimeout(provider)
+    this.refreshWithTimeout(provider, undefined, false)
       .finally(() => {
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
@@ -358,7 +358,7 @@ export class ProviderRegistry {
         outcome = 'cancelled';
       } else {
         logger.debug(`Provider ${provider.id} refreshing...`);
-        outcome = await this.refreshWithTimeout(provider, token);
+        outcome = await this.refreshWithTimeout(provider, token, true);
       }
 
       completedProviderIds.add(provider.id);
@@ -392,10 +392,14 @@ export class ProviderRegistry {
       return 'cancelled';
     }
     logger.debug(`Provider ${provider.id} refreshing...`);
-    return this.refreshWithTimeout(provider, token);
+    return this.refreshWithTimeout(provider, token, true);
   }
 
-  private refreshWithTimeout(provider: DevDocketProvider, parentToken?: vscode.CancellationToken): Promise<ProviderRefreshOutcome> {
+  private refreshWithTimeout(
+    provider: DevDocketProvider,
+    parentToken?: vscode.CancellationToken,
+    interactive = false,
+  ): Promise<ProviderRefreshOutcome> {
     this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
     let timedOut = false;
@@ -416,7 +420,7 @@ export class ProviderRegistry {
 
     let providerRefreshPromise: Promise<void>;
     try {
-      providerRefreshPromise = Promise.resolve(provider.refresh(cts.token));
+      providerRefreshPromise = Promise.resolve(provider.refresh(cts.token, { interactive }));
     } catch (err) {
       providerRefreshPromise = Promise.reject(err);
     }

@@ -440,7 +440,7 @@ describe('AdoPrReviewProvider — extended', () => {
       );
     });
 
-    it('uses createIfNone: true for user-triggered refresh', async () => {
+    it('checks for a cached session before prompting on user-triggered refresh', async () => {
       mockFetch
         .mockResolvedValueOnce(mockConnectionData())
         .mockResolvedValueOnce({
@@ -453,7 +453,7 @@ describe('AdoPrReviewProvider — extended', () => {
       expect(authentication.getSession).toHaveBeenCalledWith(
         'microsoft',
         ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
-        { createIfNone: true },
+        { silent: true },
       );
     });
   });

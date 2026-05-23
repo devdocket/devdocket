@@ -180,7 +180,7 @@ describe('AiReviewAction', () => {
       await action.run(item);
 
       // Verify worktree was prepared
-      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42', expect.anything());
 
       // Verify fetch was called with the GitHub API
       expect(mockFetch).toHaveBeenCalledWith(
@@ -367,7 +367,7 @@ describe('AiReviewAction', () => {
       expect(authentication.getSession).toHaveBeenCalledWith(
         'microsoft',
         ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
-        { createIfNone: true },
+        { silent: true },
       );
       expect(String(mockFetch.mock.calls[1][0])).toContain('/diffs/commits?');
     });
@@ -738,7 +738,7 @@ describe('AiReviewAction', () => {
       await action.run(item);
 
       // ensureWorktree reuses existing clone/worktree
-      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42', expect.anything());
     });
 
     it('does not call ensureWorktree for non-PR URLs', async () => {

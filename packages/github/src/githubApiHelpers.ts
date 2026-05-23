@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, combineSignals, createAbortError, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
+import { isValidGitHubRepo, combineSignals, createAbortError, getSessionWithAuthFallback, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
 import { logger } from './logger';
+
+export interface GitHubAuthOptions {
+  interactive?: boolean;
+  signal?: AbortSignal;
+}
 
 export interface GitHubIssue {
   number: number;
@@ -150,25 +155,39 @@ export async function getHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-/** Retry a request with interactive auth (prompts user to sign in). */
-export async function retryWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
-  try {
-    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
-    if (session) {
-      return await fetch(apiUrl, {
-        headers: {
-          'Accept': 'application/vnd.github+json',
-          'User-Agent': 'DevDocket-VSCode',
-          'X-GitHub-Api-Version': '2022-11-28',
-          'Authorization': `Bearer ${session.accessToken}`,
-        },
-        signal,
-      });
-    }
-  } catch {
-    logger.debug('User declined GitHub authentication prompt');
+export async function getGitHubSession(
+  scopes: readonly string[],
+  options: GitHubAuthOptions = {},
+): Promise<vscode.AuthenticationSession | undefined> {
+  return getSessionWithAuthFallback({
+    interactive: options.interactive,
+    signal: options.signal,
+    getSilent: () => vscode.authentication.getSession('github', [...scopes], { silent: true }),
+    getInteractive: () => vscode.authentication.getSession('github', [...scopes], { createIfNone: true }),
+  });
+}
+
+/** Retry a request with GitHub auth, prompting only for interactive callers. */
+export async function retryWithAuth(
+  apiUrl: string,
+  signal?: AbortSignal,
+  options: Omit<GitHubAuthOptions, 'signal'> = {},
+): Promise<Response | undefined> {
+  const session = await getGitHubSession(['repo'], { ...options, signal });
+  if (!session) {
+    return undefined;
   }
-  return undefined;
+
+  const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
+  return await fetch(apiUrl, {
+    headers: {
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'DevDocket-VSCode',
+      'X-GitHub-Api-Version': '2022-11-28',
+      'Authorization': `Bearer ${session.accessToken}`,
+    },
+    signal: requestSignal,
+  });
 }
 
 /**

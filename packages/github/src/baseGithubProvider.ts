@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
-import { BaseProvider, ProviderItem, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
+import { BaseProvider, ProviderItem, createAbortError, runWorkerPool, type ProviderRefreshOptions, type RelatedItemRef } from '@devdocket/shared';
 import { fetchPrCrossReferencesBatch } from './githubGraphql';
+import { getGitHubSession } from './githubApiHelpers';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
 
@@ -31,7 +32,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     return ['repo'];
   }
 
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
+  async refresh(token?: vscode.CancellationToken, options?: ProviderRefreshOptions): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -39,6 +40,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     this._isRefreshing = true;
     const abortController = new AbortController();
     const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    const interactive = options?.interactive ?? true;
     try {
       if (token?.isCancellationRequested) {
         return;
@@ -46,10 +48,14 @@ export abstract class BaseGitHubProvider extends BaseProvider {
 
       let session: vscode.AuthenticationSession | undefined;
       try {
-        session = await vscode.authentication.getSession('github', this.getAuthenticationScopes(), {
-          createIfNone: true,
+        session = await getGitHubSession(this.getAuthenticationScopes(), {
+          interactive,
+          signal: abortController.signal,
         });
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
         const message = err instanceof Error ? err.message : String(err);
         logger.error('GitHub authentication failed', err);
         this.showGitHubAuthenticationWarning(`DevDocket GitHub: Authentication failed — ${message}`);
@@ -58,12 +64,16 @@ export abstract class BaseGitHubProvider extends BaseProvider {
 
       if (!session || token?.isCancellationRequested) {
         if (!session) {
-          logger.info('User cancelled GitHub authentication');
+          if (interactive) {
+            logger.info('User cancelled GitHub authentication');
+          } else {
+            logger.debug('No cached GitHub session available for non-interactive refresh');
+          }
         }
         return;
       }
 
-      await this.fetchAndPublish(session.accessToken, true, abortController.signal);
+      await this.fetchAndPublish(session.accessToken, interactive, abortController.signal);
       this.markRefreshSuccess();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {

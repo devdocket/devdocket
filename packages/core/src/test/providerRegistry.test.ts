@@ -121,6 +121,13 @@ describe('ProviderRegistry', () => {
     expect(provider.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('treats registration refreshes as non-interactive', () => {
+    const provider = createMockProvider('registration-auth');
+    registry.register(provider);
+
+    expect(provider.refresh).toHaveBeenCalledWith(expect.anything(), { interactive: false });
+  });
+
   it('applies window state to already registered providers that support it', () => {
     const provider = {
       ...createMockProvider('window-aware'),
@@ -274,6 +281,16 @@ describe('ProviderRegistry', () => {
     expect(p2.refresh).toHaveBeenCalledTimes(1);
   });
 
+  it('treats refreshAll as interactive', async () => {
+    const provider = createMockProvider('refresh-all-auth');
+    registry.register(provider);
+    vi.mocked(provider.refresh).mockClear();
+
+    await registry.refreshAll();
+
+    expect(provider.refresh).toHaveBeenCalledWith(expect.anything(), { interactive: true });
+  });
+
   it('handles refresh errors gracefully in refreshAll', async () => {
     const p1 = createMockProvider('p1');
     vi.mocked(p1.refresh).mockRejectedValueOnce(new Error('network error'));
@@ -382,6 +399,16 @@ describe('ProviderRegistry', () => {
 
   it('returns cancelled when refreshing an unregistered provider by id', async () => {
     await expect(registry.refreshProvider('missing')).resolves.toBe('cancelled');
+  });
+
+  it('treats single-provider refreshes as interactive', async () => {
+    const provider = createMockProvider('single-refresh-auth');
+    registry.register(provider);
+    vi.mocked(provider.refresh).mockClear();
+
+    await registry.refreshProvider('single-refresh-auth');
+
+    expect(provider.refresh).toHaveBeenCalledWith(expect.anything(), { interactive: true });
   });
 
   it('cleans up all subscriptions on dispose', () => {
@@ -983,6 +1010,7 @@ describe('ProviderRegistry', () => {
 
       expect(provider.refresh).toHaveBeenCalledWith(
         expect.objectContaining({ isCancellationRequested: false }),
+        { interactive: false },
       );
     });
 

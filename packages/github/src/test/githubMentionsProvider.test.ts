@@ -116,7 +116,7 @@ describe('GitHubMentionsProvider', () => {
 
     await provider.refresh();
 
-    expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo', 'read:org'], { createIfNone: true });
+    expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo', 'read:org'], { silent: true });
   });
 
   it('discovers mentioned issues and PRs', async () => {

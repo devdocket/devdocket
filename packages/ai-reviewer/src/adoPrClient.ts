@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
+import { combineSignals, createAbortError, raceWithAbort } from '@devdocket/shared';
 import type { AdoPrUrlParts } from './prUrl';
+import { ADO_AUTH_SCOPE, getAdoSession, type AuthRequestOptions } from './auth';
 
-// Azure DevOps' first-party Microsoft Entra resource ID, matching packages/ado auth.
-export const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
+export { ADO_AUTH_SCOPE };
 export const ADO_SYNTHETIC_DIFF_NOTICE = 'Azure DevOps returned change metadata; when a local worktree is available DevDocket replaces this with a full git diff.';
 const ADO_API_VERSION = '7.1';
 const ADO_THREADS_API_VERSION = '7.1-preview.1';
@@ -48,25 +49,30 @@ interface AdoCommitDiffResponse {
 }
 
 type FetchLike = typeof fetch;
-type SessionProvider = (createIfNone: boolean) => Promise<vscode.AuthenticationSession | undefined>;
+type SessionProvider = (options?: AuthRequestOptions) => Promise<vscode.AuthenticationSession | undefined>;
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (!signal?.aborted) {
+    return;
+  }
+  throw signal.reason instanceof Error ? signal.reason : createAbortError();
+}
 
 export class AdoPrClient {
   constructor(
     private readonly fetchImpl: FetchLike = fetch,
-    private readonly getSessionImpl: SessionProvider = async createIfNone => vscode.authentication.getSession(
-      'microsoft',
-      [ADO_AUTH_SCOPE],
-      { createIfNone },
-    ),
+    private readonly getSessionImpl: SessionProvider = options => getAdoSession(options),
   ) {}
 
-  async fetchPullRequestDetails(parts: AdoPrUrlParts): Promise<AdoPullRequestDetails | undefined> {
-    const session = await this.getSessionImpl(true);
+  async fetchPullRequestDetails(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<AdoPullRequestDetails | undefined> {
+    throwIfAborted(options.signal);
+    const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
+    const signal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
     const response = await this.fetchImpl(this.prApiUrl(parts), {
       headers: this.jsonHeaders(session.accessToken),
-      signal: AbortSignal.timeout(30_000),
+      signal,
     });
 
     if (!response.ok) {
@@ -76,18 +82,20 @@ export class AdoPrClient {
     return response.json() as Promise<AdoPullRequestDetails>;
   }
 
-  async fetchDiff(parts: AdoPrUrlParts): Promise<string | undefined> {
-    const result = await this.fetchDiffResult(parts);
+  async fetchDiff(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<string | undefined> {
+    const result = await this.fetchDiffResult(parts, options);
     return result?.diff;
   }
 
-  async fetchDiffResult(parts: AdoPrUrlParts): Promise<AdoDiffResult | undefined> {
-    const session = await this.getSessionImpl(true);
+  async fetchDiffResult(parts: AdoPrUrlParts, options: AuthRequestOptions = {}): Promise<AdoDiffResult | undefined> {
+    throwIfAborted(options.signal);
+    const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) return undefined;
 
+    const detailsSignal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
     const detailsResponse = await this.fetchImpl(this.prApiUrl(parts), {
       headers: this.jsonHeaders(session.accessToken),
-      signal: AbortSignal.timeout(30_000),
+      signal: detailsSignal,
     });
 
     if (!detailsResponse.ok) {
@@ -101,9 +109,10 @@ export class AdoPrClient {
       throw new Error('Azure DevOps PR metadata did not include source and target versions');
     }
 
+    const diffSignal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
     const diffResponse = await this.fetchImpl(this.diffApiUrl(parts, baseVersion, targetVersion), {
       headers: this.jsonHeaders(session.accessToken),
-      signal: AbortSignal.timeout(30_000),
+      signal: diffSignal,
     });
 
     if (!diffResponse.ok) {
@@ -127,8 +136,13 @@ export class AdoPrClient {
     return { diff: renderAdoDiffSummary(parts, details, parsed, synthetic), synthetic };
   }
 
-  async postThread(parts: AdoPrUrlParts, comment: AdoThreadCommentInput): Promise<void> {
-    const session = await this.getSessionImpl(true);
+  async postThread(
+    parts: AdoPrUrlParts,
+    comment: AdoThreadCommentInput,
+    options: AuthRequestOptions = { interactive: true },
+  ): Promise<void> {
+    throwIfAborted(options.signal);
+    const session = await raceWithAbort(this.getSessionImpl(options), options.signal);
     if (!session) {
       throw new Error('Azure DevOps authentication is required to post review comments');
     }
@@ -158,6 +172,7 @@ export class AdoPrClient {
       };
     }
 
+    const signal = options.signal ? combineSignals(options.signal, 30_000) : AbortSignal.timeout(30_000);
     const response = await this.fetchImpl(this.threadsApiUrl(parts), {
       method: 'POST',
       headers: {
@@ -165,7 +180,7 @@ export class AdoPrClient {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
+      signal,
     });
 
     if (!response.ok) {
