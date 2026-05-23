@@ -293,8 +293,8 @@ export class RepoManager {
 
     const cancellation = abortFromToken(token);
     try {
-      this.log.info('Requesting GitHub auth session');
       this.throwIfCancelled(token, cancellation.signal, 'GitHub authentication');
+      this.log.info('Requesting GitHub auth session');
       const session = await this.runStep('GitHub authentication', () =>
         getGitHubSession({ interactive: true, signal: cancellation.signal }),
       );
