@@ -173,6 +173,28 @@ describe('BaseGitHubProvider repository filtering', () => {
     provider.dispose();
   });
 
+  it('shows the refresh-oriented SSO message for user-triggered refreshes', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    const provider = new TestGitHubProvider();
+    const error = new GitHubSsoError('GitHub SSO authorization required', {
+      orgName: 'example-refresh',
+    });
+    provider.fetchImpl.mockRejectedValue(error);
+
+    await provider.refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showErrorMessage).toHaveBeenCalledWith(
+      'DevDocket: GitHub requires SSO authorization for the "example-refresh" organization\nbefore DevDocket can refresh items from it.',
+      'Authorize in browser',
+      'Retry',
+      'Dismiss',
+    );
+
+    provider.dispose();
+  });
+
   it('keeps background SSO prompts deduplicated after dismiss', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
     vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);

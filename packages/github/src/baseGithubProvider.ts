@@ -272,10 +272,11 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     const orgLabel = error.orgName
       ? `the "${error.orgName}" organization`
       : 'this organization';
-    const message = dedupeByOrg
-      ? `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`
-      : `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
-    const actions = authorizationUrl
+    const safeAuthorizationUrl = authorizationUrl && isSafeExternalUrl(authorizationUrl)
+      ? authorizationUrl
+      : undefined;
+    const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`;
+    const actions = safeAuthorizationUrl
       ? (retry
         ? [AUTHORIZE_IN_BROWSER, RETRY, DISMISS] as const
         : [AUTHORIZE_IN_BROWSER, DISMISS] as const)
@@ -289,8 +290,8 @@ export abstract class BaseGitHubProvider extends BaseProvider {
           if (dedupeByOrg) {
             notifiedGitHubSsoOrgs.delete(dedupeKey);
           }
-          if (authorizationUrl) {
-            await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
+          if (safeAuthorizationUrl) {
+            await vscode.env.openExternal(vscode.Uri.parse(safeAuthorizationUrl));
           }
           return;
         }
@@ -326,6 +327,15 @@ function getGitHubSsoAuthorizationUrl(error: Pick<GitHubSsoError, 'ssoUrl' | 'or
     return `https://github.com/orgs/${encodeURIComponent(error.orgName)}/sso`;
   }
   return undefined;
+}
+
+function isSafeExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
