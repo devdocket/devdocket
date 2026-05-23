@@ -133,6 +133,26 @@ describe('BaseGitHubProvider repository filtering', () => {
     provider.dispose();
   });
 
+  it('falls back to the org SSO page when the header omits a direct authorization URL', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    vi.mocked(window.showErrorMessage).mockResolvedValue('Authorize in browser' as any);
+    const provider = new TestGitHubProvider();
+    const error = new GitHubSsoError('GitHub SSO authorization required', {
+      orgName: 'example-fallback',
+    });
+    provider.fetchImpl.mockRejectedValue(error);
+
+    await expect(provider.refreshInBackground()).rejects.toThrow(error);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(env.openExternal).toHaveBeenCalledWith(expect.objectContaining({
+      toString: expect.any(Function),
+    }));
+    expect(env.openExternal.mock.calls[0][0].toString()).toBe('https://github.com/orgs/example-fallback/sso');
+
+    provider.dispose();
+  });
+
   it('deduplicates background SSO prompts until the user takes an action', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
     vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);

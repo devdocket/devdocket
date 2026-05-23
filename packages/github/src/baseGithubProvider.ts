@@ -268,6 +268,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       notifiedGitHubSsoOrgs.add(dedupeKey);
     }
 
+    const authorizationUrl = getGitHubSsoAuthorizationUrl(error);
     const orgLabel = error.orgName
       ? `the "${error.orgName}" organization`
       : 'this organization';
@@ -278,25 +279,29 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       ? [AUTHORIZE_IN_BROWSER, RETRY, DISMISS] as const
       : [AUTHORIZE_IN_BROWSER, DISMISS] as const;
 
-    void Promise.resolve(vscode.window.showErrorMessage(message, ...actions)).then(async action => {
-      if (action === AUTHORIZE_IN_BROWSER && error.ssoUrl) {
-        if (dedupeByOrg) {
-          notifiedGitHubSsoOrgs.delete(dedupeKey);
+    void Promise.resolve(vscode.window.showErrorMessage(message, ...actions))
+      .then(async action => {
+        if (action === AUTHORIZE_IN_BROWSER) {
+          if (dedupeByOrg) {
+            notifiedGitHubSsoOrgs.delete(dedupeKey);
+          }
+          if (authorizationUrl) {
+            await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
+          }
+          return;
         }
-        await vscode.env.openExternal(vscode.Uri.parse(error.ssoUrl));
-        return;
-      }
-      if (action === RETRY && retry) {
-        if (dedupeByOrg) {
-          notifiedGitHubSsoOrgs.delete(dedupeKey);
+        if (action === RETRY && retry) {
+          if (dedupeByOrg) {
+            notifiedGitHubSsoOrgs.delete(dedupeKey);
+          }
+          try {
+            await retry();
+          } catch (retryError) {
+            logger.error('GitHub SSO retry failed', retryError);
+          }
         }
-        try {
-          await retry();
-        } catch (retryError) {
-          logger.error('GitHub SSO retry failed', retryError);
-        }
-      }
-    });
+      })
+      .catch(notificationError => logger.error('GitHub SSO notification failed', notificationError));
   }
 
   private showGitHubSettingsWarning(message: string): void {
@@ -307,6 +312,16 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     });
   }
 
+}
+
+function getGitHubSsoAuthorizationUrl(error: Pick<GitHubSsoError, 'ssoUrl' | 'orgName'>): string | undefined {
+  if (error.ssoUrl) {
+    return error.ssoUrl;
+  }
+  if (error.orgName) {
+    return `https://github.com/orgs/${encodeURIComponent(error.orgName)}/sso`;
+  }
+  return undefined;
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {
