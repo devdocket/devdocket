@@ -13,7 +13,6 @@ import {
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
 const MAX_TOTAL_ENTRIES = 5_000;
-const EVICTION_FRACTION = 0.2;
 
 export type InboxState = (typeof inboxStates)[number];
 
@@ -39,10 +38,7 @@ function trimInboxStateRecords(records: PersistedInboxStateRecord[]): PersistedI
     return records;
   }
 
-  const evictedCount = Math.max(
-    records.length - MAX_TOTAL_ENTRIES,
-    Math.ceil(records.length * EVICTION_FRACTION),
-  );
+  const evictedCount = records.length - MAX_TOTAL_ENTRIES;
   const keysToEvict = new Set(
     records
       .map((record, index) => ({

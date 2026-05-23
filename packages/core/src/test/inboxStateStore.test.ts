@@ -751,11 +751,11 @@ describe('InboxStateStore', () => {
       }
 
       const records = await store.loadAll();
-      expect(records).toHaveLength(4_800);
-      expect(persistedRecords()).toHaveLength(4_800);
+      expect(records).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
       expect(store.getState('gh', 'issue-0')).toBeUndefined();
-      expect(store.getState('gh', 'issue-1199')).toBeUndefined();
-      expect(store.getState('gh', 'issue-1200')).toBe('accepted');
+      expect(store.getState('gh', 'issue-999')).toBeUndefined();
+      expect(store.getState('gh', 'issue-1000')).toBe('accepted');
       expect(store.getState('gh', 'issue-5999')).toBe('accepted');
     });
 
@@ -771,11 +771,11 @@ describe('InboxStateStore', () => {
       const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
       await store2.load();
 
-      expect(await store2.loadAll()).toHaveLength(4_800);
-      expect(persistedRecords()).toHaveLength(4_800);
+      expect(await store2.loadAll()).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
       expect(store2.getState('gh', 'issue-0')).toBeUndefined();
-      expect(store2.getState('gh', 'issue-1200')).toBe('dismissed');
-      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed inbox-state.json from 6000 to 4800 entries while loading'));
+      expect(store2.getState('gh', 'issue-1000')).toBe('dismissed');
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed inbox-state.json from 6000 to 5000 entries while loading'));
       store2.dispose();
       infoSpy.mockRestore();
     });
