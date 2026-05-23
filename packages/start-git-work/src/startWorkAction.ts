@@ -323,7 +323,7 @@ export class StartWorkAction implements DevDocketAction {
     } catch (worktreeErr) {
       if (this.isAbortError(worktreeErr)) {
         try {
-          await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+          await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
           cancellationState.cleanupActivity = undefined;
         } catch (rollbackErr) {
           const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
@@ -333,7 +333,7 @@ export class StartWorkAction implements DevDocketAction {
       }
 
       try {
-        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+        await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
       } catch (rollbackErr) {
         const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
         void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
