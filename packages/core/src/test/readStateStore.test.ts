@@ -392,6 +392,21 @@ describe('ReadStateStore', () => {
       warnSpy.mockRestore();
       store2.dispose();
     });
+
+    it('keeps cached keys when the remote snapshot is an invalid array', async () => {
+      fileSystem.writeJson(fileUri, ['gh::keep']);
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+      fileSystem.writeJson(fileUri, [42]);
+
+      await store2.add('gh::fresh');
+
+      expect(persistedKeys().sort()).toEqual(['gh::fresh', 'gh::keep']);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped 1 invalid read state entries'));
+      warnSpy.mockRestore();
+      store2.dispose();
+    });
   });
 
   describe('prune', () => {

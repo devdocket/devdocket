@@ -81,7 +81,8 @@ export class ReadStateStore {
 
     for (const [key, createdAt] of this.items) {
       if (!this.removedSinceLoad.has(key) && (!snapshot.available || this.addedSinceLoad.has(key) || remoteKeys.has(key))) {
-        merged.set(key, createdAt);
+        const existingCreatedAt = merged.get(key);
+        merged.set(key, existingCreatedAt === undefined ? createdAt : Math.min(existingCreatedAt, createdAt));
       }
     }
 
@@ -133,6 +134,7 @@ export class ReadStateStore {
       invalidCount++;
     }
 
+    const available = invalidCount === 0;
     if (invalidCount > 0) {
       logger.warn(`Skipped ${invalidCount} invalid read state entries (expected strings or { key, createdAt })`);
     }
@@ -145,7 +147,7 @@ export class ReadStateStore {
       }
     }
 
-    return { records: Array.from(deduped.values()), available: true };
+    return { records: Array.from(deduped.values()), available };
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */
