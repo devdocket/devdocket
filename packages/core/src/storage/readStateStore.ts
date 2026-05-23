@@ -7,6 +7,7 @@ const MAX_TOTAL_ENTRIES = 5_000;
 
 interface PersistedReadStateRecord {
   key: string;
+  /** First-seen timestamp used for FIFO eviction of persisted read-state entries. */
   createdAt: number;
 }
 
@@ -39,9 +40,9 @@ export class ReadStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
   readonly onDidChange = this._onDidChange.event;
-  /** Keys added locally since last load — ensures local additions survive remote merges. */
+  /** Keys added locally since the last load or persist — ensures local additions survive remote merges. */
   private readonly addedSinceLoad = new Set<string>();
-  /** Keys removed locally since last load — prevents re-adding from stale remote data. */
+  /** Keys removed locally since the last load or persist — prevents re-adding from stale remote data. */
   private readonly removedSinceLoad = new Set<string>();
 
   constructor(private readonly fileStore: FileStore<unknown[]>) {}

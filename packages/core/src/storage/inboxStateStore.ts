@@ -30,6 +30,7 @@ export interface InboxStateRecord {
 }
 
 interface PersistedInboxStateRecord extends InboxStateRecord {
+  /** Last-write timestamp used for eviction so recently updated inbox decisions survive capacity trimming. */
   createdAt: number;
 }
 
@@ -183,19 +184,27 @@ export class InboxStateStore {
     if (!this.loaded) { await this.load(); }
     const k = this.key(providerId, externalId);
     const previousValue = this.cache.get(k);
+    const nextVersion = version ?? previousValue?.version;
+    const nextResurfaceVersion = previousValue?.resurfaceVersion;
+    if (
+      previousValue
+      && previousValue.inboxState === state
+      && previousValue.version === nextVersion
+      && previousValue.resurfaceVersion === nextResurfaceVersion
+    ) {
+      return;
+    }
     const newRecord: PersistedInboxStateRecord = {
       providerId,
       externalId,
       inboxState: state,
-      createdAt: previousValue?.createdAt ?? Date.now(),
+      createdAt: Date.now(),
     };
-    if (version !== undefined) {
-      newRecord.version = version;
-    } else if (previousValue?.version !== undefined) {
-      newRecord.version = previousValue.version;
+    if (nextVersion !== undefined) {
+      newRecord.version = nextVersion;
     }
-    if (previousValue?.resurfaceVersion !== undefined) {
-      newRecord.resurfaceVersion = previousValue.resurfaceVersion;
+    if (nextResurfaceVersion !== undefined) {
+      newRecord.resurfaceVersion = nextResurfaceVersion;
     }
     this.cache.set(k, newRecord);
     this.dirtyKeys.add(k);
@@ -210,29 +219,38 @@ export class InboxStateStore {
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }>): Promise<void> {
     if (!this.loaded) { await this.load(); }
     if (items.length === 0) { return; }
+    let changed = false;
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
       const previousRecord = this.cache.get(k);
+      const nextVersion = item.version ?? previousRecord?.version;
+      const nextResurfaceVersion = item.resurfaceVersion ?? previousRecord?.resurfaceVersion;
+      if (
+        previousRecord
+        && previousRecord.inboxState === item.state
+        && previousRecord.version === nextVersion
+        && previousRecord.resurfaceVersion === nextResurfaceVersion
+      ) {
+        continue;
+      }
       const newRecord: PersistedInboxStateRecord = {
         providerId: item.providerId,
         externalId: item.externalId,
         inboxState: item.state,
-        createdAt: previousRecord?.createdAt ?? Date.now(),
+        createdAt: Date.now(),
       };
-      if (item.version !== undefined) {
-        newRecord.version = item.version;
-      } else if (previousRecord?.version !== undefined) {
-        newRecord.version = previousRecord.version;
+      if (nextVersion !== undefined) {
+        newRecord.version = nextVersion;
       }
-      if (item.resurfaceVersion !== undefined) {
-        newRecord.resurfaceVersion = item.resurfaceVersion;
-      } else if (previousRecord?.resurfaceVersion !== undefined) {
-        newRecord.resurfaceVersion = previousRecord.resurfaceVersion;
+      if (nextResurfaceVersion !== undefined) {
+        newRecord.resurfaceVersion = nextResurfaceVersion;
       }
       this.cache.set(k, newRecord);
       this.dirtyKeys.add(k);
       this.removedKeys.delete(k);
+      changed = true;
     }
+    if (!changed) { return; }
     await this.persist();
     this._onDidChange.fire();
   }

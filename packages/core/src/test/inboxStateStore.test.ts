@@ -70,6 +70,29 @@ describe('InboxStateStore', () => {
     expect(records[0].inboxState).toBe('accepted');
   });
 
+  it('skips no-op setState writes', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted', createdAt: 321 },
+    ]);
+    const listener = vi.fn();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(999);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    store2.onDidChange(listener);
+    await store2.load();
+    await store2.setState('gh', 'issue-1', 'accepted');
+
+    expect(listener).not.toHaveBeenCalled();
+    expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+      providerId: 'gh',
+      externalId: 'issue-1',
+      inboxState: 'accepted',
+      createdAt: 321,
+    }));
+    nowSpy.mockRestore();
+    store2.dispose();
+  });
+
   it('should return all records from loadAll', async () => {
     await store.setState('gh', 'issue-1', 'unseen');
     await store.setState('gh', 'issue-2', 'accepted');
@@ -132,10 +155,11 @@ describe('InboxStateStore', () => {
     }));
   });
 
-  it('preserves createdAt timestamps across reload and rewrite', async () => {
+  it('refreshes createdAt timestamps when an existing record is updated', async () => {
     fileSystem.writeJson(fileUri, [
       { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted', createdAt: 321 },
     ]);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(654);
 
     const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
     await store2.load();
@@ -145,11 +169,12 @@ describe('InboxStateStore', () => {
       providerId: 'gh',
       externalId: 'issue-1',
       inboxState: 'dismissed',
-      createdAt: 321,
+      createdAt: 654,
     }));
     expect(await store2.loadAll()).toEqual([
       { providerId: 'gh', externalId: 'issue-1', inboxState: 'dismissed' },
     ]);
+    nowSpy.mockRestore();
     store2.dispose();
   });
 
@@ -608,6 +633,27 @@ describe('InboxStateStore', () => {
       expect(store.getVersion('gh', 'pr-1')).toBe('sha-new');
     });
 
+    it('refreshes createdAt when only the version changes via setState', async () => {
+      fileSystem.writeJson(fileUri, [
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-old', createdAt: 10 },
+      ]);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(20);
+
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      await freshStore.load();
+      await freshStore.setState('gh', 'pr-1', 'accepted', 'sha-new');
+
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'pr-1',
+        inboxState: 'accepted',
+        version: 'sha-new',
+        createdAt: 20,
+      }));
+      nowSpy.mockRestore();
+      freshStore.dispose();
+    });
+
     it('should persist version to the backing JSON file', async () => {
       await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
 
@@ -632,6 +678,55 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pr-1', state: 'accepted' },
       ]);
       expect(store.getVersion('gh', 'pr-1')).toBe('sha-abc');
+    });
+
+    it('refreshes createdAt when setStates updates an existing record', async () => {
+      fileSystem.writeJson(fileUri, [
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', createdAt: 50 },
+      ]);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(75);
+
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      await freshStore.load();
+      await freshStore.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'dismissed' },
+      ]);
+
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'pr-1',
+        inboxState: 'dismissed',
+        createdAt: 75,
+      }));
+      nowSpy.mockRestore();
+      freshStore.dispose();
+    });
+
+    it('skips no-op setStates writes', async () => {
+      fileSystem.writeJson(fileUri, [
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-1', resurfaceVersion: 'rv-1', createdAt: 44 },
+      ]);
+      const listener = vi.fn();
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(99);
+
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      freshStore.onDidChange(listener);
+      await freshStore.load();
+      await freshStore.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-1', resurfaceVersion: 'rv-1' },
+      ]);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'pr-1',
+        inboxState: 'accepted',
+        version: 'sha-1',
+        resurfaceVersion: 'rv-1',
+        createdAt: 44,
+      }));
+      nowSpy.mockRestore();
+      freshStore.dispose();
     });
 
     it('should update version in setStates when provided', async () => {
