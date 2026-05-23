@@ -258,6 +258,11 @@ describe('RepoManager', () => {
       await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42', cancellation.token))
         .rejects.toMatchObject({ name: 'AbortError' });
       expect(authentication.getSession).not.toHaveBeenCalled();
+      expect(mockLogOutputChannel.info).toHaveBeenCalledWith('Cancellation detected before GitHub authentication');
+      const cancellationLogs = vi.mocked(mockLogOutputChannel.info).mock.calls
+        .map(call => String(call[0]))
+        .filter(message => message.includes('Cancellation '));
+      expect(cancellationLogs).toHaveLength(1);
     });
 
     it('checks for a silent GitHub session before prompting during worktree setup', async () => {

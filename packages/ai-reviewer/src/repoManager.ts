@@ -723,6 +723,7 @@ export class RepoManager {
 
   private throwIfCancelled(token: vscode.CancellationToken | undefined, signal: AbortSignal | undefined, step: string): void {
     if (token?.isCancellationRequested || signal?.aborted) {
+      this.log.info(`Cancellation detected before ${step}`);
       throw createStepAbortError(step);
     }
   }
