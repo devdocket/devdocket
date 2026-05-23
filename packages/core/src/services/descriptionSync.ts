@@ -24,7 +24,7 @@ export async function syncProviderDescriptions(
     const workItem = workGraph.findItemByProvenance(providerId, discovered.externalId);
     if (workItem && 'description' in discovered && workItem.description !== discovered.description) {
       try {
-        await workGraph.updateItem(workItem.id, { description: discovered.description });
+        await workGraph.updateItem(workItem.id, { description: discovered.description }, { source: 'provider-sync' });
         logger.debug(`Synced description for ${providerId}/${discovered.externalId}`);
       } catch (err) {
         logger.error(`Failed to sync description for ${providerId}/${discovered.externalId}`, err);

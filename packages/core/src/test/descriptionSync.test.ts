@@ -33,7 +33,7 @@ describe('syncProviderDescriptions', () => {
     await syncProviderDescriptions('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.findItemByProvenance).toHaveBeenCalledWith('github', '42');
-    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { description: 'New description' });
+    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { description: 'New description' }, { source: 'provider-sync' });
   });
 
   it('does not update when descriptions match', async () => {
@@ -73,7 +73,7 @@ describe('syncProviderDescriptions', () => {
     await syncProviderDescriptions('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
-    expect(workGraph.updateItem).toHaveBeenCalledWith('gh-1', { description: 'Updated GH desc' });
+    expect(workGraph.updateItem).toHaveBeenCalledWith('gh-1', { description: 'Updated GH desc' }, { source: 'provider-sync' });
     expect(workGraph.findItemByProvenance).not.toHaveBeenCalledWith('ado', expect.anything());
   });
 
@@ -91,7 +91,7 @@ describe('syncProviderDescriptions', () => {
     await syncProviderDescriptions('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
-    expect(workGraph.updateItem).toHaveBeenCalledWith('gh-1', { description: 'Updated GH desc' });
+    expect(workGraph.updateItem).toHaveBeenCalledWith('gh-1', { description: 'Updated GH desc' }, { source: 'provider-sync' });
   });
 
   it('continues syncing other items when one update fails', async () => {
@@ -111,7 +111,7 @@ describe('syncProviderDescriptions', () => {
     await syncProviderDescriptions('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
-    expect(workGraph.updateItem).toHaveBeenCalledWith('item-2', { description: 'Updated' });
+    expect(workGraph.updateItem).toHaveBeenCalledWith('item-2', { description: 'Updated' }, { source: 'provider-sync' });
   });
 
   it('does nothing when provider has no items', async () => {
@@ -131,7 +131,7 @@ describe('syncProviderDescriptions', () => {
 
     await syncProviderDescriptions('github', providerRegistry as any, workGraph as any);
 
-    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { description: undefined });
+    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { description: undefined }, { source: 'provider-sync' });
   });
 
   it('does not update when both descriptions are undefined', async () => {
