@@ -194,7 +194,11 @@ describe('ProviderRegistry', () => {
     await vi.waitFor(() => expect(reg.findProviderItem('ado-pr-reviews', 'myorg/MyProject/myrepo/42')).toEqual(
       expect.objectContaining({ externalId: 'myorg/MyProject/myrepo/42', itemType: 'pr' }),
     ));
-    expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42', undefined, { interactive: false });
+    expect(provider.resolveUrl).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+      expect.any(AbortSignal),
+      { interactive: false },
+    );
   });
 
   it('rehydrates only active imported work items', async () => {
@@ -231,7 +235,11 @@ describe('ProviderRegistry', () => {
 
     reg.register(provider);
     await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
-    expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/43', undefined, { interactive: false });
+    expect(provider.resolveUrl).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/43',
+      expect.any(AbortSignal),
+      { interactive: false },
+    );
   });
 
   it('throws on duplicate provider id', () => {

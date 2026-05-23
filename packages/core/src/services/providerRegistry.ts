@@ -366,7 +366,7 @@ export class ProviderRegistry {
       }
 
       try {
-        const resolved = await provider.resolveUrl(importedItem.url, undefined, { interactive: false });
+        const resolved = await provider.resolveUrl(importedItem.url, AbortSignal.timeout(30_000), { interactive: false });
         if (!resolved || resolved.externalId !== importedItem.externalId) {
           continue;
         }
