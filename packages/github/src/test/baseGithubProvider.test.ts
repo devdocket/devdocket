@@ -217,6 +217,24 @@ describe('BaseGitHubProvider repository filtering', () => {
     provider.dispose();
   });
 
+  it('deduplicates non-interactive refresh SSO prompts', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    const provider = new TestGitHubProvider();
+    const error = new GitHubSsoError('GitHub SSO authorization required', {
+      orgName: 'example-noninteractive',
+    });
+    provider.fetchImpl.mockRejectedValue(error);
+
+    await provider.refresh(undefined, { interactive: false });
+    await provider.refresh(undefined, { interactive: false });
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showErrorMessage).toHaveBeenCalledTimes(1);
+
+    provider.dispose();
+  });
+
   it('keeps background SSO prompts deduplicated after dismiss', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
     vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);

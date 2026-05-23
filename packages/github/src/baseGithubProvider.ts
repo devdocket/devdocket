@@ -90,7 +90,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
         logger.debug(`${this.label} fetch aborted due to cancellation`);
       } else {
         if (err instanceof GitHubSsoError) {
-          this.showGitHubSsoNotification(err, () => this.refresh(undefined, { interactive: true }));
+          this.showGitHubSsoNotification(err, () => this.refresh(undefined, { interactive: true }), !interactive);
         }
         logger.error(`Failed to fetch ${this.label}`, err);
       }

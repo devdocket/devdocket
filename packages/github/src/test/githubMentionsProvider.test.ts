@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubMentionsProvider } from '../githubMentionsProvider';
+import { GitHubSsoError } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
@@ -106,6 +107,18 @@ describe('GitHubMentionsProvider', () => {
   it('has correct id and label', () => {
     expect(provider.id).toBe('github-mentions');
     expect(provider.label).toBe('GitHub Mentions');
+  });
+
+  it('propagates SSO errors during background refresh', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: (name: string) => name === 'x-github-sso' ? 'required; url=https://github.com/orgs/example-mentions/sso?authorization_request=abc123' : null },
+      text: async () => JSON.stringify({ message: 'Resource protected by organization SAML enforcement.' }),
+    });
+
+    await expect(provider.refreshInBackground()).rejects.toBeInstanceOf(GitHubSsoError);
   });
 
   it('requests read:org scope for team mention detection', async () => {
