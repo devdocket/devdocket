@@ -303,7 +303,7 @@ export class RepoManager {
         throw new Error('GitHub authentication required');
       }
       this.log.debug(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
-      this.throwIfCancelled(token, cancellation.signal, 'GitHub authentication');
+      this.throwIfCancelled(token, cancellation.signal, 'validate repository');
 
       const cloneUrl = `https://github.com/${org}/${repo}.git`;
       const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository', undefined, cancellation.signal);
