@@ -485,7 +485,7 @@ export class RepoManager {
         this.log.error('Microsoft authentication not available');
         throw new Error('Azure DevOps authentication required');
       }
-      this.throwIfCancelled(token, cancellation.signal, 'Azure DevOps authentication');
+      this.throwIfCancelled(token, cancellation.signal, 'fetch PR metadata');
 
       const details = await this.runStep('fetch PR metadata', () =>
         new AdoPrClient(fetch, async () => session).fetchPullRequestDetails(
