@@ -215,6 +215,21 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       }),
     );
   });
+
+  it('skips interactive auth retry when resolveUrl is non-interactive', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+
+    await expect(
+      provider.resolveUrl('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42', undefined, { interactive: false }),
+    ).rejects.toThrow('not found');
+
+    expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('AdoWorkItemProvider.resolveUrl', () => {
@@ -551,5 +566,20 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
         }),
       }),
     );
+  });
+
+  it('skips interactive auth retry for work-item resolveUrl when non-interactive', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+    });
+
+    await expect(
+      provider.resolveUrl('https://dev.azure.com/myorg/MyProject/_workitems/edit/99', undefined, { interactive: false }),
+    ).rejects.toThrow('not found');
+
+    expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
   });
 });
