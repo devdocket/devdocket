@@ -120,7 +120,15 @@ export class ReadStateStore {
       logger.warn(`Skipped ${invalidCount} invalid read state entries (expected strings or { key, createdAt })`);
     }
 
-    return records;
+    const deduped = new Map<string, PersistedReadStateRecord>();
+    for (const record of records) {
+      const existing = deduped.get(record.key);
+      if (!existing || record.createdAt < existing.createdAt) {
+        deduped.set(record.key, record);
+      }
+    }
+
+    return Array.from(deduped.values());
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */

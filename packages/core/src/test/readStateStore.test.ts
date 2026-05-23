@@ -130,6 +130,26 @@ describe('ReadStateStore', () => {
     store2.dispose();
   });
 
+  it('deduplicates persisted read-state keys while keeping the oldest timestamp', async () => {
+    fileSystem.writeJson(fileUri, [
+      { key: 'gh::dup', createdAt: 5 },
+      { key: 'gh::dup', createdAt: 1 },
+      { key: 'gh::other', createdAt: 3 },
+    ]);
+
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    await store2.load();
+    await store2.add('gh::fresh');
+
+    expect([...store2.keys()].sort()).toEqual(['gh::dup', 'gh::fresh', 'gh::other']);
+    expect(persistedRecords()).toEqual([
+      { key: 'gh::dup', createdAt: 1 },
+      { key: 'gh::other', createdAt: 3 },
+      { key: 'gh::fresh', createdAt: expect.any(Number) },
+    ]);
+    store2.dispose();
+  });
+
   it('should skip non-string elements in the array', async () => {
     fileSystem.writeJson(fileUri, ['valid::1', 42, null, true, 'valid::2', { obj: true }]);
 
