@@ -153,6 +153,26 @@ describe('BaseGitHubProvider repository filtering', () => {
     provider.dispose();
   });
 
+  it('omits authorize when no SSO URL can be derived', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    const provider = new TestGitHubProvider();
+    const error = new GitHubSsoError('GitHub SSO authorization required');
+    provider.fetchImpl.mockRejectedValue(error);
+
+    await expect(provider.refreshInBackground()).rejects.toThrow(error);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showErrorMessage).toHaveBeenCalledWith(
+      'DevDocket: GitHub requires SSO authorization for this organization\nbefore DevDocket can refresh items from it.',
+      'Retry',
+      'Dismiss',
+    );
+    expect(env.openExternal).not.toHaveBeenCalled();
+
+    provider.dispose();
+  });
+
   it('keeps background SSO prompts deduplicated after dismiss', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
     vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);

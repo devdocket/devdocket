@@ -275,9 +275,13 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     const message = dedupeByOrg
       ? `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`
       : `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
-    const actions = retry
-      ? [AUTHORIZE_IN_BROWSER, RETRY, DISMISS] as const
-      : [AUTHORIZE_IN_BROWSER, DISMISS] as const;
+    const actions = authorizationUrl
+      ? (retry
+        ? [AUTHORIZE_IN_BROWSER, RETRY, DISMISS] as const
+        : [AUTHORIZE_IN_BROWSER, DISMISS] as const)
+      : (retry
+        ? [RETRY, DISMISS] as const
+        : [DISMISS] as const);
 
     void Promise.resolve(vscode.window.showErrorMessage(message, ...actions))
       .then(async action => {
