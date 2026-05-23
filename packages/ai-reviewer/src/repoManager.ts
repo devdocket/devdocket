@@ -18,9 +18,9 @@ const UNSAFE_URL_CHARS = /[\s\x00-\x1f\x7f]/;
 let gitVersionChecked = false;
 
 /** Verify git >= 2.31 (needed for GIT_CONFIG_COUNT env vars). Runs once. */
-async function ensureGitVersion(): Promise<void> {
+async function ensureGitVersion(signal?: AbortSignal): Promise<void> {
   if (gitVersionChecked) return;
-  const raw = await gitExec(['version'], '.');
+  const raw = await gitExec(['version'], '.', { signal });
   const match = raw.match(/(\d+)\.(\d+)/);
   if (!match) {
     throw new Error(
@@ -64,15 +64,28 @@ export interface WorktreeInfo {
  * Uses GIT_CONFIG_COUNT/KEY/VALUE (git ≥ 2.31) so the token never appears
  * in process argument lists visible to other users.
  */
-async function gitAuth(args: string[], cwd: string, token: string, timeout = 30_000): Promise<string> {
+async function gitAuth(
+  args: string[],
+  cwd: string,
+  token: string,
+  timeout = 30_000,
+  signal?: AbortSignal,
+): Promise<string> {
   const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
-  return gitWithExtraHeader(args, cwd, `Authorization: Basic ${encoded}`, timeout);
+  return gitWithExtraHeader(args, cwd, `Authorization: Basic ${encoded}`, timeout, signal);
 }
 
-async function gitWithExtraHeader(args: string[], cwd: string, extraHeader: string, timeout = 30_000): Promise<string> {
-  await ensureGitVersion();
+async function gitWithExtraHeader(
+  args: string[],
+  cwd: string,
+  extraHeader: string,
+  timeout = 30_000,
+  signal?: AbortSignal,
+): Promise<string> {
+  await ensureGitVersion(signal);
   return gitExec(args, cwd, {
     timeout,
+    signal,
     env: {
       GIT_CONFIG_COUNT: '1',
       GIT_CONFIG_KEY_0: 'http.extraheader',
@@ -81,8 +94,14 @@ async function gitWithExtraHeader(args: string[], cwd: string, extraHeader: stri
   });
 }
 
-async function gitAdoAuth(args: string[], cwd: string, token: string, timeout = 30_000): Promise<string> {
-  return gitWithExtraHeader(args, cwd, `Authorization: Bearer ${token}`, timeout);
+async function gitAdoAuth(
+  args: string[],
+  cwd: string,
+  token: string,
+  timeout = 30_000,
+  signal?: AbortSignal,
+): Promise<string> {
+  return gitWithExtraHeader(args, cwd, `Authorization: Bearer ${token}`, timeout, signal);
 }
 
 function sanitizePathSegment(segment: string): string {
@@ -135,6 +154,38 @@ function cloneArgs(args: string[]): string[] {
     : args;
 }
 
+type RepoAbortError = Error & { step?: string };
+
+function isAbortError(err: unknown): err is RepoAbortError {
+  return err instanceof Error && err.name === 'AbortError';
+}
+
+function createStepAbortError(step: string): RepoAbortError {
+  const error = createAbortError() as RepoAbortError;
+  error.message = `Cancelled during ${step}`;
+  error.step = step;
+  return error;
+}
+
+function abortFromToken(token?: vscode.CancellationToken): { signal: AbortSignal | undefined; dispose(): void } {
+  if (!token) {
+    return { signal: undefined, dispose() {} };
+  }
+
+  const controller = new AbortController();
+  if (token.isCancellationRequested) {
+    controller.abort(createAbortError());
+  }
+
+  const subscription = token.onCancellationRequested(() => controller.abort(createAbortError()));
+  return {
+    signal: controller.signal,
+    dispose() {
+      subscription.dispose();
+    },
+  };
+}
+
 function underlyingErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
@@ -155,17 +206,20 @@ async function withPathContext<T>(operation: string, label: string, targetPath: 
   try {
     return await work;
   } catch (err) {
+    if (isAbortError(err)) {
+      throw err;
+    }
     throw pathContextError(operation, label, targetPath, err);
   }
 }
 
-async function configureLongPaths(clonePath: string): Promise<void> {
+async function configureLongPaths(clonePath: string, signal?: AbortSignal): Promise<void> {
   if (process.platform === 'win32') {
     await withPathContext(
       'Failed to configure Git long path support',
       'repo',
       clonePath,
-      gitExec(['config', '--local', 'core.longpaths', 'true'], clonePath),
+      gitExec(['config', '--local', 'core.longpaths', 'true'], clonePath, { signal }),
     );
   }
 }
@@ -237,21 +291,22 @@ export class RepoManager {
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
     this.log.debug(`Paths — clonePath: ${clonePath}, worktreePath: ${worktreePath}`);
 
-    const abortController = new AbortController();
-    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    const cancellation = abortFromToken(token);
     try {
       this.log.info('Requesting GitHub auth session');
-      this.throwIfCancelled(token, abortController.signal);
-      const session = await getGitHubSession({ interactive: true, signal: abortController.signal });
+      this.throwIfCancelled(token, cancellation.signal, 'GitHub authentication');
+      const session = await this.runStep('GitHub authentication', () =>
+        getGitHubSession({ interactive: true, signal: cancellation.signal }),
+      );
       if (!session) {
         this.log.error('GitHub authentication not available');
         throw new Error('GitHub authentication required');
       }
       this.log.debug(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'GitHub authentication');
 
       const cloneUrl = `https://github.com/${org}/${repo}.git`;
-      const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository');
+      const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository', undefined, cancellation.signal);
       this.log.debug(`Clone directory exists and is valid: ${cloneExists}`);
       if (!cloneExists) {
         this.log.info('Cloning repository');
@@ -263,25 +318,30 @@ export class RepoManager {
           cloneParent,
           vscode.workspace.fs.createDirectory(vscode.Uri.file(cloneParent)),
         );
-        await withPathContext(
-          'Failed to clone repository',
-          'repo',
-          clonePath,
-          gitAuth(
-            cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
-            cloneParent,
-            session.accessToken,
-            300_000,
+        await this.runStep('clone repository', () =>
+          withPathContext(
+            'Failed to clone repository',
+            'repo',
+            clonePath,
+            gitAuth(
+              cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
+              cloneParent,
+              session.accessToken,
+              300_000,
+              cancellation.signal,
+            ),
           ),
         );
         this.log.info('Clone complete');
       }
-      this.throwIfCancelled(token, abortController.signal);
-      await configureLongPaths(clonePath);
+      this.throwIfCancelled(token, cancellation.signal, 'configure Git long path support');
+      await this.runStep('configure Git long path support', () => configureLongPaths(clonePath, cancellation.signal));
 
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'fetch PR metadata');
       this.log.info('Fetching PR metadata from GitHub API');
-      const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken, abortController.signal);
+      const prMeta = await this.runStep('fetch PR metadata', () =>
+        this.fetchPrMetadata(org, repo, prNumber, session.accessToken, cancellation.signal),
+      );
       const baseRef = prMeta.baseRef;
       const headRef = `pr-${prNumber}`;
       const diffHeadRef = 'HEAD';
@@ -292,63 +352,86 @@ export class RepoManager {
         throw new Error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
       }
       this.log.info(`PR metadata — baseRef: ${baseRef}, headSha: ${prMeta.headSha}, local headRef: ${headRef}`);
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'validate worktree');
 
-      const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath);
+      const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath, cancellation.signal);
       this.log.debug(`Worktree directory exists and is valid: ${worktreeExists}`);
       if (worktreeExists) {
         this.log.info('Updating existing worktree — fetching PR head');
-        await withPathContext(
-          'Failed to fetch PR head',
-          'worktree',
-          worktreePath,
-          gitAuth(['fetch', 'origin', `pull/${prNumber}/head`], worktreePath, session.accessToken, 300_000),
+        await this.runStep('fetch PR head', () =>
+          withPathContext(
+            'Failed to fetch PR head',
+            'worktree',
+            worktreePath,
+            gitAuth(
+              ['fetch', 'origin', `pull/${prNumber}/head`],
+              worktreePath,
+              session.accessToken,
+              300_000,
+              cancellation.signal,
+            ),
+          ),
         );
-        await withPathContext(
-          'Failed to reset worktree',
-          'worktree',
-          worktreePath,
-          gitExec(['reset', '--hard', 'FETCH_HEAD'], worktreePath),
+        await this.runStep('reset worktree', () =>
+          withPathContext(
+            'Failed to reset worktree',
+            'worktree',
+            worktreePath,
+            gitExec(['reset', '--hard', 'FETCH_HEAD'], worktreePath, { signal: cancellation.signal }),
+          ),
         );
         this.log.info('Worktree updated');
       } else {
         this.log.info('Creating new worktree — fetching PR head');
-        await withPathContext(
-          'Failed to fetch PR head',
-          'repo',
-          clonePath,
-          gitAuth(['fetch', 'origin', `pull/${prNumber}/head:${headRef}`], clonePath, session.accessToken, 300_000),
+        await this.runStep('fetch PR head', () =>
+          withPathContext(
+            'Failed to fetch PR head',
+            'repo',
+            clonePath,
+            gitAuth(
+              ['fetch', 'origin', `pull/${prNumber}/head:${headRef}`],
+              clonePath,
+              session.accessToken,
+              300_000,
+              cancellation.signal,
+            ),
+          ),
         );
         this.log.info('PR head fetched');
       }
 
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'fetch base branch');
       this.log.info(`Fetching base branch: ${baseRef}`);
-      await withPathContext(
-        'Failed to fetch base branch',
-        'repo',
-        clonePath,
-        gitAuth(
-          ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
+      await this.runStep('fetch base branch', () =>
+        withPathContext(
+          'Failed to fetch base branch',
+          'repo',
           clonePath,
-          session.accessToken,
-          300_000,
+          gitAuth(
+            ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
+            clonePath,
+            session.accessToken,
+            300_000,
+            cancellation.signal,
+          ),
         ),
       );
       this.log.info('Base branch fetched');
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'fetch base branch');
 
       if (!worktreeExists) {
         if (cloneExists) {
-          await this.pruneWorktreeMetadata(clonePath);
+          await this.runStep('prune worktree metadata', () => this.pruneWorktreeMetadata(clonePath, undefined, cancellation.signal));
         }
         this.log.info('Creating worktree');
         this.log.debug(`Worktree destination: ${worktreePath}, ref: ${headRef}`);
-        await withPathContext(
-          'Failed to create worktree',
-          'worktree',
-          worktreePath,
-          gitExec(['worktree', 'add', worktreePath, headRef], clonePath),
+        await this.runStep('create worktree', () =>
+          withPathContext(
+            'Failed to create worktree',
+            'worktree',
+            worktreePath,
+            gitExec(['worktree', 'add', worktreePath, headRef], clonePath, { signal: cancellation.signal }),
+          ),
         );
         this.log.info('Worktree created');
       }
@@ -370,7 +453,7 @@ export class RepoManager {
       this.log.debug(`ensureWorktree complete — worktree ready at ${worktreePath}`);
       return info;
     } finally {
-      cancelListener?.dispose();
+      cancellation.dispose();
     }
   }
 
@@ -391,26 +474,29 @@ export class RepoManager {
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
     this.log.debug(`ADO paths — clonePath: ${clonePath}, worktreePath: ${worktreePath}`);
 
-    const abortController = new AbortController();
-    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    const cancellation = abortFromToken(token);
     try {
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'Azure DevOps authentication');
 
-      const session = await getAdoSession({ interactive: true, signal: abortController.signal });
+      const session = await this.runStep('Azure DevOps authentication', () =>
+        getAdoSession({ interactive: true, signal: cancellation.signal }),
+      );
       if (!session) {
         this.log.error('Microsoft authentication not available');
         throw new Error('Azure DevOps authentication required');
       }
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'Azure DevOps authentication');
 
-      const details = await new AdoPrClient(fetch, async () => session).fetchPullRequestDetails(
-        { org, project, repo, prId: prNumber },
-        { interactive: true, signal: abortController.signal },
+      const details = await this.runStep('fetch PR metadata', () =>
+        new AdoPrClient(fetch, async () => session).fetchPullRequestDetails(
+          { org, project, repo, prId: prNumber },
+          { interactive: true, signal: cancellation.signal },
+        ),
       );
       if (!details) {
         throw new Error('Azure DevOps authentication required');
       }
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'fetch PR metadata');
 
       const sourceRef = details.sourceRefName;
       const targetRef = details.targetRefName;
@@ -423,7 +509,7 @@ export class RepoManager {
         throw new Error('Azure DevOps repository clone URL is invalid');
       }
 
-      const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository');
+      const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository', undefined, cancellation.signal);
       if (!cloneExists) {
         this.log.info('Cloning Azure Repos repository');
         const cloneParent = path.dirname(clonePath);
@@ -433,59 +519,82 @@ export class RepoManager {
           cloneParent,
           vscode.workspace.fs.createDirectory(vscode.Uri.file(cloneParent)),
         );
-        await withPathContext(
-          'Failed to clone Azure Repos repository',
-          'repo',
-          clonePath,
-          gitAdoAuth(
-            cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
-            cloneParent,
-            session.accessToken,
-            300_000,
+        await this.runStep('clone repository', () =>
+          withPathContext(
+            'Failed to clone Azure Repos repository',
+            'repo',
+            clonePath,
+            gitAdoAuth(
+              cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
+              cloneParent,
+              session.accessToken,
+              300_000,
+              cancellation.signal,
+            ),
           ),
         );
         this.log.info('ADO clone complete');
       }
-      this.throwIfCancelled(token, abortController.signal);
-      await configureLongPaths(clonePath);
+      this.throwIfCancelled(token, cancellation.signal, 'configure Git long path support');
+      await this.runStep('configure Git long path support', () => configureLongPaths(clonePath, cancellation.signal));
 
-      this.throwIfCancelled(token, abortController.signal);
+      this.throwIfCancelled(token, cancellation.signal, 'fetch ADO refs');
       const headRef = `refs/devdocket/ado/pr-${prNumber}-head`;
       const baseRef = `refs/devdocket/ado/pr-${prNumber}-base`;
       // Force-update DevDocket-owned refs so force-pushed PR branches are reflected accurately.
-      await withPathContext(
-        'Failed to fetch ADO source ref',
-        'repo',
-        clonePath,
-        gitAdoAuth(['fetch', 'origin', `+${sourceRef}:${headRef}`], clonePath, session.accessToken, 300_000),
+      await this.runStep('fetch ADO source ref', () =>
+        withPathContext(
+          'Failed to fetch ADO source ref',
+          'repo',
+          clonePath,
+          gitAdoAuth(
+            ['fetch', 'origin', `+${sourceRef}:${headRef}`],
+            clonePath,
+            session.accessToken,
+            300_000,
+            cancellation.signal,
+          ),
+        ),
       );
-      await withPathContext(
-        'Failed to fetch ADO target ref',
-        'repo',
-        clonePath,
-        gitAdoAuth(['fetch', 'origin', `+${targetRef}:${baseRef}`], clonePath, session.accessToken, 300_000),
+      await this.runStep('fetch ADO target ref', () =>
+        withPathContext(
+          'Failed to fetch ADO target ref',
+          'repo',
+          clonePath,
+          gitAdoAuth(
+            ['fetch', 'origin', `+${targetRef}:${baseRef}`],
+            clonePath,
+            session.accessToken,
+            300_000,
+            cancellation.signal,
+          ),
+        ),
       );
 
-      this.throwIfCancelled(token, abortController.signal);
-      const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath);
+      this.throwIfCancelled(token, cancellation.signal, 'validate worktree');
+      const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath, cancellation.signal);
       if (worktreeExists) {
         this.log.info('Updating existing ADO worktree');
-        await withPathContext(
-          'Failed to reset ADO worktree',
-          'worktree',
-          worktreePath,
-          gitExec(['reset', '--hard', headRef], worktreePath),
+        await this.runStep('reset worktree', () =>
+          withPathContext(
+            'Failed to reset ADO worktree',
+            'worktree',
+            worktreePath,
+            gitExec(['reset', '--hard', headRef], worktreePath, { signal: cancellation.signal }),
+          ),
         );
       } else {
         if (cloneExists) {
-          await this.pruneWorktreeMetadata(clonePath);
+          await this.runStep('prune worktree metadata', () => this.pruneWorktreeMetadata(clonePath, undefined, cancellation.signal));
         }
         this.log.info('Creating ADO worktree');
-        await withPathContext(
-          'Failed to create ADO worktree',
-          'worktree',
-          worktreePath,
-          gitExec(['worktree', 'add', '--detach', worktreePath, headRef], clonePath),
+        await this.runStep('create worktree', () =>
+          withPathContext(
+            'Failed to create ADO worktree',
+            'worktree',
+            worktreePath,
+            gitExec(['worktree', 'add', '--detach', worktreePath, headRef], clonePath, { signal: cancellation.signal }),
+          ),
         );
       }
 
@@ -506,7 +615,7 @@ export class RepoManager {
       this.log.debug(`ensureAdoWorktree complete — worktree ready at ${worktreePath}`);
       return info;
     } finally {
-      cancelListener?.dispose();
+      cancellation.dispose();
     }
   }
 
@@ -520,7 +629,7 @@ export class RepoManager {
   }
 
   /** Remove a single worktree. */
-  async removeWorktree(prUrl: string): Promise<void> {
+  async removeWorktree(prUrl: string, token?: vscode.CancellationToken): Promise<void> {
     this.log.debug(`removeWorktree called — prUrl: ${sanitizeUrlForLog(prUrl)}`);
     const key = this.keyForPrUrl(prUrl);
     if (!key) return;
@@ -531,50 +640,70 @@ export class RepoManager {
       return;
     }
 
-    await gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath);
-    validWorktreePaths.delete(path.resolve(info.worktreePath));
-    this.worktrees.delete(key);
-    this.log.info(`Worktree removed for ${key}`);
+    const cancellation = abortFromToken(token);
+    try {
+      this.throwIfCancelled(token, cancellation.signal, 'remove worktree');
+      await this.runStep('remove worktree', () =>
+        gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath, { signal: cancellation.signal }),
+      );
+      validWorktreePaths.delete(path.resolve(info.worktreePath));
+      this.worktrees.delete(key);
+      this.log.info(`Worktree removed for ${key}`);
+    } finally {
+      cancellation.dispose();
+    }
   }
 
   /** Remove entire clone + all worktrees for a repo. */
-  async removeRepo(org: string, repo: string): Promise<void> {
+  async removeRepo(org: string, repo: string, token?: vscode.CancellationToken): Promise<void> {
     this.log.info(`removeRepo called — ${org}/${repo}`);
     // Collect entries first to avoid mutation during iteration
     const toRemove = [...this.worktrees.entries()]
       .filter(([, info]) => info.org === org && info.repo === repo);
 
-    const repoBases = new Set<string>();
-    for (const [key, info] of toRemove) {
-      repoBases.add(path.dirname(info.clonePath));
-      try {
-        await gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath);
-        this.log.info(`Removed worktree for ${key}`);
-      } catch {
-        this.log.warn(`Worktree for ${key} already gone — skipping`);
+    const cancellation = abortFromToken(token);
+    try {
+      const repoBases = new Set<string>();
+      for (const [key, info] of toRemove) {
+        this.throwIfCancelled(token, cancellation.signal, 'remove worktree');
+        repoBases.add(path.dirname(info.clonePath));
+        try {
+          await this.runStep('remove worktree', () =>
+            gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath, { signal: cancellation.signal }),
+          );
+          this.log.info(`Removed worktree for ${key}`);
+        } catch (err) {
+          if (isAbortError(err)) {
+            throw err;
+          }
+          this.log.warn(`Worktree for ${key} already gone — skipping`);
+        }
+        validWorktreePaths.delete(path.resolve(info.worktreePath));
+        this.worktrees.delete(key);
       }
-      validWorktreePaths.delete(path.resolve(info.worktreePath));
-      this.worktrees.delete(key);
-    }
 
-    if (repoBases.size === 0) {
-      repoBases.add(path.join(this.storageUri.fsPath, 'repos', repoDirFor({ provider: 'github', org, repo })));
-      const [adoOrg, project, ...rest] = org.split('/');
-      if (adoOrg && project && rest.length === 0) {
-        repoBases.add(path.join(this.storageUri.fsPath, 'repos', repoDirFor({ provider: 'ado', org: adoOrg, project, repo })));
+      if (repoBases.size === 0) {
+        repoBases.add(path.join(this.storageUri.fsPath, 'repos', repoDirFor({ provider: 'github', org, repo })));
+        const [adoOrg, project, ...rest] = org.split('/');
+        if (adoOrg && project && rest.length === 0) {
+          repoBases.add(path.join(this.storageUri.fsPath, 'repos', repoDirFor({ provider: 'ado', org: adoOrg, project, repo })));
+        }
       }
-    }
 
-    for (const repoBase of repoBases) {
-      try {
-        await vscode.workspace.fs.delete(vscode.Uri.file(repoBase), {
-          recursive: true,
-          useTrash: false,
-        });
-        this.log.debug(`Deleted repo directory: ${repoBase}`);
-      } catch {
-        this.log.debug(`Repo directory not found (already cleaned): ${repoBase}`);
+      for (const repoBase of repoBases) {
+        this.throwIfCancelled(token, cancellation.signal, 'delete repository directory');
+        try {
+          await vscode.workspace.fs.delete(vscode.Uri.file(repoBase), {
+            recursive: true,
+            useTrash: false,
+          });
+          this.log.debug(`Deleted repo directory: ${repoBase}`);
+        } catch {
+          this.log.debug(`Repo directory not found (already cleaned): ${repoBase}`);
+        }
       }
+    } finally {
+      cancellation.dispose();
     }
   }
 
@@ -592,9 +721,22 @@ export class RepoManager {
     return undefined;
   }
 
-  private throwIfCancelled(token?: vscode.CancellationToken, signal?: AbortSignal): void {
+  private throwIfCancelled(token: vscode.CancellationToken | undefined, signal: AbortSignal | undefined, step: string): void {
     if (token?.isCancellationRequested || signal?.aborted) {
-      throw createAbortError();
+      throw createStepAbortError(step);
+    }
+  }
+
+  private async runStep<T>(step: string, work: () => Promise<T>): Promise<T> {
+    try {
+      return await work();
+    } catch (err) {
+      if (isAbortError(err)) {
+        const abortStep = err.step ?? step;
+        this.log.info(`Cancellation received during ${abortStep}`);
+        throw createStepAbortError(abortStep);
+      }
+      throw err;
     }
   }
 
@@ -610,6 +752,7 @@ export class RepoManager {
     dirPath: string,
     kind: 'repository' | 'worktree',
     clonePath?: string,
+    signal?: AbortSignal,
   ): Promise<boolean> {
     if (!await this.directoryExists(dirPath)) {
       return false;
@@ -617,12 +760,18 @@ export class RepoManager {
 
     const label = kind === 'worktree' ? 'worktree' : 'repo';
     try {
-      await gitExec(['rev-parse', '--git-dir'], dirPath);
-      const topLevel = (await gitExec(['rev-parse', '--show-toplevel'], dirPath)).trim();
+      await this.runStep(`validate ${kind}`, () => gitExec(['rev-parse', '--git-dir'], dirPath, { signal }));
+      const topLevel = (await this.runStep(
+        `validate ${kind}`,
+        () => gitExec(['rev-parse', '--show-toplevel'], dirPath, { signal }),
+      )).trim();
       if (sameResolvedPath(topLevel, dirPath)) {
         return true;
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        throw err;
+      }
       if (!isInvalidGitDirectoryError(err)) {
         throw pathContextError(`Failed to validate ${kind} directory`, label, dirPath, err);
       }
@@ -636,17 +785,21 @@ export class RepoManager {
       deleteDirectoryNoTrash(dirPath),
     );
     if (kind === 'worktree' && clonePath) {
-      await this.pruneWorktreeMetadata(clonePath, 'Failed to prune invalid worktree metadata');
+      await this.pruneWorktreeMetadata(clonePath, 'Failed to prune invalid worktree metadata', signal);
     }
     return false;
   }
 
-  private async pruneWorktreeMetadata(clonePath: string, operation = 'Failed to prune worktree metadata'): Promise<void> {
+  private async pruneWorktreeMetadata(
+    clonePath: string,
+    operation = 'Failed to prune worktree metadata',
+    signal?: AbortSignal,
+  ): Promise<void> {
     await withPathContext(
       operation,
       'repo',
       clonePath,
-      gitExec(['worktree', 'prune'], clonePath),
+      gitExec(['worktree', 'prune'], clonePath, { signal }),
     );
   }
 

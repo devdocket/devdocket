@@ -8,7 +8,7 @@ import { gitExec } from './tools/gitUtils';
 import { AdoPrClient } from './adoPrClient';
 import { parseAdoPrUrl } from './prUrl';
 import type { RepoManager, WorktreeInfo } from './repoManager';
-import type { WorkItem } from './types';
+import type { DevDocketApi, WorkItem } from './types';
 
 // Re-export sanitizePrUrl for backward compatibility (tests import it from here)
 export { sanitizePrUrl };
@@ -30,6 +30,7 @@ export class AiReviewAction extends BasePrAction {
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
+    private readonly api?: DevDocketApi,
   ) {
     super();
   }
@@ -105,6 +106,14 @@ export class AiReviewAction extends BasePrAction {
       worktreeInfo = await this.repoManager.ensureWorktree(item.url!, token);
       this.log.info('Worktree ready for code review');
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        const detail = err.message === 'The operation was aborted.'
+          ? 'AI code review cancelled during repository preparation.'
+          : `AI code review ${err.message.charAt(0).toLowerCase()}${err.message.slice(1)}.`;
+        this.log.info(detail);
+        await this.api?.addActivity?.(item.id, 'action-executed', detail);
+        throw err;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
     }

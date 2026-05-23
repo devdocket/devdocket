@@ -30,6 +30,12 @@ export class AiWalkthroughAction extends BasePrAction {
       await this.repoManager.ensureWorktree(item.url!, token);
       this.log.info('Worktree ready');
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        this.log.info(err.message === 'The operation was aborted.'
+          ? 'AI walkthrough cancelled during repository preparation.'
+          : `AI walkthrough ${err.message.charAt(0).toLowerCase()}${err.message.slice(1)}.`);
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.log.error(`Worktree preparation failed: ${msg}`);
       vscode.window.showErrorMessage(`AI Walkthrough: Failed to prepare repository — ${msg}`);
