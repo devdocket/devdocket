@@ -90,7 +90,7 @@ export class WalkthroughParticipant {
       this.log.info('No cached worktree info — preparing worktree');
       response.progress('Cloning repository and preparing worktree…');
       try {
-        info = await this.repoManager.ensureWorktree(prUrl);
+        info = await this.repoManager.ensureWorktree(prUrl, token);
         this.log.debug(`Worktree ready at ${info.worktreePath}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

@@ -1,3 +1,6 @@
+import type { ProviderRefreshOptions } from './apiTypes';
+import type { CancellationTokenLike } from './runWatcher';
+
 // Minimal re-declarations to avoid depending on the vscode module
 
 /** A handle that releases a resource when disposed. */
@@ -398,7 +401,7 @@ export abstract class BaseProvider {
   /** Override to provide the background refresh implementation. */
   protected abstract doBackgroundRefresh(): Promise<void>;
 
-  abstract refresh(token?: unknown): Promise<void>;
+  abstract refresh(token?: CancellationTokenLike, options?: ProviderRefreshOptions): Promise<void>;
 
   dispose(): void {
     if (this._disposed) {

@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
+import { combineSignals, createAbortError } from '@devdocket/shared';
 import type { WorkItem, DevDocketAction } from './types';
 import { parseAdoPrUrl, parsePullRequestUrl, parsePrUrl } from './prUrl';
 import { AdoPrClient } from './adoPrClient';
+import { getGitHubSession } from './auth';
 import { confirmAiUsage } from './confirmAiUsage';
 import { fenceDiff } from './diffFence';
 import { sanitizePrUrl } from './promptSanitization';
@@ -58,66 +60,96 @@ export abstract class BasePrAction implements DevDocketAction {
 
     if (!await confirmAiUsage(this.confirmationMessage)) return;
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: this.progressTitle,
-        cancellable: true,
-      },
-      async (progress, token) => {
-        await this.doWork(item, progress, token);
-      },
-    );
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: this.progressTitle,
+          cancellable: true,
+        },
+        async (progress, token) => {
+          await this.doWork(item, progress, token);
+        },
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
+      throw err;
+    }
   }
 
-  async fetchDiff(url: string): Promise<string | undefined> {
+  async fetchDiff(url: string, token?: vscode.CancellationToken): Promise<string | undefined> {
     try {
       const github = this.parseGitHubPrUrl(url);
       if (github) {
-        return await this.fetchGitHubDiff(github.repo, github.prNumber);
+        return await this.fetchGitHubDiff(github.repo, github.prNumber, token);
       }
 
       const ado = parseAdoPrUrl(url);
       if (ado) {
-        return await new AdoPrClient().fetchDiff(ado);
+        const abortController = new AbortController();
+        const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+        try {
+          if (token?.isCancellationRequested) {
+            throw createAbortError();
+          }
+          return await new AdoPrClient().fetchDiff(ado, { interactive: true, signal: abortController.signal });
+        } finally {
+          cancelListener?.dispose();
+        }
       }
 
       return undefined;
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
       console.error(`${this.progressTitle}: failed to fetch diff:`, err);
       vscode.window.showWarningMessage(`${this.progressTitle}: Failed to fetch PR diff`);
       return undefined;
     }
   }
 
-  private async fetchGitHubDiff(repo: string, prNumber: string): Promise<string | undefined> {
-    const session = await vscode.authentication.getSession('github', ['repo'], {
-      createIfNone: true,
-    });
-    if (!session) {
-      vscode.window.showWarningMessage(
-        `${this.progressTitle}: GitHub authentication is required to fetch the PR diff.`,
-      );
-      return undefined;
-    }
+  private async fetchGitHubDiff(
+    repo: string,
+    prNumber: string,
+    token?: vscode.CancellationToken,
+  ): Promise<string | undefined> {
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    try {
+      if (token?.isCancellationRequested) {
+        throw createAbortError();
+      }
+      const session = await getGitHubSession({ interactive: true, signal: abortController.signal });
+      if (!session) {
+        vscode.window.showWarningMessage(
+          `${this.progressTitle}: GitHub authentication is required to fetch the PR diff.`,
+        );
+        return undefined;
+      }
 
-    const response = await fetch(
-      `https://api.github.com/repos/${repo}/pulls/${prNumber}`,
-      {
-        headers: {
-          Authorization: `Bearer ${session.accessToken}`,
-          Accept: 'application/vnd.github.diff',
-          'X-GitHub-Api-Version': '2022-11-28',
+      const response = await fetch(
+        `https://api.github.com/repos/${repo}/pulls/${prNumber}`,
+        {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+            Accept: 'application/vnd.github.diff',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(abortController.signal, 30_000),
         },
-        signal: AbortSignal.timeout(30_000),
-      },
-    );
+      );
 
-    if (!response.ok) {
-      vscode.window.showWarningMessage(`${this.progressTitle}: GitHub API returned ${response.status}`);
-      return undefined;
+      if (!response.ok) {
+        vscode.window.showWarningMessage(`${this.progressTitle}: GitHub API returned ${response.status}`);
+        return undefined;
+      }
+      return response.text();
+    } finally {
+      cancelListener?.dispose();
     }
-    return response.text();
   }
 
   /** Load the prompt, using a custom file if configured, otherwise the built-in default. */

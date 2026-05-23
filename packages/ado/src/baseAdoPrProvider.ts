@@ -3,6 +3,7 @@ import {
   BaseProvider,
   ProviderItem,
   type ProviderBadge,
+  type ProviderRefreshOptions,
   isValidUrlSegment,
   combineSignals,
   createAbortError,
@@ -13,7 +14,7 @@ import {
 } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
+import { ADO_AUTH_SCOPE, getAdoHeaders, getAdoSession, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
 
 export interface AdoPullRequest {
   pullRequestId: number;
@@ -75,7 +76,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     super(new vscode.EventEmitter<ProviderItem[]>());
   }
 
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
+  async refresh(token?: vscode.CancellationToken, options?: ProviderRefreshOptions): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -83,15 +84,25 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     this._isRefreshing = true;
     const abortController = new AbortController();
     const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    const interactive = options?.interactive ?? true;
     try {
       logger.info(`Fetching ADO ${this.logLabel}...`);
       if (token?.isCancellationRequested) {
         return;
       }
 
-      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
-        createIfNone: true,
-      }).catch(() => null);
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await getAdoSession({
+          interactive,
+          signal: abortController.signal,
+        });
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          throw err;
+        }
+        session = undefined;
+      }
 
       if (token?.isCancellationRequested) {
         return;
@@ -101,7 +112,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         return;
       }
 
-      await this.fetchAndPublishPrs(session.accessToken, true, session.account.id, abortController.signal);
+      await this.fetchAndPublishPrs(session.accessToken, interactive, session.account.id, abortController.signal);
       this.markRefreshSuccess();
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
@@ -357,7 +368,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await retryAdoWithAuth(apiUrl, signal);
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: true });
       if (retryResponse) {
         response = retryResponse;
       }
@@ -443,7 +454,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         signal: combineSignals(undefined, 30_000),
       });
       if (response.status === 401 || response.status === 403 || (response.status === 404 && !wasAuthenticated)) {
-        const retryResponse = await retryAdoWithAuth(detailUrl);
+        const retryResponse = await retryAdoWithAuth(detailUrl, undefined, { interactive: true });
         if (retryResponse) { response = retryResponse; }
       }
       if (!response.ok) {

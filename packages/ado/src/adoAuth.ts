@@ -1,6 +1,12 @@
 import * as vscode from 'vscode';
+import { combineSignals, getSessionWithAuthFallback } from '@devdocket/shared';
 
 export const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
+
+export interface AdoAuthOptions {
+  interactive?: boolean;
+  signal?: AbortSignal;
+}
 
 /** Get ADO API headers, attaching auth if a silent session is available. */
 export async function getAdoHeaders(): Promise<Record<string, string>> {
@@ -12,18 +18,31 @@ export async function getAdoHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-/** Retry a request with interactive ADO auth (prompts user to sign in). */
-export async function retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
-  try {
-    const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true });
-    if (session) {
-      return await fetch(apiUrl, {
-        headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
-        signal,
-      });
-    }
-  } catch { /* user declined */ }
-  return undefined;
+export async function getAdoSession(options: AdoAuthOptions = {}): Promise<vscode.AuthenticationSession | undefined> {
+  return getSessionWithAuthFallback({
+    interactive: options.interactive,
+    signal: options.signal,
+    getSilent: () => vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true }),
+    getInteractive: () => vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true }),
+  });
+}
+
+/** Retry a request with ADO auth, prompting only for interactive callers. */
+export async function retryAdoWithAuth(
+  apiUrl: string,
+  signal?: AbortSignal,
+  options: Omit<AdoAuthOptions, 'signal'> = {},
+): Promise<Response | undefined> {
+  const session = await getAdoSession({ ...options, signal });
+  if (!session) {
+    return undefined;
+  }
+
+  const requestSignal = signal ? combineSignals(signal, 30_000) : AbortSignal.timeout(30_000);
+  return await fetch(apiUrl, {
+    headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
+    signal: requestSignal,
+  });
 }
 
 /** Throw a descriptive error for a non-ok ADO API response. */

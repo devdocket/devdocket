@@ -89,7 +89,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
     if (!response.ok && !wasAuthenticated && !signal?.aborted &&
         (response.status === 404 || looksLikeRateLimited403(response))) {
-      const retryResponse = await retryWithAuth(apiUrl, signal);
+      const retryResponse = await retryWithAuth(apiUrl, signal, { interactive: true });
       if (retryResponse) { response = retryResponse; }
     }
 
