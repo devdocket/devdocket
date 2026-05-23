@@ -12,7 +12,13 @@ const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
 const RETRY = 'Retry';
 const DISMISS = 'Dismiss';
 const GITHUB_SETTINGS_QUERY = '@ext:devdocket.devdocket-github';
+// Background refreshes are deduplicated per org for the lifetime of this session
+// so polling does not resurface the same SSO prompt every few minutes.
 const notifiedGitHubSsoOrgs = new Set<string>();
+
+export function resetGitHubSsoNotificationDedupeForTests(): void {
+  notifiedGitHubSsoOrgs.clear();
+}
 
 /**
  * Base class for GitHub providers that handles the common authentication

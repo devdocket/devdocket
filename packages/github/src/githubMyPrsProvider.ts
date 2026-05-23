@@ -2,7 +2,7 @@ import { ProviderItem, ProviderBadge, combineSignals, createAbortError, runWorke
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getGitHubAuthHeaders, filterMergedGitHubPrs, throwApiError, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
+import { GitHubSsoError, getGitHubAuthHeaders, filterMergedGitHubPrs, throwApiError, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
@@ -67,14 +67,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     if (authoredSettled.status === 'rejected') {
       const err = authoredSettled.reason;
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && (err.name === 'AbortError' || err instanceof GitHubSsoError)) {
         throw err;
       }
       logger.error('Failed to fetch authored PRs', err);
     }
     if (assignedSettled.status === 'rejected') {
       const err = assignedSettled.reason;
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && (err.name === 'AbortError' || err instanceof GitHubSsoError)) {
         throw err;
       }
       logger.error('Failed to fetch assigned PRs', err);

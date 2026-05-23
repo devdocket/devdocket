@@ -492,12 +492,12 @@ describe('registerCommands', () => {
         .mockRejectedValueOnce(ssoError)
         .mockResolvedValueOnce(fakeDetails);
       (vscode.window.showInputBox as Mock)
-        .mockResolvedValueOnce('https://github.com/owner/repo/pull/42')
         .mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
       (vscode.window.showErrorMessage as Mock).mockResolvedValueOnce('Retry');
       await invoke('devdocket.createItemFromUrl');
 
       expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(2);
+      expect(vscode.window.showInputBox).toHaveBeenCalledTimes(1);
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('Created'),

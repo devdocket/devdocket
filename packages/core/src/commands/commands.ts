@@ -382,13 +382,15 @@ async function handleCreateItemFromUrl(
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
   editorPanelDependencies: WorkItemEditorPanelDependencies,
+  initialUrl?: string,
 ): Promise<void> {
-  const url = await vscode.window.showInputBox({
+  const inputUrl = initialUrl ?? await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
   });
-  if (!url?.trim()) { return; }
+  const url = inputUrl?.trim();
+  if (!url) { return; }
 
-  if (!isSafeUrl(url.trim())) {
+  if (!isSafeUrl(url)) {
     void vscode.window.showErrorMessage('DevDocket: Please enter a valid HTTP or HTTPS URL');
     return;
   }
@@ -400,11 +402,22 @@ async function handleCreateItemFromUrl(
       (_progress, token) => {
         const controller = new AbortController();
         token.onCancellationRequested(() => controller.abort());
-        return providerRegistry.resolveUrl(url.trim(), controller.signal);
+        return providerRegistry.resolveUrl(url, controller.signal);
       },
     );
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      return;
+    }
+    if (isGitHubSsoError(error)) {
+      await handleGitHubSsoError(error, () => handleCreateItemFromUrl(
+        context,
+        workGraph,
+        providerRegistry,
+        labelCache,
+        editorPanelDependencies,
+        url,
+      ));
       return;
     }
     throw error;

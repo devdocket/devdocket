@@ -167,15 +167,15 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       }
 
       if (!response.ok) {
+        if (response.headers?.get?.('x-github-sso')) {
+          await throwApiError(response, `GitHub ${label}`);
+        }
         if (allItems.length > 0) {
           logger.warn(
             `GitHub API returned ${response.status} on page ${page + 1}. ` +
             `Returning ${allItems.length} items from previous pages.`,
           );
           return allItems;
-        }
-        if (response.headers?.get?.('x-github-sso')) {
-          await throwApiError(response, `GitHub ${label}`);
         }
         throw new Error(`GitHub API returned ${response.status}`);
       }

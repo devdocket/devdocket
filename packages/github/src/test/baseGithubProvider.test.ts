@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { authentication, commands, env, window, workspace } from 'vscode';
 import { type ProviderItem } from '@devdocket/shared';
-import { BaseGitHubProvider } from '../baseGithubProvider';
+import { BaseGitHubProvider, resetGitHubSsoNotificationDedupeForTests } from '../baseGithubProvider';
 import { GitHubSsoError } from '../githubApiHelpers';
 
 class TestGitHubProvider extends BaseGitHubProvider {
@@ -26,6 +26,7 @@ class TestGitHubProvider extends BaseGitHubProvider {
 
 describe('BaseGitHubProvider repository filtering', () => {
   afterEach(() => {
+    resetGitHubSsoNotificationDedupeForTests();
     vi.mocked(authentication.getSession).mockReset();
     vi.mocked(commands.executeCommand).mockReset();
     vi.mocked(env.openExternal).mockReset();
@@ -113,8 +114,8 @@ describe('BaseGitHubProvider repository filtering', () => {
     vi.mocked(window.showErrorMessage).mockResolvedValue('Authorize in browser' as any);
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError('GitHub SSO authorization required', {
-      orgName: 'example',
-      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      orgName: 'example-open',
+      ssoUrl: 'https://github.com/orgs/example-open/sso?authorization_request=abc123',
     });
     provider.fetchImpl.mockRejectedValue(error);
 
@@ -122,7 +123,7 @@ describe('BaseGitHubProvider repository filtering', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
 
     expect(window.showErrorMessage).toHaveBeenCalledWith(
-      'DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore DevDocket can refresh items from it.',
+      'DevDocket: GitHub requires SSO authorization for the "example-open" organization\nbefore DevDocket can refresh items from it.',
       'Authorize in browser',
       'Retry',
       'Dismiss',
@@ -137,8 +138,8 @@ describe('BaseGitHubProvider repository filtering', () => {
     vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError('GitHub SSO authorization required', {
-      orgName: 'example',
-      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      orgName: 'example-dismiss',
+      ssoUrl: 'https://github.com/orgs/example-dismiss/sso?authorization_request=abc123',
     });
     provider.fetchImpl.mockRejectedValue(error);
 
