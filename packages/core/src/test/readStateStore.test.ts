@@ -327,6 +327,22 @@ describe('ReadStateStore', () => {
       infoSpy.mockRestore();
     });
 
+    it('keeps trimmed entries in memory when persisting the load-time trim fails', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const failingStore = new ReadStateStore({
+        read: vi.fn(async () => Array.from({ length: 6_000 }, (_, i) => ({ key: `gh::issue-${i}`, createdAt: i }))),
+        write: vi.fn(async () => { throw new Error('disk full'); }),
+      });
+
+      await expect(failingStore.load()).resolves.toBeUndefined();
+      expect([...failingStore.keys()]).toHaveLength(5_000);
+      expect(failingStore.has('gh::issue-0')).toBe(false);
+      expect(failingStore.has('gh::issue-1000')).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist trimmed read state while loading; continuing with 5000 in-memory entries'), expect.any(Error));
+      warnSpy.mockRestore();
+      failingStore.dispose();
+    });
+
     it('does not resurrect keys evicted by another window', async () => {
       const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));

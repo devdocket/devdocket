@@ -250,8 +250,12 @@ export class ReadStateStore {
     const trimmedRecords = trimReadStateRecords(records);
     this.items.clear();
     if (trimmedRecords.length !== records.length) {
-      await this.fileStore.write(trimmedRecords);
-      logger.info(`Trimmed read-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+      try {
+        await this.fileStore.write(trimmedRecords);
+        logger.info(`Trimmed read-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+      } catch (err) {
+        logger.warn(`Failed to persist trimmed read state while loading; continuing with ${trimmedRecords.length} in-memory entries`, err);
+      }
     }
     for (const record of trimmedRecords) {
       this.items.set(record.key, record.createdAt);
