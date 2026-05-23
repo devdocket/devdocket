@@ -4,7 +4,6 @@ import { logger } from '../services/logger';
 import type { FileStore } from './fileStore';
 
 const MAX_TOTAL_ENTRIES = 5_000;
-const EVICTION_FRACTION = 0.2;
 
 interface PersistedReadStateRecord {
   key: string;
@@ -16,10 +15,7 @@ function trimReadStateRecords(records: PersistedReadStateRecord[]): PersistedRea
     return records;
   }
 
-  const evictedCount = Math.max(
-    records.length - MAX_TOTAL_ENTRIES,
-    Math.ceil(records.length * EVICTION_FRACTION),
-  );
+  const evictedCount = records.length - MAX_TOTAL_ENTRIES;
   const keysToEvict = new Set(
     records
       .map((record, index) => ({ ...record, index }))

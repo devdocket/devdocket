@@ -263,11 +263,11 @@ describe('ReadStateStore', () => {
         nowSpy.mockRestore();
       }
 
-      expect([...store.keys()]).toHaveLength(4_800);
-      expect(persistedRecords()).toHaveLength(4_800);
+      expect([...store.keys()]).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
       expect(store.has('gh::issue-0')).toBe(false);
-      expect(store.has('gh::issue-1199')).toBe(false);
-      expect(store.has('gh::issue-1200')).toBe(true);
+      expect(store.has('gh::issue-999')).toBe(false);
+      expect(store.has('gh::issue-1000')).toBe(true);
       expect(store.has('gh::issue-5999')).toBe(true);
     });
 
@@ -281,11 +281,11 @@ describe('ReadStateStore', () => {
       const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
       await store2.load();
 
-      expect([...store2.keys()]).toHaveLength(4_800);
-      expect(persistedRecords()).toHaveLength(4_800);
+      expect([...store2.keys()]).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
       expect(store2.has('gh::issue-0')).toBe(false);
-      expect(store2.has('gh::issue-1200')).toBe(true);
-      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed read-state.json from 6000 to 4800 entries while loading'));
+      expect(store2.has('gh::issue-1000')).toBe(true);
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed read-state.json from 6000 to 5000 entries while loading'));
       store2.dispose();
       infoSpy.mockRestore();
     });
@@ -305,7 +305,7 @@ describe('ReadStateStore', () => {
       await windowB.add('gh::another-fresh');
 
       expect(persistedKeys()).not.toContain('gh::issue-0');
-      expect(persistedKeys()).not.toContain('gh::issue-1199');
+      expect(persistedKeys()).not.toContain('gh::issue-999');
       expect(persistedKeys()).toContain('gh::fresh');
       expect(persistedKeys()).toContain('gh::another-fresh');
 
