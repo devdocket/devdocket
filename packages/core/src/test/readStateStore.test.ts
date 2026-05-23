@@ -289,6 +289,29 @@ describe('ReadStateStore', () => {
       store2.dispose();
       infoSpy.mockRestore();
     });
+
+    it('does not resurrect keys evicted by another window', async () => {
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+
+      fileSystem.writeJson(fileUri, Array.from({ length: 6_000 }, (_, i) => ({
+        key: `gh::issue-${i}`,
+        createdAt: i,
+      })));
+
+      await windowA.load();
+      await windowB.load();
+      await windowA.add('gh::fresh');
+      await windowB.add('gh::another-fresh');
+
+      expect(persistedKeys()).not.toContain('gh::issue-0');
+      expect(persistedKeys()).not.toContain('gh::issue-1199');
+      expect(persistedKeys()).toContain('gh::fresh');
+      expect(persistedKeys()).toContain('gh::another-fresh');
+
+      windowA.dispose();
+      windowB.dispose();
+    });
   });
 
   describe('prune', () => {

@@ -43,6 +43,8 @@ export class ReadStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
   readonly onDidChange = this._onDidChange.event;
+  /** Keys added locally since last load — ensures local additions survive remote merges. */
+  private readonly addedSinceLoad = new Set<string>();
   /** Keys removed locally since last load — prevents re-adding from stale remote data. */
   private readonly removedSinceLoad = new Set<string>();
 
@@ -57,10 +59,19 @@ export class ReadStateStore {
    * keys, and writes the merged result.
    */
   private async persist(): Promise<void> {
-    const merged = new Map(this.items);
-    for (const remote of await this.parseFromFileStore()) {
-      if (!this.removedSinceLoad.has(remote.key) && !merged.has(remote.key)) {
+    const remoteRecords = await this.parseFromFileStore();
+    const remoteKeys = new Set(remoteRecords.map(record => record.key));
+    const merged = new Map<string, number>();
+
+    for (const remote of remoteRecords) {
+      if (!this.removedSinceLoad.has(remote.key)) {
         merged.set(remote.key, remote.createdAt);
+      }
+    }
+
+    for (const [key, createdAt] of this.items) {
+      if (!this.removedSinceLoad.has(key) && (this.addedSinceLoad.has(key) || remoteKeys.has(key))) {
+        merged.set(key, createdAt);
       }
     }
 
@@ -72,6 +83,7 @@ export class ReadStateStore {
     for (const record of trimmed) {
       this.items.set(record.key, record.createdAt);
     }
+    this.addedSinceLoad.clear();
     this.removedSinceLoad.clear();
   }
 
@@ -119,6 +131,8 @@ export class ReadStateStore {
     if (!this.loaded) { await this.load(); }
     if (this.items.has(key)) { return false; }
     this.items.set(key, Date.now());
+    this.addedSinceLoad.add(key);
+    this.removedSinceLoad.delete(key);
     await this.persist();
     this._onDidChange.fire();
     return true;
@@ -132,6 +146,8 @@ export class ReadStateStore {
     for (const key of keys) {
       if (!this.items.has(key)) {
         this.items.set(key, Date.now());
+        this.addedSinceLoad.add(key);
+        this.removedSinceLoad.delete(key);
         newlyAdded.push(key);
       }
     }
@@ -152,6 +168,7 @@ export class ReadStateStore {
     for (const key of keys) {
       if (this.items.delete(key)) {
         changed = true;
+        this.addedSinceLoad.delete(key);
         this.removedSinceLoad.add(key);
       }
     }
@@ -220,6 +237,7 @@ export class ReadStateStore {
     if (trimmedRecords.length > 0) {
       logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
+    this.addedSinceLoad.clear();
     this.removedSinceLoad.clear();
     this.loaded = true;
   }
@@ -234,6 +252,7 @@ export class ReadStateStore {
    */
   invalidateCache(): void {
     this.items.clear();
+    this.addedSinceLoad.clear();
     this.removedSinceLoad.clear();
     this.loaded = false;
   }
