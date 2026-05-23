@@ -103,7 +103,8 @@ export class ReadStateStore {
       return { records: [], available: false };
     }
     if (!Array.isArray(parsed)) {
-      return { records: [], available: true };
+      logger.warn('Read state snapshot is not an array; falling back to the in-memory snapshot');
+      return { records: [], available: false };
     }
 
     const records: PersistedReadStateRecord[] = [];
