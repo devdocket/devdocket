@@ -30,7 +30,7 @@ export interface InboxStateRecord {
 }
 
 interface PersistedInboxStateRecord extends InboxStateRecord {
-  /** Last-write timestamp used for eviction so recently updated inbox decisions survive capacity trimming. */
+  /** Legacy field name: stores the last-write timestamp used for eviction so recently updated inbox decisions survive trimming. */
   createdAt: number;
 }
 
