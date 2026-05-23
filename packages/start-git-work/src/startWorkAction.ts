@@ -1027,7 +1027,7 @@ export class StartWorkAction implements DevDocketAction {
 
     const detail = `Start Git Work cancelled during ${cancellationState.currentStep}.`;
     try {
-      await this.addActivity(item.id, 'updated', detail);
+      await this.addActivity(item.id, 'action-executed', detail);
     } catch (activityErr) {
       logger.warn('Failed to log cancellation activity', activityErr);
     }

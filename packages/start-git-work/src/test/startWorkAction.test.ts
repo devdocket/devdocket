@@ -1147,7 +1147,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(commands.executeCommand).mock.calls).toContainEqual([
         'devdocket.addActivity',
         'wc-test-1',
-        'updated',
+        'action-executed',
         'Start Git Work cancelled during running npm.',
       ]);
     });
