@@ -110,10 +110,13 @@ async function handleGitHubSsoError(
   retry: () => Promise<void>,
 ): Promise<void> {
   const authorizationUrl = getGitHubSsoAuthorizationUrl(err);
+  const safeAuthorizationUrl = authorizationUrl && isSafeUrl(authorizationUrl)
+    ? authorizationUrl
+    : undefined;
   const orgLabel = err.orgName
     ? `the "${err.orgName}" organization`
     : 'this organization';
-  const actions = authorizationUrl
+  const actions = safeAuthorizationUrl
     ? [AUTHORIZE_IN_BROWSER_ACTION, RETRY_ACTION, DISMISS_ACTION] as const
     : [RETRY_ACTION, DISMISS_ACTION] as const;
   const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
@@ -122,13 +125,21 @@ async function handleGitHubSsoError(
     ...actions,
   );
 
-  if (action === AUTHORIZE_IN_BROWSER_ACTION && authorizationUrl) {
-    await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
+  if (action === AUTHORIZE_IN_BROWSER_ACTION && safeAuthorizationUrl) {
+    try {
+      await vscode.env.openExternal(vscode.Uri.parse(safeAuthorizationUrl));
+    } catch (openError) {
+      handleCommandError('Failed to open GitHub SSO authorization', openError);
+    }
     return;
   }
 
   if (action === RETRY_ACTION) {
-    await retry();
+    try {
+      await retry();
+    } catch (retryError) {
+      handleCommandError('Failed to retry after GitHub SSO authorization', retryError);
+    }
   }
 }
 
