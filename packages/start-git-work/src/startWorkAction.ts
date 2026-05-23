@@ -15,7 +15,7 @@ import {
   type DevDocketAction,
 } from '@devdocket/shared';
 import { promptGitCleanup } from './gitCleanup';
-import { encodeWorkStartedDetail } from './workStartedDetail';
+import { decodeWorkStartedDetail, encodeWorkStartedDetail } from './workStartedDetail';
 
 const execFileAsync = promisify(execFile);
 
@@ -1015,8 +1015,8 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     if (cancellationState.cleanupActivity) {
-      const cleanupDetail = cancellationState.cleanupActivity.detail;
-      const cleanupTarget = cleanupDetail && cleanupDetail.includes('"worktreePath"')
+      const cleanupInfo = decodeWorkStartedDetail(cancellationState.cleanupActivity.detail);
+      const cleanupTarget = cleanupInfo?.worktreePath
         ? 'The created worktree may need cleanup.'
         : 'A partially created branch may need cleanup.';
       const choice = await vscode.window.showWarningMessage(
