@@ -7,10 +7,13 @@ import {
   requiredString,
   optionalString,
   requiredEnum,
+  optionalFiniteNumber,
 } from './validation';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
+const MAX_TOTAL_ENTRIES = 5_000;
+const EVICTION_FRACTION = 0.2;
 
 export type InboxState = (typeof inboxStates)[number];
 
@@ -27,6 +30,39 @@ export interface InboxStateRecord {
   resurfaceVersion?: string;
 }
 
+interface PersistedInboxStateRecord extends InboxStateRecord {
+  createdAt: number;
+}
+
+function trimInboxStateRecords(records: PersistedInboxStateRecord[]): PersistedInboxStateRecord[] {
+  if (records.length <= MAX_TOTAL_ENTRIES) {
+    return records;
+  }
+
+  const evictedCount = Math.max(
+    records.length - MAX_TOTAL_ENTRIES,
+    Math.ceil(records.length * EVICTION_FRACTION),
+  );
+  const keysToEvict = new Set(
+    records
+      .map((record, index) => ({
+        key: `${record.providerId}::${record.externalId}`,
+        createdAt: record.createdAt,
+        index,
+      }))
+      .sort((a, b) => a.createdAt - b.createdAt || a.index - b.index)
+      .slice(0, evictedCount)
+      .map(record => record.key),
+  );
+
+  return records.filter(record => !keysToEvict.has(`${record.providerId}::${record.externalId}`));
+}
+
+function toInboxStateRecord(record: PersistedInboxStateRecord): InboxStateRecord {
+  const { createdAt: _createdAt, ...publicRecord } = record;
+  return publicRecord;
+}
+
 /**
  * Validates that a parsed JSON value has the required shape of an InboxStateRecord.
  * Returns a descriptive error string if invalid, or undefined if valid.
@@ -40,7 +76,8 @@ function validateInboxStateRecord(value: unknown, index: number): string | undef
     ?? requiredString(result, 'externalId', ctx)
     ?? requiredEnum(result, 'inboxState', validInboxStates, ctx)
     ?? optionalString(result, 'version', ctx)
-    ?? optionalString(result, 'resurfaceVersion', ctx);
+    ?? optionalString(result, 'resurfaceVersion', ctx)
+    ?? optionalFiniteNumber(result, 'createdAt', ctx);
 }
 
 /**
@@ -51,7 +88,7 @@ function validateInboxStateRecord(value: unknown, index: number): string | undef
  * always read live from the provider.
  */
 export class InboxStateStore {
-  private readonly cache = new Map<string, InboxStateRecord>();
+  private readonly cache = new Map<string, PersistedInboxStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private loaded = false;
@@ -93,7 +130,7 @@ export class InboxStateStore {
    * keys win, and locally removed keys stay removed.
    */
   private async persist(): Promise<void> {
-    const merged = new Map<string, InboxStateRecord>();
+    const merged = new Map<string, PersistedInboxStateRecord>();
 
     for (const remote of await this.parseFromFileStore()) {
       merged.set(this.key(remote.providerId, remote.externalId), remote);
@@ -110,27 +147,32 @@ export class InboxStateStore {
       }
     }
 
-    await this.fileStore.write(Array.from(merged.values()));
+    const trimmed = trimInboxStateRecords(Array.from(merged.values()));
+    await this.fileStore.write(trimmed);
     this.cache.clear();
-    for (const [k, record] of merged) {
-      this.cache.set(k, record);
+    for (const record of trimmed) {
+      this.cache.set(this.key(record.providerId, record.externalId), record);
     }
     this.dirtyKeys.clear();
     this.removedKeys.clear();
   }
 
   /** Parse and validate inbox state records from the backing JSON file. */
-  private async parseFromFileStore(): Promise<InboxStateRecord[]> {
+  private async parseFromFileStore(): Promise<PersistedInboxStateRecord[]> {
     const parsed = await this.fileStore.read();
     if (!Array.isArray(parsed)) { return []; }
-    const records: InboxStateRecord[] = [];
+    const records: PersistedInboxStateRecord[] = [];
     for (let i = 0; i < parsed.length; i++) {
       const error = validateInboxStateRecord(parsed[i], i);
       if (error) {
         logger.warn(`Skipping invalid inbox state record: ${error}`);
         continue;
       }
-      records.push(parsed[i] as InboxStateRecord);
+      const record = parsed[i] as InboxStateRecord & { createdAt?: number };
+      records.push({
+        ...record,
+        createdAt: record.createdAt ?? i,
+      });
     }
     return records;
   }
@@ -145,7 +187,12 @@ export class InboxStateStore {
     if (!this.loaded) { await this.load(); }
     const k = this.key(providerId, externalId);
     const previousValue = this.cache.get(k);
-    const newRecord: InboxStateRecord = { providerId, externalId, inboxState: state };
+    const newRecord: PersistedInboxStateRecord = {
+      providerId,
+      externalId,
+      inboxState: state,
+      createdAt: previousValue?.createdAt ?? Date.now(),
+    };
     if (version !== undefined) {
       newRecord.version = version;
     } else if (previousValue?.version !== undefined) {
@@ -170,7 +217,12 @@ export class InboxStateStore {
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
       const previousRecord = this.cache.get(k);
-      const newRecord: InboxStateRecord = { providerId: item.providerId, externalId: item.externalId, inboxState: item.state };
+      const newRecord: PersistedInboxStateRecord = {
+        providerId: item.providerId,
+        externalId: item.externalId,
+        inboxState: item.state,
+        createdAt: previousRecord?.createdAt ?? Date.now(),
+      };
       if (item.version !== undefined) {
         newRecord.version = item.version;
       } else if (previousRecord?.version !== undefined) {
@@ -194,7 +246,7 @@ export class InboxStateStore {
    */
   async loadAll(): Promise<InboxStateRecord[]> {
     await this.load();
-    return Array.from(this.cache.values());
+    return Array.from(this.cache.values(), record => toInboxStateRecord(record));
   }
 
   /**
@@ -204,12 +256,17 @@ export class InboxStateStore {
     if (this.loaded) { return; }
     this.cache.clear();
     const records = await this.parseFromFileStore();
-    for (const record of records) {
+    const trimmedRecords = trimInboxStateRecords(records);
+    if (trimmedRecords.length !== records.length) {
+      await this.fileStore.write(trimmedRecords);
+      logger.info(`Trimmed inbox-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+    }
+    for (const record of trimmedRecords) {
       this.cache.set(this.key(record.providerId, record.externalId), record);
     }
     this.dirtyKeys.clear();
     this.removedKeys.clear();
-    if (records.length > 0) {
+    if (trimmedRecords.length > 0) {
       logger.debug(`Loaded inbox state: ${this.cache.size} entries`);
     }
     this.loaded = true;

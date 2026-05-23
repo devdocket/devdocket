@@ -3,12 +3,16 @@ import * as vscode from 'vscode';
 import type { ProviderItem } from '../api/types';
 import { ReadStateStore } from '../storage/readStateStore';
 import { JsonFileStore } from '../storage/fileStore';
+import { logger } from '../services/logger';
 import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 describe('ReadStateStore', () => {
   const fileUri = vscode.Uri.file('C:\\test\\read-state.json');
   let fileSystem: MockFileSystem;
   let store: ReadStateStore;
+
+  const persistedRecords = () => fileSystem.readJson<Array<{ key: string; createdAt?: number }>>(fileUri) ?? [];
+  const persistedKeys = () => persistedRecords().map(record => record.key);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -25,12 +29,12 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::1')).toBe(false);
   });
 
-  it('should add a key and persist to globalState', async () => {
+  it('should add a key and persist to the file store', async () => {
     await store.load();
     expect(await store.add('gh::issue-1')).toBe(true);
 
-    const persisted = fileSystem.readJson<string[]>(fileUri);
-    expect(persisted).toEqual(['gh::issue-1']);
+    const persisted = persistedRecords();
+    expect(persisted).toEqual([{ key: 'gh::issue-1', createdAt: expect.any(Number) }]);
   });
 
   it('should return false when adding a duplicate key', async () => {
@@ -57,8 +61,8 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::2')).toBe(true);
     expect(store.has('gh::3')).toBe(false);
 
-    const persisted = fileSystem.readJson<string[]>(fileUri);
-    expect(persisted).toEqual(['gh::2']);
+    const persisted = persistedRecords();
+    expect(persisted).toEqual([{ key: 'gh::2', createdAt: expect.any(Number) }]);
   });
 
   it('should ignore non-existent keys in deleteMany', async () => {
@@ -87,6 +91,43 @@ describe('ReadStateStore', () => {
     expect(store2.has('gh::1')).toBe(true);
     expect(store2.has('jira::2')).toBe(true);
     expect(store2.has('gh::3')).toBe(false);
+  });
+
+  it('persists createdAt timestamps for new keys', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(4_321);
+
+    try {
+      await store.load();
+      await store.add('gh::timed');
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(persistedRecords()).toEqual([{ key: 'gh::timed', createdAt: 4_321 }]);
+  });
+
+  it('preserves createdAt timestamps across reload and rewrite', async () => {
+    fileSystem.writeJson(fileUri, [{ key: 'gh::legacy', createdAt: 123 }]);
+
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    await store2.load();
+    await store2.add('gh::new');
+
+    expect(persistedRecords()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'gh::legacy', createdAt: 123 }),
+      expect.objectContaining({ key: 'gh::new', createdAt: expect.any(Number) }),
+    ]));
+    store2.dispose();
+  });
+
+  it('loads legacy string entries without createdAt timestamps', async () => {
+    fileSystem.writeJson(fileUri, ['gh::legacy']);
+
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    await store2.load();
+
+    expect(store2.has('gh::legacy')).toBe(true);
+    store2.dispose();
   });
 
   it('should skip non-string elements in the array', async () => {
@@ -154,7 +195,7 @@ describe('ReadStateStore', () => {
       await windowB.add('gh::remote');
       await windowA.add('gh::local');
 
-      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::local', 'gh::remote']);
+      expect(persistedKeys().sort()).toEqual(['gh::local', 'gh::remote']);
 
       windowA.dispose();
       windowB.dispose();
@@ -172,7 +213,7 @@ describe('ReadStateStore', () => {
       await windowA.deleteMany(['gh::remove']);
 
       expect([...windowA.keys()].sort()).toEqual(['gh::keep', 'gh::remote']);
-      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::keep', 'gh::remote']);
+      expect(persistedKeys().sort()).toEqual(['gh::keep', 'gh::remote']);
 
       windowA.dispose();
       windowB.dispose();
@@ -192,7 +233,7 @@ describe('ReadStateStore', () => {
 
       await windowA.add('gh::local');
 
-      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::local', 'gh::shared']);
+      expect(persistedKeys().sort()).toEqual(['gh::local', 'gh::shared']);
 
       windowA.dispose();
       windowB.dispose();
@@ -207,6 +248,46 @@ describe('ReadStateStore', () => {
       await store.load();
 
       expect([...store.keys()]).toEqual(['gh::issue-2']);
+    });
+  });
+
+  describe('capacity management', () => {
+    it('caps persisted keys and evicts the oldest keys first on write', async () => {
+      let currentTime = 0;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime++);
+
+      try {
+        await store.load();
+        await store.addMany(Array.from({ length: 6_000 }, (_, i) => `gh::issue-${i}`));
+      } finally {
+        nowSpy.mockRestore();
+      }
+
+      expect([...store.keys()]).toHaveLength(4_800);
+      expect(persistedRecords()).toHaveLength(4_800);
+      expect(store.has('gh::issue-0')).toBe(false);
+      expect(store.has('gh::issue-1199')).toBe(false);
+      expect(store.has('gh::issue-1200')).toBe(true);
+      expect(store.has('gh::issue-5999')).toBe(true);
+    });
+
+    it('trims oversized persisted read state on load and logs once', async () => {
+      const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+      fileSystem.writeJson(fileUri, Array.from({ length: 6_000 }, (_, i) => ({
+        key: `gh::issue-${i}`,
+        createdAt: i,
+      })));
+
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+
+      expect([...store2.keys()]).toHaveLength(4_800);
+      expect(persistedRecords()).toHaveLength(4_800);
+      expect(store2.has('gh::issue-0')).toBe(false);
+      expect(store2.has('gh::issue-1200')).toBe(true);
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed read-state.json from 6000 to 4800 entries while loading'));
+      store2.dispose();
+      infoSpy.mockRestore();
     });
   });
 
@@ -303,7 +384,7 @@ describe('ReadStateStore', () => {
       expect(pruned).toBe(1);
       expect(freshStore.has('gh::keep')).toBe(true);
       expect(freshStore.has('gh::stale')).toBe(false);
-      expect(fileSystem.readJson<string[]>(fileUri)).toEqual(['gh::keep']);
+      expect(persistedKeys()).toEqual(['gh::keep']);
       freshStore.dispose();
     });
 
@@ -319,7 +400,7 @@ describe('ReadStateStore', () => {
 
       expect(pruned).toBe(1);
       expect([...freshStore.keys()]).toEqual(['legacy-key']);
-      expect(fileSystem.readJson<string[]>(fileUri)).toEqual(['legacy-key']);
+      expect(persistedKeys()).toEqual(['legacy-key']);
       freshStore.dispose();
     });
 

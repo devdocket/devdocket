@@ -3,14 +3,42 @@ import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
 import type { FileStore } from './fileStore';
 
+const MAX_TOTAL_ENTRIES = 5_000;
+const EVICTION_FRACTION = 0.2;
+
+interface PersistedReadStateRecord {
+  key: string;
+  createdAt: number;
+}
+
+function trimReadStateRecords(records: PersistedReadStateRecord[]): PersistedReadStateRecord[] {
+  if (records.length <= MAX_TOTAL_ENTRIES) {
+    return records;
+  }
+
+  const evictedCount = Math.max(
+    records.length - MAX_TOTAL_ENTRIES,
+    Math.ceil(records.length * EVICTION_FRACTION),
+  );
+  const keysToEvict = new Set(
+    records
+      .map((record, index) => ({ ...record, index }))
+      .sort((a, b) => a.createdAt - b.createdAt || a.index - b.index)
+      .slice(0, evictedCount)
+      .map(record => record.key),
+  );
+
+  return records.filter(record => !keysToEvict.has(record.key));
+}
+
 /**
  * Persists the set of inbox item IDs that the user has viewed ("read")
  * so read/unread state survives across VS Code restarts.
  *
- * Stored as a string array in a JSON file under globalStorageUri.
+ * Stored as timestamped records in a JSON file under globalStorageUri.
  */
 export class ReadStateStore {
-  private readonly items = new Set<string>();
+  private readonly items = new Map<string, number>();
   private loaded = false;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
@@ -29,28 +57,68 @@ export class ReadStateStore {
    * keys, and writes the merged result.
    */
   private async persist(): Promise<void> {
-    const remoteParsed = await this.fileStore.read();
-    const merged = new Set(this.items);
-    if (Array.isArray(remoteParsed)) {
-      for (const item of remoteParsed) {
-        if (typeof item === 'string' && !this.removedSinceLoad.has(item)) {
-          merged.add(item);
-        }
+    const merged = new Map(this.items);
+    for (const remote of await this.parseFromFileStore()) {
+      if (!this.removedSinceLoad.has(remote.key) && !merged.has(remote.key)) {
+        merged.set(remote.key, remote.createdAt);
       }
     }
-    await this.fileStore.write([...merged]);
+
+    const trimmed = trimReadStateRecords(
+      Array.from(merged, ([key, createdAt]) => ({ key, createdAt })),
+    );
+    await this.fileStore.write(trimmed);
     this.items.clear();
-    for (const key of merged) {
-      this.items.add(key);
+    for (const record of trimmed) {
+      this.items.set(record.key, record.createdAt);
     }
     this.removedSinceLoad.clear();
+  }
+
+  private async parseFromFileStore(): Promise<PersistedReadStateRecord[]> {
+    const parsed = await this.fileStore.read();
+    if (!Array.isArray(parsed)) {
+      return [];
+    }
+
+    const records: PersistedReadStateRecord[] = [];
+    let invalidCount = 0;
+    for (let i = 0; i < parsed.length; i++) {
+      const item = parsed[i];
+      if (typeof item === 'string') {
+        records.push({ key: item, createdAt: i });
+        continue;
+      }
+
+      if (
+        typeof item === 'object'
+        && item !== null
+        && !Array.isArray(item)
+        && typeof (item as { key?: unknown }).key === 'string'
+        && ((item as { createdAt?: unknown }).createdAt === undefined
+          || (typeof (item as { createdAt?: unknown }).createdAt === 'number'
+            && Number.isFinite((item as { createdAt?: number }).createdAt)))
+      ) {
+        const record = item as { key: string; createdAt?: number };
+        records.push({ key: record.key, createdAt: record.createdAt ?? i });
+        continue;
+      }
+
+      invalidCount++;
+    }
+
+    if (invalidCount > 0) {
+      logger.warn(`Skipped ${invalidCount} invalid read state entries (expected strings or { key, createdAt })`);
+    }
+
+    return records;
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */
   async add(key: string): Promise<boolean> {
     if (!this.loaded) { await this.load(); }
     if (this.items.has(key)) { return false; }
-    this.items.add(key);
+    this.items.set(key, Date.now());
     await this.persist();
     this._onDidChange.fire();
     return true;
@@ -63,7 +131,7 @@ export class ReadStateStore {
     const newlyAdded: string[] = [];
     for (const key of keys) {
       if (!this.items.has(key)) {
-        this.items.add(key);
+        this.items.set(key, Date.now());
         newlyAdded.push(key);
       }
     }
@@ -75,7 +143,7 @@ export class ReadStateStore {
   }
 
   keys(): IterableIterator<string> {
-    return this.items.values();
+    return this.items.keys();
   }
 
   async deleteMany(keys: string[]): Promise<void> {
@@ -116,7 +184,7 @@ export class ReadStateStore {
     if (activeProviderIds.size === 0) { return 0; }
 
     const staleKeys: string[] = [];
-    for (const key of this.items) {
+    for (const key of this.items.keys()) {
       const delimiterIndex = key.indexOf('::');
       if (delimiterIndex === -1) { continue; }
       const providerId = key.slice(0, delimiterIndex);
@@ -139,20 +207,17 @@ export class ReadStateStore {
 
   async load(): Promise<void> {
     if (this.loaded) { return; }
-    const parsed = await this.fileStore.read();
+    const records = await this.parseFromFileStore();
+    const trimmedRecords = trimReadStateRecords(records);
     this.items.clear();
-    if (Array.isArray(parsed)) {
-      let invalidCount = 0;
-      for (const item of parsed) {
-        if (typeof item === 'string') {
-          this.items.add(item);
-        } else {
-          invalidCount++;
-        }
-      }
-      if (invalidCount > 0) {
-        logger.warn(`Skipped ${invalidCount} invalid read state entries (expected strings)`);
-      }
+    if (trimmedRecords.length !== records.length) {
+      await this.fileStore.write(trimmedRecords);
+      logger.info(`Trimmed read-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+    }
+    for (const record of trimmedRecords) {
+      this.items.set(record.key, record.createdAt);
+    }
+    if (trimmedRecords.length > 0) {
       logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
     this.removedSinceLoad.clear();
