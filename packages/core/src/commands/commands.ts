@@ -110,9 +110,7 @@ async function handleGitHubSsoError(
   retry: () => Promise<void>,
 ): Promise<void> {
   const authorizationUrl = getGitHubSsoAuthorizationUrl(err);
-  const safeAuthorizationUrl = authorizationUrl && isSafeUrl(authorizationUrl)
-    ? authorizationUrl
-    : undefined;
+  const safeAuthorizationUrl = authorizationUrl ? isSafeUrl(authorizationUrl) : null;
   const orgLabel = err.orgName
     ? `the "${err.orgName}" organization`
     : 'this organization';
@@ -127,7 +125,7 @@ async function handleGitHubSsoError(
 
   if (action === AUTHORIZE_IN_BROWSER_ACTION && safeAuthorizationUrl) {
     try {
-      await vscode.env.openExternal(vscode.Uri.parse(safeAuthorizationUrl));
+      await vscode.env.openExternal(vscode.Uri.parse(safeAuthorizationUrl.href));
     } catch (openError) {
       handleCommandError('Failed to open GitHub SSO authorization', openError);
     }
