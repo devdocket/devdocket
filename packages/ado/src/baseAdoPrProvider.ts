@@ -4,6 +4,7 @@ import {
   ProviderItem,
   type ProviderBadge,
   type ProviderRefreshOptions,
+  type ResolveUrlOptions,
   isValidUrlSegment,
   combineSignals,
   createAbortError,
@@ -350,7 +351,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return parsed.filter(item => closedSet.has(item.id)).map(item => item.id);
   }
 
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
     const match = url.trim().match(BaseAdoPrProvider.ADO_PR_PATTERN);
     if (!match) {
       return undefined;

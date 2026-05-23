@@ -393,6 +393,11 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).toHaveBeenCalled();
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledWith(
+        'https://github.com/owner/repo/pull/42',
+        expect.any(AbortSignal),
+        { interactive: true },
+      );
       expect(providerRegistry.registerSyntheticResolvedItem).toHaveBeenCalledWith(
         'github-pr-reviews',
         expect.objectContaining({

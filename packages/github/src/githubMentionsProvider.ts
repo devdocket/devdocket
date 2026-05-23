@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Lexer, type Token, type Tokens } from 'marked';
-import { ProviderItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolveUrlOptions, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -167,7 +167,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   private static readonly GITHUB_ISSUE_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\b/i;
   private static readonly GITHUB_PR_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
     const trimmed = url.trim();
     const issueMatch = trimmed.match(GitHubMentionsProvider.GITHUB_ISSUE_PATTERN);
     const prMatch = trimmed.match(GitHubMentionsProvider.GITHUB_PR_PATTERN);
@@ -189,7 +189,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     if (!response.ok && !wasAuthenticated && !signal?.aborted &&
         (response.status === 404 || looksLikeRateLimited403(response))) {
-      const retryResponse = await retryWithAuth(apiUrl, signal, { interactive: true });
+      const retryResponse = await retryWithAuth(apiUrl, signal, { interactive: options?.interactive ?? true });
       if (retryResponse) { response = retryResponse; }
     }
 

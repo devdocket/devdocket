@@ -64,6 +64,17 @@ export interface ProviderRefreshOptions {
 }
 
 /**
+ * Options that describe how URL resolution was initiated.
+ */
+export interface ResolveUrlOptions {
+  /**
+   * Whether resolving the URL may prompt for authentication when a cached
+   * session is unavailable. Background rehydration should pass `false`.
+   */
+  readonly interactive?: boolean;
+}
+
+/**
  * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link DevDocketApi.registerProvider} and emit
@@ -112,7 +123,7 @@ export interface DevDocketProvider {
    * @param url - The raw URL entered by the user.
    * @param signal - Optional abort signal for cancellation.
    */
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined>;
   /**
    * Check which of the given external items have been closed or completed.
    *

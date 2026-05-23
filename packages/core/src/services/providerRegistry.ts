@@ -360,7 +360,7 @@ export class ProviderRegistry {
       }
 
       try {
-        const resolved = await provider.resolveUrl(importedItem.url);
+        const resolved = await provider.resolveUrl(importedItem.url, undefined, { interactive: false });
         if (!resolved || resolved.externalId !== importedItem.externalId) {
           continue;
         }
@@ -433,11 +433,11 @@ export class ProviderRegistry {
    * Ask each registered provider to resolve a URL.
    * Returns the first successful result, or `undefined` if no provider recognizes the URL.
    */
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
     for (const provider of this.providers.values()) {
       if (typeof provider.resolveUrl !== 'function') { continue; }
       try {
-        const result = await provider.resolveUrl(url, signal);
+        const result = await provider.resolveUrl(url, signal, options);
         if (result) { return { ...result, providerId: provider.id }; }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { throw error; }

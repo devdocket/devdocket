@@ -353,7 +353,7 @@ async function handleCreateItemFromUrl(
       (_progress, token) => {
         const controller = new AbortController();
         token.onCancellationRequested(() => controller.abort());
-        return providerRegistry.resolveUrl(url.trim(), controller.signal);
+        return providerRegistry.resolveUrl(url.trim(), controller.signal, { interactive: true });
       },
     );
   } catch (error) {

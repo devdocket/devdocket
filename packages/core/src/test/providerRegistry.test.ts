@@ -194,7 +194,7 @@ describe('ProviderRegistry', () => {
     await vi.waitFor(() => expect(reg.findProviderItem('ado-pr-reviews', 'myorg/MyProject/myrepo/42')).toEqual(
       expect.objectContaining({ externalId: 'myorg/MyProject/myrepo/42', itemType: 'pr' }),
     ));
-    expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42');
+    expect(provider.resolveUrl).toHaveBeenCalledWith('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42', undefined, { interactive: false });
   });
 
   it('throws on duplicate provider id', () => {
@@ -2232,7 +2232,17 @@ describe('ProviderRegistry', () => {
 
       const signal = AbortSignal.abort();
       await registry.resolveUrl('https://u', signal);
-      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', signal);
+      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', signal, undefined);
+    });
+
+    it('passes resolveUrl options to the provider', async () => {
+      const p1 = createMockProvider('opts');
+      (p1 as any).resolveUrl = vi.fn(async () => undefined);
+      registry.register(p1);
+      await nextTick();
+
+      await registry.resolveUrl('https://u', undefined, { interactive: false });
+      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', undefined, { interactive: false });
     });
   });
 });
