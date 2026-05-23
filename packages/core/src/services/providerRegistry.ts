@@ -385,9 +385,10 @@ export class ProviderRegistry {
       return liveItems;
     }
 
+    const liveExternalIds = new Set(liveItems.map(item => item.externalId));
     const merged = [...liveItems];
     for (const [externalId, item] of syntheticItems) {
-      if (!liveItems.some(liveItem => liveItem.externalId === externalId)) {
+      if (!liveExternalIds.has(externalId)) {
         merged.push(item);
       }
     }
