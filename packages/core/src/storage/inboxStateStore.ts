@@ -171,7 +171,17 @@ export class InboxStateStore {
         createdAt: record.createdAt ?? i,
       });
     }
-    return records;
+
+    const deduped = new Map<string, PersistedInboxStateRecord>();
+    for (const record of records) {
+      const key = this.key(record.providerId, record.externalId);
+      const existing = deduped.get(key);
+      if (!existing || record.createdAt >= existing.createdAt) {
+        deduped.set(key, record);
+      }
+    }
+
+    return Array.from(deduped.values());
   }
 
   /**

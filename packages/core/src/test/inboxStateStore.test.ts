@@ -193,6 +193,25 @@ describe('InboxStateStore', () => {
     store2.dispose();
   });
 
+  it('deduplicates persisted inbox-state records while keeping the newest timestamp', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'dup', inboxState: 'accepted', createdAt: 1 },
+      { providerId: 'gh', externalId: 'dup', inboxState: 'dismissed', createdAt: 5 },
+      { providerId: 'gh', externalId: 'other', inboxState: 'unseen', createdAt: 3 },
+    ]);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const records = await store2.loadAll();
+
+    expect(records).toEqual([
+      { providerId: 'gh', externalId: 'dup', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'other', inboxState: 'unseen' },
+    ]);
+    expect(store2.getState('gh', 'dup')).toBe('dismissed');
+    expect(store2.getState('gh', 'other')).toBe('unseen');
+    store2.dispose();
+  });
+
   // ── Schema validation ─────────────────────────────────────────────
 
   describe('schema validation', () => {
