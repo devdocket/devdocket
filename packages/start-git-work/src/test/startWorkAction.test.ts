@@ -1185,8 +1185,9 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['branch', '-D', 'issue123']);
       const rollbackCall = vi.mocked(execFile).mock.calls.find(call => call[1][0] === 'branch' && call[1][1] === '-D');
       expect(rollbackCall?.[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Start Git Work cancelled during creating worktree.',
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Start Git Work cancelled during creating worktree.'),
+        'Clean up',
       );
     });
 

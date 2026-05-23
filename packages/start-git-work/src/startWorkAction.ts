@@ -1016,14 +1016,16 @@ export class StartWorkAction implements DevDocketAction {
 
     if (cancellationState.cleanupActivity) {
       const cleanupInfo = decodeWorkStartedDetail(cancellationState.cleanupActivity.detail);
-      const cleanupTarget = cleanupInfo?.worktreePath
+      const hasWorktree = !!cleanupInfo?.worktreePath;
+      const cleanupTarget = hasWorktree
         ? 'The created worktree may need cleanup.'
         : 'A partially created branch may need cleanup.';
+      const cleanupAction = hasWorktree ? 'Remove worktree' : 'Clean up';
       const choice = await vscode.window.showWarningMessage(
         `DevDocket: ${detail} ${cleanupTarget}`,
-        'Remove worktree',
+        cleanupAction,
       );
-      if (choice === 'Remove worktree') {
+      if (choice === cleanupAction) {
         await promptGitCleanup(
           {
             ...item,
