@@ -337,6 +337,10 @@ export class ProviderRegistry {
   }
 
   registerSyntheticResolvedItem(providerId: string, details: ProviderResolvedItem | ResolvedItem): void {
+    if (this.providers.has(providerId)) {
+      this.markImportedItemRehydrated(providerId, details.externalId);
+    }
+
     const item = toSyntheticProviderItem(details);
     if (!item) {
       return;
@@ -442,7 +446,7 @@ export class ProviderRegistry {
    * Ask each registered provider to resolve a URL.
    * Returns the first successful result, or `undefined` if no provider recognizes the URL.
    */
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<(ResolvedItem & { providerId: string }) | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
     for (const provider of this.providers.values()) {
       if (typeof provider.resolveUrl !== 'function') { continue; }
       try {

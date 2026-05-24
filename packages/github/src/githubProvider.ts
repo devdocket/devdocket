@@ -1,4 +1,4 @@
-import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, type ResolveUrlOptions, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, ProviderResolvedItem, combineSignals, createAbortError, safeDecodeComponent, type ResolveUrlOptions } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -49,7 +49,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
   private static readonly GITHUB_ISSUE_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderResolvedItem | undefined> {
     const match = url.trim().match(GitHubIssueProvider.GITHUB_ISSUE_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
@@ -84,7 +84,6 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     return {
       ...item,
       notes: item.description ?? '',
-      providerId: this.id,
     };
   }
 

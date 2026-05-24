@@ -61,7 +61,6 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
       externalId: 'myorg/MyProject/myrepo/42',
       group: 'MyProject/myrepo',
-      providerId: 'ado-pr-reviews',
       itemType: 'pr',
       author: { displayName: 'Jane Doe', handle: 'jane@example.com' },
       capabilities: { gitWork: expect.any(Function) },
@@ -317,7 +316,6 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/99',
       externalId: 'myorg/MyProject/99',
       group: 'myorg/MyProject',
-      providerId: 'ado-work-items',
       itemType: 'issue',
     }));
   });

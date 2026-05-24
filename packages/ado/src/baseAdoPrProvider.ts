@@ -10,7 +10,7 @@ import {
   createAbortError,
   runWorkerPool,
   safeDecodeComponent,
-  type ResolvedItem,
+  type ProviderResolvedItem,
   type GitWorkInfo,
 } from '@devdocket/shared';
 import { logger } from './logger';
@@ -351,7 +351,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return parsed.filter(item => closedSet.has(item.id)).map(item => item.id);
   }
 
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderResolvedItem | undefined> {
     const match = url.trim().match(BaseAdoPrProvider.ADO_PR_PATTERN);
     if (!match) {
       return undefined;
@@ -405,7 +405,6 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return {
       ...item,
       notes: item.description ?? '',
-      providerId: this.id,
       url: htmlUrl,
     };
   }

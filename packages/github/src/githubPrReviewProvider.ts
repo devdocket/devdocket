@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { ProviderItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type RelatedItemRef, type ResolveUrlOptions, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, ProviderResolvedItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type RelatedItemRef, type ResolveUrlOptions } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -105,7 +105,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
   private static readonly GITHUB_PR_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderResolvedItem | undefined> {
     const match = url.trim().match(GitHubPrReviewProvider.GITHUB_PR_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
@@ -142,7 +142,6 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     return {
       ...item,
       notes: item.description ?? '',
-      providerId: this.id,
     };
   }
 
