@@ -117,40 +117,12 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       : new Map<string, RelatedItemRef[]>();
 
     const items: ProviderItem[] = filtered.map(({ issue, repoName }) => {
-      const isPr = !!issue.pull_request;
       const externalId = `${repoName}#${issue.number}`;
-      const resurfaceVersion = resurfaceVersions.get(externalId);
-      const relatedItems = relatedItemsMap.get(externalId);
-      return {
-        externalId,
-        title: `#${issue.number}: ${issue.title}`,
-        description: issue.body ?? undefined,
-        url: issue.html_url,
-        ...(issue.user?.login ? {
-          author: {
-            displayName: issue.user.login,
-            handle: issue.user.login,
-            avatarUrl: issue.user.avatar_url,
-            profileUrl: issue.user.html_url,
-          },
-        } : {}),
-        group: repoName,
+      return this.createProviderItem(issue, repoName, {
         reason: 'mentioned',
-        canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,
-        itemType: isPr ? 'pr' : 'issue',
-        capabilities: {
-          gitWork: isPr
-            ? createGitHubPrGitWork(repoName, issue.number, issue.pull_request?.url)
-            : createGitHubIssueGitWork(repoName, issue.number),
-        },
-        badges: [
-          { label: 'Mentioned', variant: 'warning' },
-          ...buildIssueStateBadge(issue.state),
-        ],
-        ...(issue.state ? { state: issue.state } : {}),
-        ...(resurfaceVersion ? { resurfaceVersion } : {}),
-        ...(relatedItems ? { relatedItems } : {}),
-      };
+        resurfaceVersion: resurfaceVersions.get(externalId),
+        relatedItems: relatedItemsMap.get(externalId),
+      });
     });
 
     logger.info(`Discovered ${items.length} mentioned items`);
@@ -198,15 +170,61 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       await throwApiError(response, `${label} ${owner}/${repo}#${number}`);
     }
 
-    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const data = await response.json() as GitHubIssue & { url?: string };
     const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
+    const item = this.createProviderItem({
+      ...data,
+      number,
+      html_url: data.html_url,
+      repository_url: data.repository_url ?? `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+      ...(isPr ? { pull_request: { url: data.url ?? apiUrl } } : {}),
+    }, canonicalRepo, {
+      ...(isPr ? { prApiUrl: data.url ?? apiUrl } : {}),
+    });
     return {
-      title: `#${number}: ${data.title}`,
-      notes: data.body ?? '',
-      url: data.html_url,
-      externalId: `${canonicalRepo}#${number}`,
-      group: canonicalRepo,
+      ...item,
+      notes: item.description ?? '',
       providerId: this.id,
+    };
+  }
+
+  private createProviderItem(
+    issue: GitHubIssue,
+    repoName: string,
+    options?: { reason?: string; resurfaceVersion?: string; relatedItems?: RelatedItemRef[]; prApiUrl?: string },
+  ): ProviderItem {
+    const isPr = !!issue.pull_request;
+    const badges = [
+      ...(options?.reason ? [{ label: 'Mentioned', variant: 'warning' as const }] : []),
+      ...buildIssueStateBadge(issue.state),
+    ];
+
+    return {
+      externalId: `${repoName}#${issue.number}`,
+      title: `#${issue.number}: ${issue.title}`,
+      description: issue.body ?? undefined,
+      url: issue.html_url,
+      ...(issue.user?.login ? {
+        author: {
+          displayName: issue.user.login,
+          handle: issue.user.login,
+          avatarUrl: issue.user.avatar_url,
+          profileUrl: issue.user.html_url,
+        },
+      } : {}),
+      group: repoName,
+      ...(options?.reason ? { reason: options.reason } : {}),
+      canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,
+      itemType: isPr ? 'pr' : 'issue',
+      capabilities: {
+        gitWork: isPr
+          ? createGitHubPrGitWork(repoName, issue.number, options?.prApiUrl ?? issue.pull_request?.url)
+          : createGitHubIssueGitWork(repoName, issue.number),
+      },
+      ...(badges.length > 0 ? { badges } : {}),
+      ...(issue.state ? { state: issue.state } : {}),
+      ...(options?.resurfaceVersion ? { resurfaceVersion: options.resurfaceVersion } : {}),
+      ...(options?.relatedItems ? { relatedItems: options.relatedItems } : {}),
     };
   }
 

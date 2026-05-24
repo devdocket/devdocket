@@ -315,28 +315,8 @@ export class AdoWorkItemProvider extends BaseProvider {
     const items: ProviderItem[] = [];
     for (const wi of activeWorkItems) {
       const projectName = wi.fields['System.TeamProject'];
-      const wiType = wi.fields['System.WorkItemType'];
-      const state = wi.fields['System.State'];
-      const stateBadge: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
       const gitWork = await this.resolveWorkItemGitWork(token, org, projectName, wi, signal);
-      items.push({
-        externalId: `${org}/${projectName}/${wi.id}`,
-        title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
-        description: wi.fields['System.Description']?.replace(/<[^>]*(>|$)/g, '') ?? undefined,
-        url: wi._links.html.href,
-        ...(wi.fields['System.CreatedBy']?.displayName ? {
-          author: {
-            displayName: wi.fields['System.CreatedBy'].displayName,
-            handle: wi.fields['System.CreatedBy'].uniqueName,
-          },
-        } : {}),
-        group: `${org}/${projectName}`,
-        reason: 'assigned',
-        state,
-        itemType: 'issue',
-        ...(gitWork ? { capabilities: { gitWork } } : {}),
-        ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
-      });
+      items.push(this.createProviderItem(wi, org, gitWork, 'assigned'));
     }
 
     return { items, failed: batchFailed };
@@ -724,17 +704,63 @@ export class AdoWorkItemProvider extends BaseProvider {
       throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`);
     }
 
-    const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
+    const data = await response.json() as AdoWorkItem;
     const teamProject = data.fields['System.TeamProject'];
     const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(teamProject)}/_workitems/edit/${id}`;
+    const token = this.extractBearerToken(headers)
+      ?? (await getAdoSession({ interactive: false, signal }))?.accessToken;
+    const gitWork = token
+      ? await this.resolveWorkItemGitWork(token, org, teamProject, data, signal)
+      : undefined;
+    const item = this.createProviderItem({
+      ...data,
+      id,
+      _links: {
+        html: { href: data._links?.html?.href ?? htmlUrl },
+      },
+    }, org, gitWork);
     return {
-      title: `#${id}: ${data.fields['System.Title']}`,
+      ...item,
       notes: this.stripHtml(data.fields['System.Description'] ?? ''),
-      url: htmlUrl,
-      externalId: `${org}/${teamProject}/${id}`,
-      group: `${org}/${teamProject}`,
       providerId: this.id,
+      url: htmlUrl,
     };
+  }
+
+  private createProviderItem(wi: AdoWorkItem, org: string, gitWork?: GitWorkInfo, reason?: string): ProviderItem {
+    const projectName = wi.fields['System.TeamProject'];
+    const wiType = wi.fields['System.WorkItemType'];
+    const state = wi.fields['System.State'];
+    const badges: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
+    const description = this.stripHtml(wi.fields['System.Description'] ?? '');
+
+    return {
+      externalId: `${org}/${projectName}/${wi.id}`,
+      title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
+      ...(description ? { description } : {}),
+      url: wi._links.html.href,
+      ...(wi.fields['System.CreatedBy']?.displayName ? {
+        author: {
+          displayName: wi.fields['System.CreatedBy'].displayName,
+          handle: wi.fields['System.CreatedBy'].uniqueName,
+        },
+      } : {}),
+      group: `${org}/${projectName}`,
+      ...(reason ? { reason } : {}),
+      ...(state ? { state } : {}),
+      itemType: 'issue',
+      ...(gitWork ? { capabilities: { gitWork } } : {}),
+      ...(badges.length > 0 ? { badges } : {}),
+    };
+  }
+
+  private extractBearerToken(headers: Record<string, string>): string | undefined {
+    const authorization = headers['Authorization'];
+    if (!authorization) {
+      return undefined;
+    }
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    return match?.[1];
   }
 
   private stripHtml(html: string): string {

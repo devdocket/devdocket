@@ -755,7 +755,7 @@ describe('AdoWorkItemProvider — extended', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].description).toBe('');
+      expect(items[0].description).toBeUndefined();
     });
   });
 

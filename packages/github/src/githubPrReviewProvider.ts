@@ -80,31 +80,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       const repoName = repoNameMap.get(pr.html_url)!;
       const externalId = `${repoName}#${pr.number}`;
       const relatedItems = relatedItemsMap.get(externalId);
-      const item: ProviderItem = {
-        externalId,
-        title: `#${pr.number}: ${pr.title}`,
-        description: pr.body ?? undefined,
-        url: pr.html_url,
-        ...(pr.user?.login ? {
-          author: {
-            displayName: pr.user.login,
-            handle: pr.user.login,
-            avatarUrl: pr.user.avatar_url,
-            profileUrl: pr.user.html_url,
-          },
-        } : {}),
-        group: repoName,
+      const item = this.createProviderItem(pr, repoName, {
         reason: 'review_requested',
-        canonicalId: `github:pull:${repoName}#${pr.number}`,
-        itemType: 'pr',
-        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
-        ...(relatedItems ? { relatedItems } : {}),
-        badges: [
-          { label: 'Review requested', variant: 'warning' },
-          ...buildIssueStateBadge(pr.state),
-        ],
-      };
-      if (pr.state) { item.state = pr.state; }
+        relatedItems,
+        prApiUrl: pr.pull_request?.url,
+      });
       // Head SHA uses soft resurfacing (version) — resurfaces from
       // Done/Archived or when no work item exists, but not from Queue or Focus.
       const headSha = headShas.get(pr.html_url);
@@ -149,16 +129,56 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       await throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
     }
 
-    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const data = await response.json() as GitHubIssue & { url?: string };
     const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
+    const item = this.createProviderItem({
+      ...data,
+      number,
+      html_url: data.html_url,
+      repository_url: data.repository_url ?? `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    }, canonicalRepo, {
+      prApiUrl: data.url ?? apiUrl,
+    });
     return {
-      title: `#${number}: ${data.title}`,
-      notes: data.body ?? '',
-      url: data.html_url,
-      externalId: `${canonicalRepo}#${number}`,
-      group: canonicalRepo,
+      ...item,
+      notes: item.description ?? '',
       providerId: this.id,
     };
+  }
+
+  private createProviderItem(
+    pr: GitHubIssue,
+    repoName: string,
+    options?: { reason?: string; relatedItems?: RelatedItemRef[]; prApiUrl?: string },
+  ): ProviderItem {
+    const badges = [
+      ...(options?.reason ? [{ label: 'Review requested', variant: 'warning' as const }] : []),
+      ...buildIssueStateBadge(pr.state),
+    ];
+
+    const item: ProviderItem = {
+      externalId: `${repoName}#${pr.number}`,
+      title: `#${pr.number}: ${pr.title}`,
+      description: pr.body ?? undefined,
+      url: pr.html_url,
+      ...(pr.user?.login ? {
+        author: {
+          displayName: pr.user.login,
+          handle: pr.user.login,
+          avatarUrl: pr.user.avatar_url,
+          profileUrl: pr.user.html_url,
+        },
+      } : {}),
+      group: repoName,
+      ...(options?.reason ? { reason: options.reason } : {}),
+      canonicalId: `github:pull:${repoName}#${pr.number}`,
+      itemType: 'pr',
+      capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, options?.prApiUrl ?? pr.pull_request?.url) },
+      ...(options?.relatedItems ? { relatedItems: options.relatedItems } : {}),
+      ...(badges.length > 0 ? { badges } : {}),
+    };
+    if (pr.state) { item.state = pr.state; }
+    return item;
   }
 
   /**

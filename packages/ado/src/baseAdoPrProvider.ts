@@ -392,25 +392,21 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     const projectName = data.repository.project.name;
     const repoName = data.repository.name;
     const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}/pullrequest/${id}`;
-    return {
-      title: `#${id}: ${data.title}`,
-      notes: data.description ?? '',
-      url: htmlUrl,
-      externalId: `${org}/${projectName}/${repoName}/${id}`,
-      group: `${projectName}/${repoName}`,
-      providerId: this.id,
-      itemType: 'pr',
-      capabilities: {
-        gitWork: this.createPrGitWork({
-          ...data,
-          pullRequestId: id,
-          repository: {
-            ...data.repository,
-            name: repoName,
-            project: { name: projectName },
-          },
-        }, org),
+    const item = this.createBaseItem({
+      ...data,
+      pullRequestId: id,
+      repository: {
+        ...data.repository,
+        name: repoName,
+        project: { name: projectName },
+        webUrl: data.repository.webUrl ?? `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`,
       },
+    }, org);
+    return {
+      ...item,
+      notes: item.description ?? '',
+      providerId: this.id,
+      url: htmlUrl,
     };
   }
 

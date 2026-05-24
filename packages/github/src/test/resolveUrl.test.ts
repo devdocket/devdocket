@@ -68,6 +68,15 @@ describe('resolveUrl', () => {
       expect(result?.externalId).toBe('owner/repo#123');
       expect(result?.group).toBe('owner/repo');
       expect(result?.providerId).toBe('github');
+      expect(result?.description).toBe('The login page is broken');
+      expect(result?.canonicalId).toBe('github:issue:owner/repo#123');
+      expect(result?.itemType).toBe('issue');
+      expect(result?.capabilities?.gitWork).toEqual({
+        kind: 'issue',
+        cloneUrl: 'https://github.com/owner/repo.git',
+        ref: 'issue123',
+        repoLabel: 'owner/repo',
+      });
 
       expect(mockFetch).toHaveBeenCalledOnce();
       expect(mockFetch).toHaveBeenCalledWith(
@@ -415,6 +424,10 @@ describe('resolveUrl', () => {
       expect(result?.externalId).toBe('owner/repo#456');
       expect(result?.group).toBe('owner/repo');
       expect(result?.providerId).toBe('github-pr-reviews');
+      expect(result?.description).toBe('This PR adds a new feature');
+      expect(result?.canonicalId).toBe('github:pull:owner/repo#456');
+      expect(result?.itemType).toBe('pr');
+      expect(result?.capabilities?.gitWork).toEqual(expect.any(Function));
 
       expect(mockFetch).toHaveBeenCalledOnce();
       expect(mockFetch).toHaveBeenCalledWith(

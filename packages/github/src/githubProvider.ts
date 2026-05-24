@@ -36,32 +36,8 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       ? issuesWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : issuesWithRepo;
 
-    const items: ProviderItem[] = filteredIssues.map(({ issue, repoName }) => {
-      return {
-        externalId: `${repoName}#${issue.number}`,
-        title: `#${issue.number}: ${issue.title}`,
-        description: issue.body ?? undefined,
-        url: issue.html_url,
-        ...(issue.user?.login ? {
-          author: {
-            displayName: issue.user.login,
-            handle: issue.user.login,
-            avatarUrl: issue.user.avatar_url,
-            profileUrl: issue.user.html_url,
-          },
-        } : {}),
-        group: repoName,
-        reason: 'assigned',
-        canonicalId: `github:issue:${repoName}#${issue.number}`,
-        itemType: 'issue',
-        capabilities: { gitWork: createGitHubIssueGitWork(repoName, issue.number) },
-        badges: [
-          { label: 'Assigned', variant: 'warning' },
-          ...buildIssueStateBadge(issue.state),
-        ],
-        ...(issue.state ? { state: issue.state } : {}),
-      };
-    });
+    const items: ProviderItem[] = filteredIssues.map(({ issue, repoName }) =>
+      this.createProviderItem(issue, repoName, { reason: 'assigned' }));
 
     logger.info(`Discovered ${items.length} GitHub issues`);
     this.publishProviderItems(items, patterns);
@@ -97,15 +73,47 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       await throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
     }
 
-    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const data = await response.json() as GitHubIssue;
     const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
+    const item = this.createProviderItem({
+      ...data,
+      number,
+      html_url: data.html_url,
+      repository_url: data.repository_url ?? `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    }, canonicalRepo);
     return {
-      title: `#${number}: ${data.title}`,
-      notes: data.body ?? '',
-      url: data.html_url,
-      externalId: `${canonicalRepo}#${number}`,
-      group: canonicalRepo,
+      ...item,
+      notes: item.description ?? '',
       providerId: this.id,
+    };
+  }
+
+  private createProviderItem(issue: GitHubIssue, repoName: string, options?: { reason?: string }): ProviderItem {
+    const badges = [
+      ...(options?.reason ? [{ label: 'Assigned', variant: 'warning' as const }] : []),
+      ...buildIssueStateBadge(issue.state),
+    ];
+
+    return {
+      externalId: `${repoName}#${issue.number}`,
+      title: `#${issue.number}: ${issue.title}`,
+      description: issue.body ?? undefined,
+      url: issue.html_url,
+      ...(issue.user?.login ? {
+        author: {
+          displayName: issue.user.login,
+          handle: issue.user.login,
+          avatarUrl: issue.user.avatar_url,
+          profileUrl: issue.user.html_url,
+        },
+      } : {}),
+      group: repoName,
+      ...(options?.reason ? { reason: options.reason } : {}),
+      canonicalId: `github:issue:${repoName}#${issue.number}`,
+      itemType: 'issue',
+      capabilities: { gitWork: createGitHubIssueGitWork(repoName, issue.number) },
+      ...(badges.length > 0 ? { badges } : {}),
+      ...(issue.state ? { state: issue.state } : {}),
     };
   }
 

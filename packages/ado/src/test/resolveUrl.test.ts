@@ -50,8 +50,9 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
     );
 
-    expect(result).toEqual({
-      title: '#42: Fix critical bug',
+    expect(result).toEqual(expect.objectContaining({
+      title: 'PR 42: Fix critical bug',
+      description: 'This PR fixes a critical issue',
       notes: 'This PR fixes a critical issue',
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
       externalId: 'myorg/MyProject/myrepo/42',
@@ -59,7 +60,7 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       providerId: 'ado-pr-reviews',
       itemType: 'pr',
       capabilities: { gitWork: expect.any(Function) },
-    });
+    }));
   });
 
   it('uses canonical names from API in externalId and group', async () => {
@@ -203,7 +204,7 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
     );
 
     expect(result).toBeDefined();
-    expect(result?.title).toBe('#42: Private PR now visible');
+    expect(result?.title).toBe('PR 42: Private PR now visible');
     // Verify retry was made with auth
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch).toHaveBeenLastCalledWith(
@@ -304,13 +305,74 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
       'https://dev.azure.com/myorg/MyProject/_workitems/edit/99',
     );
 
-    expect(result).toEqual({
-      title: '#99: Implement feature X',
+    expect(result).toEqual(expect.objectContaining({
+      title: 'User Story 99: Implement feature X',
+      description: 'Add support for new feature',
       notes: 'Add support for new feature',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/99',
       externalId: 'myorg/MyProject/99',
       group: 'myorg/MyProject',
       providerId: 'ado-work-items',
+      itemType: 'issue',
+    }));
+  });
+
+  it('adds gitWork when the resolved work item has a repo relation', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({
+      accessToken: 'test-token',
+      id: 'session-1',
+      scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+      account: { id: '1', label: 'testuser' },
+    } as any);
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('/wit/workitems/77')) {
+        return {
+          ok: true,
+          json: async () => ({
+            id: 77,
+            fields: {
+              'System.Title': 'Connected work item',
+              'System.Description': '<p>Has a repo</p>',
+              'System.TeamProject': 'MyProject',
+              'System.WorkItemType': 'Task',
+            },
+            _links: {
+              html: { href: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/77' },
+            },
+            relations: [{
+              rel: 'ArtifactLink',
+              url: 'vstfs:///Git/Ref/project-guid/repo-guid',
+              attributes: { name: 'Branch' },
+            }],
+          }),
+        };
+      }
+      if (url.includes('/_apis/git/repositories/repo-guid')) {
+        return {
+          ok: true,
+          json: async () => ({
+            name: 'myrepo',
+            remoteUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+          }),
+        };
+      }
+      if (url.includes('/workitemtypes/') && url.includes('/states')) {
+        return { ok: true, json: async () => ({ count: 0, value: [] }) };
+      }
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+
+    const result = await provider.resolveUrl(
+      'https://dev.azure.com/myorg/MyProject/_workitems/edit/77',
+    );
+
+    expect(result?.itemType).toBe('issue');
+    expect(result?.capabilities?.gitWork).toEqual({
+      kind: 'issue',
+      cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ref: 'issue77',
+      repoLabel: 'myorg/MyProject/myrepo',
     });
   });
 
@@ -555,7 +617,7 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
     );
 
     expect(result).toBeDefined();
-    expect(result?.title).toBe('#99: Private item now visible');
+    expect(result?.title).toBe('User Story 99: Private item now visible');
     // Verify retry was made with auth
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch).toHaveBeenLastCalledWith(

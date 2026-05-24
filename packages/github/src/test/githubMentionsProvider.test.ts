@@ -1508,14 +1508,18 @@ describe('GitHubMentionsProvider', () => {
       });
 
       const result = await provider.resolveUrl('https://github.com/owner/repo/issues/5');
-      expect(result).toEqual({
+      expect(result).toEqual(expect.objectContaining({
         title: '#5: Bug report',
+        description: 'Some description',
         notes: 'Some description',
         url: 'https://github.com/owner/repo/issues/5',
         externalId: 'owner/repo#5',
         group: 'owner/repo',
         providerId: 'github-mentions',
-      });
+        canonicalId: 'github:issue:owner/repo#5',
+        itemType: 'issue',
+        capabilities: { gitWork: expect.any(Object) },
+      }));
     });
 
     it('resolves PR URLs', async () => {
@@ -1536,14 +1540,18 @@ describe('GitHubMentionsProvider', () => {
       });
 
       const result = await provider.resolveUrl('https://github.com/owner/repo/pull/10');
-      expect(result).toEqual({
+      expect(result).toEqual(expect.objectContaining({
         title: '#10: Feature PR',
+        description: 'PR description',
         notes: 'PR description',
         url: 'https://github.com/owner/repo/pull/10',
         externalId: 'owner/repo#10',
         group: 'owner/repo',
         providerId: 'github-mentions',
-      });
+        canonicalId: 'github:pull:owner/repo#10',
+        itemType: 'pr',
+        capabilities: { gitWork: expect.any(Function) },
+      }));
     });
 
     it('returns undefined for non-GitHub URLs', async () => {
