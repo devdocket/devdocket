@@ -6,6 +6,7 @@ import { JsonTaskStore } from '../storage/jsonTaskStore';
 import { JsonFileStore } from '../storage/fileStore';
 import { ITaskStore } from '../storage/taskStore';
 import { useMockFileSystem } from './testFileSystem';
+import { decodeUpdatedDetail, UPDATED_DETAIL_VALUE_MAX_LENGTH, renderUpdatedActivityDetail } from '../services/updateDetail';
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
@@ -986,7 +987,15 @@ describe('WorkGraph', () => {
       const updated = graph.getItem(item.id);
       expect(updated?.activityLog).toHaveLength(2);
       expect(updated!.activityLog![1].type).toBe('updated');
-      expect(updated!.activityLog![1].detail).toBe('title');
+      expect(decodeUpdatedDetail(updated!.activityLog![1].detail)).toEqual({
+        kind: 'v1',
+        detail: {
+          v: 1,
+          changes: {
+            title: { from: 'Original', to: 'Updated' },
+          },
+        },
+      });
     });
 
     it('records changed fields in update detail', async () => {
@@ -994,7 +1003,70 @@ describe('WorkGraph', () => {
       await graph.updateItem(item.id, { title: 'New title', notes: 'new notes' });
 
       const updated = graph.getItem(item.id);
-      expect(updated!.activityLog![1].detail).toBe('title, notes');
+      expect(decodeUpdatedDetail(updated!.activityLog![1].detail)).toEqual({
+        kind: 'v1',
+        detail: {
+          v: 1,
+          changes: {
+            title: { from: 'Original', to: 'New title' },
+            notes: { from: 'some notes', to: 'new notes' },
+          },
+        },
+      });
+    });
+
+    it('truncates oversized field diffs in update detail', async () => {
+      const originalNotes = 'a'.repeat(UPDATED_DETAIL_VALUE_MAX_LENGTH + 10);
+      const updatedNotes = 'b'.repeat(UPDATED_DETAIL_VALUE_MAX_LENGTH + 25);
+      const item = await graph.createItem({ title: 'Original', notes: originalNotes });
+      await graph.updateItem(item.id, { notes: updatedNotes });
+
+      const updated = graph.getItem(item.id);
+      expect(decodeUpdatedDetail(updated!.activityLog![1].detail)).toEqual({
+        kind: 'v1',
+        detail: {
+          v: 1,
+          changes: {
+            notes: {
+              from: `${'a'.repeat(UPDATED_DETAIL_VALUE_MAX_LENGTH - 1)}…`,
+              to: `${'b'.repeat(UPDATED_DETAIL_VALUE_MAX_LENGTH - 1)}…`,
+            },
+          },
+        },
+      });
+    });
+
+    it('omits provider-synced description values from update detail', async () => {
+      const item = await graph.createItem({ title: 'Original', description: 'Old provider description' });
+      await graph.updateItem(item.id, { description: 'New provider description' }, { source: 'provider-sync' });
+
+      const updated = graph.getItem(item.id);
+      expect(decodeUpdatedDetail(updated!.activityLog![1].detail)).toEqual({
+        kind: 'v1',
+        detail: {
+          v: 1,
+          changes: {
+            description: {},
+          },
+        },
+      });
+      expect(renderUpdatedActivityDetail(updated!.activityLog![1].detail)).toEqual({
+        kind: 'fields',
+        rows: [{ label: 'Description', value: 'value changed' }],
+      });
+    });
+
+    it('does not record empty-to-empty changes when clearing optional fields', async () => {
+      const item = await graph.createItem({ title: 'Original' });
+      const listener = vi.fn();
+      graph.onDidChange(listener);
+      (store.save as ReturnType<typeof vi.fn>).mockClear();
+
+      await graph.updateItem(item.id, { notes: '' });
+
+      expect(graph.getItem(item.id)?.activityLog).toHaveLength(1);
+      expect(store.save).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('does not record update entry when no fields actually changed', async () => {
