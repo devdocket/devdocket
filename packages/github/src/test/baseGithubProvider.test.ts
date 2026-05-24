@@ -24,6 +24,12 @@ class TestGitHubProvider extends BaseGitHubProvider {
   }
 }
 
+function selectErrorAction(label: string): void {
+  vi.mocked(window.showErrorMessage).mockImplementationOnce(async (_message: string, ...items: any[]) =>
+    items.find(item => (typeof item === 'string' ? item : item.title) === label) as any,
+  );
+}
+
 describe('BaseGitHubProvider repository filtering', () => {
   afterEach(() => {
     resetGitHubSsoNotificationDedupeForTests();
@@ -111,7 +117,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('opens the organization SSO URL from background refresh errors', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Authorize in browser' as any);
+    selectErrorAction('Authorize in browser');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError({
       orgName: 'example-open',
@@ -126,9 +132,9 @@ describe('BaseGitHubProvider repository filtering', () => {
 
     expect(window.showErrorMessage).toHaveBeenCalledWith(
       'DevDocket: GitHub requires SSO authorization for the "example-open" organization\nbefore DevDocket can refresh items from it.',
-      'Authorize in browser',
-      'Retry',
-      'Dismiss',
+      expect.objectContaining({ title: 'Authorize in browser' }),
+      expect.objectContaining({ title: 'Retry' }),
+      expect.objectContaining({ title: 'Dismiss' }),
     );
     expect(env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
     expect(provider.fetchImpl).toHaveBeenCalledTimes(2);
@@ -138,7 +144,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('falls back to the org SSO page when the header omits a direct authorization URL', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Authorize in browser' as any);
+    selectErrorAction('Authorize in browser');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError({
       orgName: 'example-fallback',
@@ -160,7 +166,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('omits authorize when no SSO URL can be derived', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    selectErrorAction('Dismiss');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError();
     provider.fetchImpl.mockRejectedValue(error);
@@ -170,8 +176,8 @@ describe('BaseGitHubProvider repository filtering', () => {
 
     expect(window.showErrorMessage).toHaveBeenCalledWith(
       'DevDocket: GitHub requires SSO authorization for this organization\nbefore DevDocket can refresh items from it.',
-      'Retry',
-      'Dismiss',
+      expect.objectContaining({ title: 'Retry' }),
+      expect.objectContaining({ title: 'Dismiss' }),
     );
     expect(env.openExternal).not.toHaveBeenCalled();
 
@@ -180,7 +186,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('omits authorize when the SSO URL is not safe to open', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    selectErrorAction('Dismiss');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError({
       ssoUrl: 'file:///not-safe',
@@ -192,8 +198,8 @@ describe('BaseGitHubProvider repository filtering', () => {
 
     expect(window.showErrorMessage).toHaveBeenCalledWith(
       'DevDocket: GitHub requires SSO authorization for this organization\nbefore DevDocket can refresh items from it.',
-      'Retry',
-      'Dismiss',
+      expect.objectContaining({ title: 'Retry' }),
+      expect.objectContaining({ title: 'Dismiss' }),
     );
     expect(env.openExternal).not.toHaveBeenCalled();
 
@@ -202,7 +208,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('shows the refresh-oriented SSO message for user-triggered refreshes', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    selectErrorAction('Dismiss');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError({
       orgName: 'example-refresh',
@@ -214,9 +220,9 @@ describe('BaseGitHubProvider repository filtering', () => {
 
     expect(window.showErrorMessage).toHaveBeenCalledWith(
       'DevDocket: GitHub requires SSO authorization for the "example-refresh" organization\nbefore DevDocket can refresh items from it.',
-      'Authorize in browser',
-      'Retry',
-      'Dismiss',
+      expect.objectContaining({ title: 'Authorize in browser' }),
+      expect.objectContaining({ title: 'Retry' }),
+      expect.objectContaining({ title: 'Dismiss' }),
     );
 
     provider.dispose();
@@ -224,7 +230,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('deduplicates non-interactive refresh SSO prompts', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    selectErrorAction('Dismiss');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError({
       orgName: 'example-noninteractive',
@@ -242,7 +248,7 @@ describe('BaseGitHubProvider repository filtering', () => {
 
   it('keeps background SSO prompts deduplicated after dismiss', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
-    vi.mocked(window.showErrorMessage).mockResolvedValue('Dismiss' as any);
+    selectErrorAction('Dismiss');
     const provider = new TestGitHubProvider();
     const error = new GitHubSsoError({
       orgName: 'example-dismiss',

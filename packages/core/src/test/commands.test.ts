@@ -69,6 +69,12 @@ function makeRecoverableError(overrides: Partial<RecoverableError> = {}): Recove
   return error;
 }
 
+function selectErrorAction(label: string): void {
+  (vscode.window.showErrorMessage as Mock).mockImplementationOnce(async (_message: string, ...items: any[]) =>
+    items.find(item => (typeof item === 'string' ? item : item.title) === label),
+  );
+}
+
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
   'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
@@ -468,16 +474,16 @@ describe('registerCommands', () => {
       });
       providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Reconnect');
+      selectErrorAction('Reconnect');
       await invoke('devdocket.createItemFromUrl');
 
       expect(run).toHaveBeenCalledTimes(1);
       expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(1);
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'Recoverable error',
-        'Reconnect',
-        'Retry',
-        'Dismiss',
+        expect.objectContaining({ title: 'Reconnect' }),
+        expect.objectContaining({ title: 'Retry' }),
+        expect.objectContaining({ title: 'Dismiss' }),
       );
     });
 
@@ -495,7 +501,7 @@ describe('registerCommands', () => {
         .mockRejectedValueOnce(recoverableError)
         .mockResolvedValueOnce(fakeDetails);
       (vscode.window.showInputBox as Mock).mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValueOnce('Authorize in browser');
+      selectErrorAction('Authorize in browser');
       await invoke('devdocket.createItemFromUrl');
 
       expect(authorize).toHaveBeenCalledTimes(1);
@@ -515,13 +521,13 @@ describe('registerCommands', () => {
       });
       providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
+      selectErrorAction('Dismiss');
       await invoke('devdocket.createItemFromUrl');
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'Recoverable error',
-        'Reconnect',
-        'Dismiss',
+        expect.objectContaining({ title: 'Reconnect' }),
+        expect.objectContaining({ title: 'Dismiss' }),
       );
     });
 
@@ -529,13 +535,13 @@ describe('registerCommands', () => {
       const recoverableError = makeRecoverableError({ message: 'Recoverable error' });
       providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
+      selectErrorAction('Dismiss');
       await invoke('devdocket.createItemFromUrl');
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'Recoverable error',
-        'Retry',
-        'Dismiss',
+        expect.objectContaining({ title: 'Retry' }),
+        expect.objectContaining({ title: 'Dismiss' }),
       );
     });
 
@@ -546,7 +552,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(fakeDetails);
       (vscode.window.showInputBox as Mock)
         .mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValueOnce('Retry');
+      selectErrorAction('Retry');
       await invoke('devdocket.createItemFromUrl');
 
       expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(2);

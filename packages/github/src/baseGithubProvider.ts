@@ -273,27 +273,34 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       ? `the "${error.orgName}" organization`
       : 'this organization';
     const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`;
-    const providerActions = error.actions ?? [];
-    const actions = [
-      ...providerActions.map(action => action.label),
-      ...(retry && error.retryable !== false ? [RETRY] : []),
-      DISMISS,
+    const providerItems = (error.actions ?? []).map(action => ({
+      title: action.label,
+      action,
+    }));
+    const retryItem = retry && error.retryable !== false
+      ? { title: RETRY }
+      : undefined;
+    const dismissItem = { title: DISMISS };
+    const items = [
+      ...providerItems,
+      ...(retryItem ? [retryItem] : []),
+      dismissItem,
     ];
 
-    void Promise.resolve(vscode.window.showErrorMessage(message, ...actions))
-      .then(async action => {
-        const providerAction = providerActions.find(candidate => candidate.label === action);
-        if (providerAction) {
+    void Promise.resolve(vscode.window.showErrorMessage(message, ...items))
+      .then(async selection => {
+        const providerItem = providerItems.find(item => item === selection);
+        if (providerItem) {
           if (dedupeByOrg) {
             notifiedGitHubSsoOrgs.delete(dedupeKey);
           }
           try {
-            await providerAction.run();
+            await providerItem.action.run();
           } catch (actionError) {
-            logger.error(`GitHub SSO action failed: ${providerAction.label}`, actionError);
+            logger.error(`GitHub SSO action failed: ${providerItem.action.label}`, actionError);
             return;
           }
-          if (providerAction.retryAfterAction && retry) {
+          if (providerItem.action.retryAfterAction && retry) {
             try {
               await retry();
             } catch (retryError) {
@@ -303,11 +310,11 @@ export abstract class BaseGitHubProvider extends BaseProvider {
           return;
         }
 
-        if (!action || action === DISMISS) {
+        if (!selection || selection === dismissItem) {
           return;
         }
 
-        if (action === RETRY && retry) {
+        if (selection === retryItem && retry) {
           if (dedupeByOrg) {
             notifiedGitHubSsoOrgs.delete(dedupeKey);
           }

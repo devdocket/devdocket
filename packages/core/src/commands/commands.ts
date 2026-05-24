@@ -85,23 +85,31 @@ async function handleRecoverableError(
   err: RecoverableError,
   retry: () => Promise<void>,
 ): Promise<void> {
-  const providerActions = err.actions ?? [];
-  const actions = [
-    ...providerActions.map(action => action.label),
-    ...(err.retryable !== false ? [RETRY_ACTION] : []),
-    DISMISS_ACTION,
+  const providerItems = (err.actions ?? []).map(action => ({
+    title: action.label,
+    action,
+  }));
+  const retryItem = err.retryable !== false
+    ? { title: RETRY_ACTION }
+    : undefined;
+  const dismissItem = { title: DISMISS_ACTION };
+  const items = [
+    ...providerItems,
+    ...(retryItem ? [retryItem] : []),
+    dismissItem,
   ];
-  const action = await vscode.window.showErrorMessage(err.message, ...actions);
-  const providerAction = providerActions.find(candidate => candidate.label === action);
-  if (providerAction) {
+  const selection = await vscode.window.showErrorMessage(err.message, ...items);
+
+  const providerItem = providerItems.find(item => item === selection);
+  if (providerItem) {
     try {
-      await providerAction.run();
+      await providerItem.action.run();
     } catch (actionError) {
-      handleCommandError(`Recovery action failed: ${providerAction.label}`, actionError);
+      handleCommandError(`Recovery action failed: ${providerItem.action.label}`, actionError);
       return;
     }
 
-    if (providerAction.retryAfterAction) {
+    if (providerItem.action.retryAfterAction) {
       try {
         await retry();
       } catch (retryError) {
@@ -111,11 +119,11 @@ async function handleRecoverableError(
     return;
   }
 
-  if (!action || action === DISMISS_ACTION) {
+  if (!selection || selection === dismissItem) {
     return;
   }
 
-  if (action === RETRY_ACTION) {
+  if (selection === retryItem) {
     try {
       await retry();
     } catch (retryError) {
