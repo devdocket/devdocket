@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
+import { type RecoverableError } from '@devdocket/shared';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { registerCommands } from '../commands/commands';
 import { isSafeUrl } from '../utils/url';
@@ -57,6 +58,15 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
     url: 'https://github.com/org/repo/issues/2',
     ...overrides,
   };
+}
+
+function makeRecoverableError(overrides: Partial<RecoverableError> = {}): RecoverableError {
+  const error = new Error('Recoverable error') as RecoverableError;
+  Object.assign(error, {
+    recoverable: true as const,
+    ...overrides,
+  });
+  return error;
 }
 
 type UsedWorkGraphMethods = Pick<
@@ -447,81 +457,92 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
     });
 
-    it('shows SSO recovery actions when URL resolution requires GitHub authorization', async () => {
-      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
-        name: 'GitHubSsoError',
-        orgName: 'example',
-        ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    it('shows provider-supplied recovery actions and invokes the selected callback', async () => {
+      const run = vi.fn(async () => undefined);
+      const recoverableError = makeRecoverableError({
+        message: 'Recoverable error',
+        actions: [{
+          label: 'Reconnect',
+          run,
+        }],
       });
-      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
+      providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Reconnect');
       await invoke('devdocket.createItemFromUrl');
 
-      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(1);
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore this item can be loaded.',
-        'Authorize in browser',
+        'Recoverable error',
+        'Reconnect',
         'Retry',
         'Dismiss',
       );
     });
 
-    it('opens the GitHub SSO authorization URL in the browser when requested', async () => {
-      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
-        name: 'GitHubSsoError',
-        orgName: 'example',
-        ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
-      });
-      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
-      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Authorize in browser');
-      await invoke('devdocket.createItemFromUrl');
-
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://github.com/orgs/example/sso?authorization_request=abc123');
-      expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
-    });
-
-    it('falls back to the org SSO page when the error has no direct authorization URL', async () => {
-      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
-        name: 'GitHubSsoError',
-        orgName: 'example-fallback',
-      });
-      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
-      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Authorize in browser');
-      await invoke('devdocket.createItemFromUrl');
-
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://github.com/orgs/example-fallback/sso');
-      expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
-    });
-
-    it('omits authorize when the SSO URL is not safe to open', async () => {
-      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
-        name: 'GitHubSsoError',
-        ssoUrl: 'file:///not-safe',
-      });
-      providerRegistry.resolveUrl.mockRejectedValue(ssoError);
-      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
-      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
-      await invoke('devdocket.createItemFromUrl');
-
-      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: GitHub requires SSO authorization for this organization\nbefore this item can be loaded.',
-        'Retry',
-        'Dismiss',
-      );
-      expect(vscode.env.openExternal).not.toHaveBeenCalled();
-    });
-
-    it('retries the command when the user selects Retry from the SSO notification', async () => {
-      const ssoError = Object.assign(new Error('GitHub SSO authorization required'), {
-        name: 'GitHubSsoError',
-        orgName: 'example',
-        ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    it('retries after a recovery action when retryAfterAction is true', async () => {
+      const authorize = vi.fn(async () => undefined);
+      const recoverableError = makeRecoverableError({
+        message: 'Recoverable error',
+        actions: [{
+          label: 'Authorize in browser',
+          run: authorize,
+          retryAfterAction: true,
+        }],
       });
       providerRegistry.resolveUrl
-        .mockRejectedValueOnce(ssoError)
+        .mockRejectedValueOnce(recoverableError)
+        .mockResolvedValueOnce(fakeDetails);
+      (vscode.window.showInputBox as Mock).mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValueOnce('Authorize in browser');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(authorize).toHaveBeenCalledTimes(1);
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(2);
+      expect(vscode.window.showInputBox).toHaveBeenCalledTimes(1);
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits Retry when a recoverable error is not retryable', async () => {
+      const recoverableError = makeRecoverableError({
+        message: 'Recoverable error',
+        retryable: false,
+        actions: [{
+          label: 'Reconnect',
+          run: vi.fn(async () => undefined),
+        }],
+      });
+      providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Recoverable error',
+        'Reconnect',
+        'Dismiss',
+      );
+    });
+
+    it('falls back to Retry and Dismiss when a recoverable error has no actions', async () => {
+      const recoverableError = makeRecoverableError({ message: 'Recoverable error' });
+      providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      (vscode.window.showErrorMessage as Mock).mockResolvedValue('Dismiss');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Recoverable error',
+        'Retry',
+        'Dismiss',
+      );
+    });
+
+    it('retries the command when the user selects Retry from a recoverable error notification', async () => {
+      const recoverableError = makeRecoverableError({ message: 'Recoverable error' });
+      providerRegistry.resolveUrl
+        .mockRejectedValueOnce(recoverableError)
         .mockResolvedValueOnce(fakeDetails);
       (vscode.window.showInputBox as Mock)
         .mockResolvedValueOnce('https://github.com/owner/repo/pull/42');

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isRecoverableError, type RecoverableError } from '@devdocket/shared';
 import { WorkItemState } from '../models/workItem';
 import { ACTIVITY_TYPES, type ActivityType } from '../models/activityLog';
 import { WorkGraph } from '../services/workGraph';
@@ -61,8 +62,6 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return item.title;
 }
 
-// isSafeUrl is imported from ../utils/url.
-
 /**
  * Label for the notification action button that opens the VS Code Extensions
  * view filtered to DevDocket-published extensions. Shared between the action
@@ -70,14 +69,8 @@ function formatItemTitle(item: { group?: string; title: string }): string {
  * drift apart silently.
  */
 const BROWSE_PROVIDER_EXTENSIONS_ACTION = 'Browse Provider Extensions';
-const AUTHORIZE_IN_BROWSER_ACTION = 'Authorize in browser';
 const RETRY_ACTION = 'Retry';
 const DISMISS_ACTION = 'Dismiss';
-
-type GitHubSsoLikeError = Error & {
-  ssoUrl?: string;
-  orgName?: string;
-};
 
 /**
  * Open the VS Code Extensions view filtered to extensions published by the
@@ -88,47 +81,37 @@ async function browseProviderExtensions(): Promise<void> {
   await vscode.commands.executeCommand('workbench.extensions.search', '@publisher:"devdocket"');
 }
 
-function isGitHubSsoError(err: unknown): err is GitHubSsoLikeError {
-  return typeof err === 'object'
-    && err !== null
-    && 'name' in err
-    && (err as { name?: unknown }).name === 'GitHubSsoError';
-}
-
-function getGitHubSsoAuthorizationUrl(err: GitHubSsoLikeError): string | undefined {
-  if (err.ssoUrl) {
-    return err.ssoUrl;
-  }
-  if (err.orgName) {
-    return `https://github.com/orgs/${encodeURIComponent(err.orgName)}/sso`;
-  }
-  return undefined;
-}
-
-async function handleGitHubSsoError(
-  err: GitHubSsoLikeError,
+async function handleRecoverableError(
+  err: RecoverableError,
   retry: () => Promise<void>,
 ): Promise<void> {
-  const authorizationUrl = getGitHubSsoAuthorizationUrl(err);
-  const safeAuthorizationUrl = authorizationUrl ? isSafeUrl(authorizationUrl) : null;
-  const orgLabel = err.orgName
-    ? `the "${err.orgName}" organization`
-    : 'this organization';
-  const actions = safeAuthorizationUrl
-    ? [AUTHORIZE_IN_BROWSER_ACTION, RETRY_ACTION, DISMISS_ACTION] as const
-    : [RETRY_ACTION, DISMISS_ACTION] as const;
-  const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
-  const action = await vscode.window.showErrorMessage(
-    message,
-    ...actions,
-  );
-
-  if (action === AUTHORIZE_IN_BROWSER_ACTION && safeAuthorizationUrl) {
+  const providerActions = err.actions ?? [];
+  const actions = [
+    ...providerActions.map(action => action.label),
+    ...(err.retryable !== false ? [RETRY_ACTION] : []),
+    DISMISS_ACTION,
+  ];
+  const action = await vscode.window.showErrorMessage(err.message, ...actions);
+  const providerAction = providerActions.find(candidate => candidate.label === action);
+  if (providerAction) {
     try {
-      await vscode.env.openExternal(vscode.Uri.parse(safeAuthorizationUrl.href));
-    } catch (openError) {
-      handleCommandError('Failed to open GitHub SSO authorization', openError);
+      await providerAction.run();
+    } catch (actionError) {
+      handleCommandError(`Recovery action failed: ${providerAction.label}`, actionError);
+      return;
     }
+
+    if (providerAction.retryAfterAction) {
+      try {
+        await retry();
+      } catch (retryError) {
+        handleCommandError('Retry failed', retryError);
+      }
+    }
+    return;
+  }
+
+  if (!action || action === DISMISS_ACTION) {
     return;
   }
 
@@ -136,7 +119,7 @@ async function handleGitHubSsoError(
     try {
       await retry();
     } catch (retryError) {
-      handleCommandError('Failed to retry after GitHub SSO authorization', retryError);
+      handleCommandError('Retry failed', retryError);
     }
   }
 }
@@ -154,9 +137,9 @@ function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Pro
     try {
       await fn(...args);
     } catch (err: unknown) {
-      if (isGitHubSsoError(err)) {
+      if (isRecoverableError(err)) {
         logger.error(label, err);
-        await handleGitHubSsoError(err, () => wrapped(...args));
+        await handleRecoverableError(err, () => wrapped(...args));
         return;
       }
       handleCommandError(label, err);
@@ -430,8 +413,8 @@ async function handleCreateItemFromUrl(
     if (error instanceof Error && error.name === 'AbortError') {
       return;
     }
-    if (isGitHubSsoError(error)) {
-      await handleGitHubSsoError(error, () => handleCreateItemFromUrl(
+    if (isRecoverableError(error)) {
+      await handleRecoverableError(error, () => handleCreateItemFromUrl(
         context,
         workGraph,
         providerRegistry,

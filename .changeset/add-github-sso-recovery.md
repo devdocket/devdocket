@@ -1,6 +1,7 @@
 ---
+"@devdocket/shared": minor
 "devdocket-github": minor
 "devdocket": patch
 ---
 
-Add in-app GitHub SSO recovery prompts with authorize and retry actions for URL imports, and surface deduplicated authorization notifications during GitHub background refreshes.
+Add a shared recoverable-error contract so providers can supply recovery actions without teaching the core extension about provider-specific failures, and use it for GitHub SSO authorization prompts and deduplicated background refresh notifications.
