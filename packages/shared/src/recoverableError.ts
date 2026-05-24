@@ -18,5 +18,6 @@ export interface RecoverableError extends Error {
 export function isRecoverableError(error: unknown): error is RecoverableError {
   return typeof error === 'object'
     && error !== null
-    && (error as { recoverable?: unknown }).recoverable === true;
+    && (error as { recoverable?: unknown }).recoverable === true
+    && typeof (error as { message?: unknown }).message === 'string';
 }

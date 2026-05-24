@@ -28,6 +28,8 @@ describe('isRecoverableError', () => {
   it('returns false for non-recoverable values', () => {
     expect(isRecoverableError(new Error('nope'))).toBe(false);
     expect(isRecoverableError({ recoverable: false })).toBe(false);
+    expect(isRecoverableError({ recoverable: true })).toBe(false);
+    expect(isRecoverableError({ recoverable: true, message: 42 })).toBe(false);
     expect(isRecoverableError(null)).toBe(false);
     expect(isRecoverableError('recoverable')).toBe(false);
   });
