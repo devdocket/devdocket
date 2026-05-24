@@ -200,6 +200,25 @@ describe('ProviderRegistry', () => {
     ]);
   });
 
+  it('does not resurface a stale synthetic item after a live item disappears', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      externalId: 'owner/repo#42',
+      title: '#42: Imported PR',
+      itemType: 'pr',
+      capabilities: { gitWork: { kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic' } },
+    });
+
+    provider.fireItems([{ externalId: 'owner/repo#42', title: '#42: Live PR' }]);
+    await vi.waitFor(() => expect(registry.findProviderItem('gh', 'owner/repo#42')?.title).toBe('#42: Live PR'));
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')).toEqual([]));
+  });
+
   it('rehydrates synthetic URL-imported items for registered providers on startup', async () => {
     const provider = {
       ...createMockProvider('ado-pr-reviews'),
