@@ -2,4 +2,4 @@
 "devdocket": patch
 ---
 
-Cap inbox-state and read-state persistence, trim only the excess oldest entries when the stores grow too large, and stamp persisted entries with eviction timestamps so oversized state can be trimmed safely.
+Cap inbox-state and read-state persistence with a shared age-based trimming helper, and apply the same bounded-storage protection to watch persistence so oversized watch snapshots only evict terminal runs and PRs.
