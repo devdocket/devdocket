@@ -51,7 +51,13 @@ const window = {
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   showOpenDialog: vi.fn(),
-  withProgress: vi.fn(async (_options: any, task: Function) => task({ report: vi.fn() })),
+  withProgress: vi.fn(async (_options: any, task: Function) => task(
+    { report: vi.fn() },
+    {
+      isCancellationRequested: false,
+      onCancellationRequested: () => ({ dispose: vi.fn() }),
+    },
+  )),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createWebviewPanel: vi.fn(),
   createOutputChannel: vi.fn(() => ({

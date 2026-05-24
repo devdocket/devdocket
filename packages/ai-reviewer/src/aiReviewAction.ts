@@ -8,13 +8,29 @@ import { gitExec } from './tools/gitUtils';
 import { AdoPrClient } from './adoPrClient';
 import { parseAdoPrUrl } from './prUrl';
 import type { RepoManager, WorktreeInfo } from './repoManager';
-import type { WorkItem } from './types';
+import type { DevDocketApi, WorkItem } from './types';
 
 // Re-export sanitizePrUrl for backward compatibility (tests import it from here)
 export { sanitizePrUrl };
 
 /** Maximum tool-use loop iterations for the tool-enabled review flow. */
 const MAX_TOOL_ITERATIONS = 15;
+
+type CancellationStepError = Error & { step?: string };
+
+function getCancellationStep(err: CancellationStepError): string | undefined {
+  if (err.step) {
+    return err.step;
+  }
+
+  const prefix = 'Cancelled during ';
+  return err.message.startsWith(prefix) ? err.message.slice(prefix.length) : undefined;
+}
+
+export function formatCancellationDetail(prefix: string, err: CancellationStepError, genericDetail: string): string {
+  const step = getCancellationStep(err);
+  return step ? `${prefix} cancelled during ${step}.` : genericDetail;
+}
 
 export class AiReviewAction extends BasePrAction {
   readonly id = 'ai-reviewer.review';
@@ -30,6 +46,7 @@ export class AiReviewAction extends BasePrAction {
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
+    private readonly api?: DevDocketApi,
   ) {
     super();
   }
@@ -105,6 +122,21 @@ export class AiReviewAction extends BasePrAction {
       worktreeInfo = await this.repoManager.ensureWorktree(item.url!, token);
       this.log.info('Worktree ready for code review');
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        const detail = formatCancellationDetail(
+          'AI code review',
+          err,
+          'AI code review cancelled during repository preparation.',
+        );
+        this.log.info(detail);
+        try {
+          await this.api?.addActivity?.(item.id, 'action-executed', detail);
+        } catch (activityErr) {
+          const activityMsg = activityErr instanceof Error ? activityErr.message : String(activityErr);
+          this.log.warn(`Failed to record cancellation activity: ${activityMsg}`);
+        }
+        throw err;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
     }

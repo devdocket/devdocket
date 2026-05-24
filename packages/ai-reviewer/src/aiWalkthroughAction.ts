@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkItem } from './types';
+import { formatCancellationDetail } from './aiReviewAction';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { RepoManager } from './repoManager';
 
@@ -30,6 +31,14 @@ export class AiWalkthroughAction extends BasePrAction {
       await this.repoManager.ensureWorktree(item.url!, token);
       this.log.info('Worktree ready');
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        this.log.info(formatCancellationDetail(
+          'AI walkthrough',
+          err,
+          'AI walkthrough cancelled during repository preparation.',
+        ));
+        return;
+      }
       const msg = err instanceof Error ? err.message : String(err);
       this.log.error(`Worktree preparation failed: ${msg}`);
       vscode.window.showErrorMessage(`AI Walkthrough: Failed to prepare repository — ${msg}`);
