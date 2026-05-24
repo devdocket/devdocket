@@ -346,7 +346,7 @@ async function handleCreateItemFromUrl(
     return;
   }
 
-  let details: ResolvedItem | undefined;
+  let details: Awaited<ReturnType<ProviderRegistry['resolveUrl']>>;
   try {
     details = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },

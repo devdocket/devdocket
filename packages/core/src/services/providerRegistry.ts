@@ -367,13 +367,13 @@ export class ProviderRegistry {
         continue;
       }
 
+      this.markImportedItemRehydrated(provider.id, importedItem.externalId);
       try {
         const resolved = await provider.resolveUrl(importedItem.url, AbortSignal.timeout(30_000), { interactive: false });
         if (!resolved || resolved.externalId !== importedItem.externalId) {
           continue;
         }
 
-        this.markImportedItemRehydrated(provider.id, importedItem.externalId);
         this.registerSyntheticResolvedItem(provider.id, resolved);
       } catch (error) {
         logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);
@@ -442,7 +442,7 @@ export class ProviderRegistry {
    * Ask each registered provider to resolve a URL.
    * Returns the first successful result, or `undefined` if no provider recognizes the URL.
    */
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<(ResolvedItem & { providerId: string }) | undefined> {
     for (const provider of this.providers.values()) {
       if (typeof provider.resolveUrl !== 'function') { continue; }
       try {

@@ -392,7 +392,10 @@ describe('registerCommands', () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
       await invoke('devdocket.createItemFromUrl');
 
-      expect(workGraph.createItem).toHaveBeenCalled();
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '#42: Fix bug', notes: 'Description' }),
+        expect.any(Object),
+      );
       expect(providerRegistry.resolveUrl).toHaveBeenCalledWith(
         'https://github.com/owner/repo/pull/42',
         expect.any(AbortSignal),

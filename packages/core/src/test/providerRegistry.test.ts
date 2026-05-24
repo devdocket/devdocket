@@ -295,19 +295,20 @@ describe('ProviderRegistry', () => {
     expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
   });
 
-  it('retries rehydration after a startup failure when the provider refreshes later', async () => {
+  it('retries rehydration after a startup failure when the provider is registered again', async () => {
+    const resolveUrl = vi.fn()
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockResolvedValueOnce({
+        title: '#42: Imported issue',
+        notes: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        providerId: 'gh',
+        itemType: 'issue' as const,
+      });
     const provider = {
       ...createMockProvider('gh'),
-      resolveUrl: vi.fn()
-        .mockRejectedValueOnce(new Error('network error'))
-        .mockResolvedValueOnce({
-          title: '#42: Imported issue',
-          notes: 'Imported notes',
-          url: 'https://example.com/42',
-          externalId: 'owner/repo#42',
-          providerId: 'gh',
-          itemType: 'issue' as const,
-        }),
+      resolveUrl,
     };
     const reg = new ProviderRegistry(
       stateStore,
@@ -321,10 +322,16 @@ describe('ProviderRegistry', () => {
       }],
     );
 
-    reg.register(provider);
-    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
-    provider.fireItems([]);
-    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(2));
+    const firstRegistration = reg.register(provider);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(1));
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+
+    firstRegistration.dispose();
+    reg.register({
+      ...createMockProvider('gh'),
+      resolveUrl,
+    });
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
       expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'issue' }),
     ));
