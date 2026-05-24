@@ -115,6 +115,7 @@ export class ProviderRegistry {
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
   private readonly initialRefreshProducedItems = new Set<string>();
+  private readonly _rehydrateQueues = new Map<string, Promise<void>>();
   /**
    * Per-provider serialization queue for handleProviderItems. A provider that
    * fires onDidDiscoverItems twice in rapid succession would otherwise have two
@@ -244,7 +245,7 @@ export class ProviderRegistry {
         if (!this._disposed) {
           this._onDidChangeProviderItems.fire();
           if (!producedItemsDuringInitialRefresh) {
-            void this.rehydrateSyntheticProviderItems(provider);
+            this.queueRehydrateSyntheticProviderItems(provider);
           }
         }
       });
@@ -263,6 +264,7 @@ export class ProviderRegistry {
       this._loadingProviders.delete(provider.id);
       this.initialRefreshProducedItems.delete(provider.id);
       this._handleQueues.delete(provider.id);
+      this._rehydrateQueues.delete(provider.id);
       if (!this._disposed) {
         this._onDidChangeProviderItems.fire();
       }
@@ -353,6 +355,22 @@ export class ProviderRegistry {
     }
 
     this.registerSyntheticProviderItem(providerId, item);
+  }
+
+  private queueRehydrateSyntheticProviderItems(provider: DevDocketProvider): void {
+    const tail = this._rehydrateQueues.get(provider.id);
+    const startNext = (): Promise<void> =>
+      this.rehydrateSyntheticProviderItems(provider)
+        .catch(error => logger.debug(`Failed to queue rehydrate URL-imported items for ${provider.id}`, error));
+    const next = tail
+      ? tail.catch(() => undefined).then(startNext)
+      : startNext();
+    const tracked = next.finally(() => {
+      if (this._rehydrateQueues.get(provider.id) === tracked) {
+        this._rehydrateQueues.delete(provider.id);
+      }
+    });
+    this._rehydrateQueues.set(provider.id, tracked);
   }
 
   private async rehydrateSyntheticProviderItems(provider: DevDocketProvider): Promise<void> {
@@ -800,7 +818,7 @@ export class ProviderRegistry {
       this._onDidRefreshProvider.fire(providerId);
       const provider = this.providers.get(providerId);
       if (provider) {
-        void this.rehydrateSyntheticProviderItems(provider);
+        this.queueRehydrateSyntheticProviderItems(provider);
       }
     }
   }
