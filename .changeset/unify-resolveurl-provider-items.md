@@ -1,5 +1,5 @@
 ---
-"@devdocket/shared": minor
+"@devdocket/shared": major
 "devdocket": patch
 "devdocket-github": minor
 "devdocket-ado": patch
