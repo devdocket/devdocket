@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
 import type { FileStore } from './fileStore';
+import { trimByAge } from './trimByAge';
 
 const MAX_TOTAL_ENTRIES = 5_000;
 
@@ -14,23 +15,6 @@ interface PersistedReadStateRecord {
 interface ReadStateSnapshot {
   records: PersistedReadStateRecord[];
   available: boolean;
-}
-
-function trimReadStateRecords(records: PersistedReadStateRecord[]): PersistedReadStateRecord[] {
-  if (records.length <= MAX_TOTAL_ENTRIES) {
-    return records;
-  }
-
-  const evictedCount = records.length - MAX_TOTAL_ENTRIES;
-  const keysToEvict = new Set(
-    records
-      .map((record, index) => ({ ...record, index }))
-      .sort((a, b) => a.createdAt - b.createdAt || a.index - b.index)
-      .slice(0, evictedCount)
-      .map(record => record.key),
-  );
-
-  return records.filter(record => !keysToEvict.has(record.key));
 }
 
 /**
@@ -86,8 +70,13 @@ export class ReadStateStore {
       }
     }
 
-    const trimmed = trimReadStateRecords(
+    const trimmed = trimByAge(
       Array.from(merged, ([key, createdAt]) => ({ key, createdAt })),
+      {
+        maxEntries: MAX_TOTAL_ENTRIES,
+        getTimestamp: record => record.createdAt,
+        getKey: record => record.key,
+      },
     );
     await this.fileStore.write(trimmed);
     this.items.clear();
@@ -250,7 +239,11 @@ export class ReadStateStore {
     if (this.loaded) { return; }
     const snapshot = await this.parseFromFileStore();
     const records = snapshot.records;
-    const trimmedRecords = trimReadStateRecords(records);
+    const trimmedRecords = trimByAge(records, {
+      maxEntries: MAX_TOTAL_ENTRIES,
+      getTimestamp: record => record.createdAt,
+      getKey: record => record.key,
+    });
     this.items.clear();
     if (trimmedRecords.length !== records.length) {
       try {

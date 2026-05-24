@@ -9,6 +9,7 @@ import {
   requiredEnum,
   optionalFiniteNumber,
 } from './validation';
+import { trimByAge } from './trimByAge';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
@@ -37,27 +38,6 @@ interface PersistedInboxStateRecord extends InboxStateRecord {
 interface InboxStateSnapshot {
   records: PersistedInboxStateRecord[];
   available: boolean;
-}
-
-function trimInboxStateRecords(records: PersistedInboxStateRecord[]): PersistedInboxStateRecord[] {
-  if (records.length <= MAX_TOTAL_ENTRIES) {
-    return records;
-  }
-
-  const evictedCount = records.length - MAX_TOTAL_ENTRIES;
-  const keysToEvict = new Set(
-    records
-      .map((record, index) => ({
-        key: `${record.providerId}::${record.externalId}`,
-        createdAt: record.createdAt,
-        index,
-      }))
-      .sort((a, b) => a.createdAt - b.createdAt || a.index - b.index)
-      .slice(0, evictedCount)
-      .map(record => record.key),
-  );
-
-  return records.filter(record => !keysToEvict.has(`${record.providerId}::${record.externalId}`));
 }
 
 function toInboxStateRecord(record: PersistedInboxStateRecord): InboxStateRecord {
@@ -156,7 +136,11 @@ export class InboxStateStore {
       }
     }
 
-    const trimmed = trimInboxStateRecords(Array.from(merged.values()));
+    const trimmed = trimByAge(Array.from(merged.values()), {
+      maxEntries: MAX_TOTAL_ENTRIES,
+      getTimestamp: record => record.createdAt,
+      getKey: record => this.key(record.providerId, record.externalId),
+    });
     await this.fileStore.write(trimmed);
     this.cache.clear();
     for (const record of trimmed) {
@@ -300,7 +284,11 @@ export class InboxStateStore {
     this.cache.clear();
     const snapshot = await this.parseFromFileStore();
     const records = snapshot.records;
-    const trimmedRecords = trimInboxStateRecords(records);
+    const trimmedRecords = trimByAge(records, {
+      maxEntries: MAX_TOTAL_ENTRIES,
+      getTimestamp: record => record.createdAt,
+      getKey: record => this.key(record.providerId, record.externalId),
+    });
     if (trimmedRecords.length !== records.length) {
       try {
         await this.fileStore.write(trimmedRecords);
