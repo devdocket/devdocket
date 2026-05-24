@@ -67,12 +67,15 @@ export class GitHubSsoError extends Error implements RecoverableError {
     const resolvedOptions = typeof messageOrOpts === 'string' ? opts : messageOrOpts;
     const authorizationUrl = getGitHubSsoAuthorizationUrl(resolvedOptions);
     const safeAuthorizationUrl = authorizationUrl ? isSafeUrl(authorizationUrl) : null;
+    const trustedAuthorizationUrl = safeAuthorizationUrl && isTrustedGitHubSsoUrl(safeAuthorizationUrl)
+      ? safeAuthorizationUrl
+      : null;
     super(typeof messageOrOpts === 'string' ? messageOrOpts : buildGitHubSsoMessage(resolvedOptions.orgName));
     this.name = 'GitHubSsoError';
-    this.ssoUrl = safeAuthorizationUrl?.href;
+    this.ssoUrl = trustedAuthorizationUrl?.href;
     this.orgName = resolvedOptions.orgName;
-    this.actions = safeAuthorizationUrl
-      ? [createAuthorizeInBrowserAction(safeAuthorizationUrl.href)]
+    this.actions = trustedAuthorizationUrl
+      ? [createAuthorizeInBrowserAction(trustedAuthorizationUrl.href)]
       : undefined;
     Object.setPrototypeOf(this, new.target.prototype);
   }
@@ -103,6 +106,10 @@ function createAuthorizeInBrowserAction(authorizationUrl: string): RecoverableEr
       await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
     },
   };
+}
+
+function isTrustedGitHubSsoUrl(url: URL): boolean {
+  return url.hostname === 'github.com';
 }
 
 export function isMergedGitHubPr(item: GitHubPrMergeFields): boolean {

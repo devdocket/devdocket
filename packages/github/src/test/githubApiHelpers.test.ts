@@ -74,10 +74,11 @@ describe('GitHubSsoError', () => {
     expect(new GitHubSsoError({ ssoUrl: 'file:///not-safe' }).actions).toBeUndefined();
   });
 
-  it('stores only safe SSO URLs on the error surface', () => {
+  it('stores only trusted GitHub SSO URLs on the error surface', () => {
     expect(new GitHubSsoError({
       ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
     }).ssoUrl).toBe('https://github.com/orgs/example/sso?authorization_request=abc123');
+    expect(new GitHubSsoError({ ssoUrl: 'https://evil.example.com/orgs/example/sso' }).ssoUrl).toBeUndefined();
     expect(new GitHubSsoError({ ssoUrl: 'file:///not-safe' }).ssoUrl).toBeUndefined();
   });
 });
