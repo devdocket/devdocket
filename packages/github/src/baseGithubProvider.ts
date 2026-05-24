@@ -8,7 +8,6 @@ import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repo
 const RELATED_ITEMS_BATCH_SIZE = 10;
 const OPEN_SETTINGS = 'Open Settings';
 const SIGN_IN = 'Sign in';
-const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
 const RETRY = 'Retry';
 const DISMISS = 'Dismiss';
 const GITHUB_SETTINGS_QUERY = '@ext:devdocket.devdocket-github';
@@ -270,33 +269,44 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       notifiedGitHubSsoOrgs.add(dedupeKey);
     }
 
-    const authorizationUrl = getGitHubSsoAuthorizationUrl(error);
     const orgLabel = error.orgName
       ? `the "${error.orgName}" organization`
       : 'this organization';
-    const safeAuthorizationUrl = authorizationUrl && isSafeExternalUrl(authorizationUrl)
-      ? authorizationUrl
-      : undefined;
     const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`;
-    const actions = safeAuthorizationUrl
-      ? (retry
-        ? [AUTHORIZE_IN_BROWSER, RETRY, DISMISS] as const
-        : [AUTHORIZE_IN_BROWSER, DISMISS] as const)
-      : (retry
-        ? [RETRY, DISMISS] as const
-        : [DISMISS] as const);
+    const providerActions = error.actions ?? [];
+    const actions = [
+      ...providerActions.map(action => action.label),
+      ...(retry && error.retryable !== false ? [RETRY] : []),
+      DISMISS,
+    ];
 
     void Promise.resolve(vscode.window.showErrorMessage(message, ...actions))
       .then(async action => {
-        if (action === AUTHORIZE_IN_BROWSER) {
+        const providerAction = providerActions.find(candidate => candidate.label === action);
+        if (providerAction) {
           if (dedupeByOrg) {
             notifiedGitHubSsoOrgs.delete(dedupeKey);
           }
-          if (safeAuthorizationUrl) {
-            await vscode.env.openExternal(vscode.Uri.parse(safeAuthorizationUrl));
+          try {
+            await providerAction.run();
+          } catch (actionError) {
+            logger.error(`GitHub SSO action failed: ${providerAction.label}`, actionError);
+            return;
+          }
+          if (providerAction.retryAfterAction && retry) {
+            try {
+              await retry();
+            } catch (retryError) {
+              logger.error('GitHub SSO retry failed', retryError);
+            }
           }
           return;
         }
+
+        if (!action || action === DISMISS) {
+          return;
+        }
+
         if (action === RETRY && retry) {
           if (dedupeByOrg) {
             notifiedGitHubSsoOrgs.delete(dedupeKey);
@@ -319,25 +329,6 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     });
   }
 
-}
-
-function getGitHubSsoAuthorizationUrl(error: Pick<GitHubSsoError, 'ssoUrl' | 'orgName'>): string | undefined {
-  if (error.ssoUrl) {
-    return error.ssoUrl;
-  }
-  if (error.orgName) {
-    return `https://github.com/orgs/${encodeURIComponent(error.orgName)}/sso`;
-  }
-  return undefined;
-}
-
-function isSafeExternalUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
-  } catch {
-    return false;
-  }
 }
 
 function chunkArray<T>(items: T[], size: number): T[][] {

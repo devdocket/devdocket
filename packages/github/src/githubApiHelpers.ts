@@ -1,5 +1,15 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, combineSignals, createAbortError, getSessionWithAuthFallback, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
+import {
+  isSafeUrl,
+  isValidGitHubRepo,
+  combineSignals,
+  createAbortError,
+  getSessionWithAuthFallback,
+  runWorkerPoolSettled,
+  type ProviderBadge,
+  type RecoverableError,
+  type RecoverableErrorAction,
+} from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubAuthOptions {
@@ -37,17 +47,62 @@ export interface GitHubPrMergeFields {
   merged?: boolean;
 }
 
-export class GitHubSsoError extends Error {
+const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
+
+interface GitHubSsoErrorOptions {
+  ssoUrl?: string;
+  orgName?: string;
+}
+
+export class GitHubSsoError extends Error implements RecoverableError {
+  readonly recoverable = true as const;
+  readonly retryable = true as const;
   readonly ssoUrl: string | undefined;
   readonly orgName: string | undefined;
+  readonly actions?: ReadonlyArray<RecoverableErrorAction>;
 
-  constructor(message: string, opts: { ssoUrl?: string; orgName?: string } = {}) {
-    super(message);
+  constructor(opts?: GitHubSsoErrorOptions);
+  constructor(message: string, opts?: GitHubSsoErrorOptions);
+  constructor(messageOrOpts: string | GitHubSsoErrorOptions = {}, opts: GitHubSsoErrorOptions = {}) {
+    const resolvedOptions = typeof messageOrOpts === 'string' ? opts : messageOrOpts;
+    const authorizationUrl = getGitHubSsoAuthorizationUrl(resolvedOptions);
+    const safeAuthorizationUrl = authorizationUrl ? isSafeUrl(authorizationUrl) : null;
+    super(typeof messageOrOpts === 'string' ? messageOrOpts : buildGitHubSsoMessage(resolvedOptions.orgName));
     this.name = 'GitHubSsoError';
-    this.ssoUrl = opts.ssoUrl;
-    this.orgName = opts.orgName;
+    this.ssoUrl = resolvedOptions.ssoUrl;
+    this.orgName = resolvedOptions.orgName;
+    this.actions = safeAuthorizationUrl
+      ? [createAuthorizeInBrowserAction(safeAuthorizationUrl.href)]
+      : undefined;
     Object.setPrototypeOf(this, new.target.prototype);
   }
+}
+
+function buildGitHubSsoMessage(orgName?: string): string {
+  const orgLabel = orgName
+    ? `the "${orgName}" organization`
+    : 'this organization';
+  return `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
+}
+
+function getGitHubSsoAuthorizationUrl(opts: GitHubSsoErrorOptions): string | undefined {
+  if (opts.ssoUrl) {
+    return opts.ssoUrl;
+  }
+  if (opts.orgName) {
+    return `https://github.com/orgs/${encodeURIComponent(opts.orgName)}/sso`;
+  }
+  return undefined;
+}
+
+function createAuthorizeInBrowserAction(authorizationUrl: string): RecoverableErrorAction {
+  return {
+    label: AUTHORIZE_IN_BROWSER,
+    retryAfterAction: true,
+    run: async () => {
+      await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
+    },
+  };
 }
 
 export function isMergedGitHubPr(item: GitHubPrMergeFields): boolean {
@@ -254,12 +309,7 @@ export async function throwApiError(response: Response, label: string): Promise<
     // `remaining===0` doesn't mask SSO or secondary-rate-limit responses.
     if (sso) {
       const { ssoUrl, orgName } = parseGitHubSsoInfo(sso);
-      throw new GitHubSsoError(
-        `GitHub SSO authorization required for ${label}` +
-        `${apiMessage ? `: ${apiMessage}` : '.'}` +
-        ' Authorize the token for the organization, then retry.',
-        { ssoUrl, orgName },
-      );
+      throw new GitHubSsoError({ ssoUrl, orgName });
     }
     if (isSecondaryRateLimited(retryAfter, apiMessage)) {
       const wait = formatRetryAfter(retryAfter);
