@@ -114,6 +114,7 @@ export class ProviderRegistry {
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  private readonly initialRefreshProducedItems = new Set<string>();
   /**
    * Per-provider serialization queue for handleProviderItems. A provider that
    * fires onDidDiscoverItems twice in rapid succession would otherwise have two
@@ -237,10 +238,14 @@ export class ProviderRegistry {
     this._onDidChangeProviderItems.fire();
     this.refreshWithTimeout(provider, undefined, false)
       .finally(() => {
+        const producedItemsDuringInitialRefresh = this.initialRefreshProducedItems.has(provider.id);
+        this.initialRefreshProducedItems.delete(provider.id);
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
           this._onDidChangeProviderItems.fire();
-          void this.rehydrateSyntheticProviderItems(provider);
+          if (!producedItemsDuringInitialRefresh) {
+            void this.rehydrateSyntheticProviderItems(provider);
+          }
         }
       });
 
@@ -256,6 +261,7 @@ export class ProviderRegistry {
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
+      this.initialRefreshProducedItems.delete(provider.id);
       this._handleQueues.delete(provider.id);
       if (!this._disposed) {
         this._onDidChangeProviderItems.fire();
@@ -361,7 +367,8 @@ export class ProviderRegistry {
       if (importedItem.providerId !== provider.id || !importedItem.externalId || !importedItem.url) {
         continue;
       }
-      if (this.getWorkItemState && !isActiveWorkItemState(this.getWorkItemState(provider.id, importedItem.externalId))) {
+      const workItemState = this.getWorkItemState?.(provider.id, importedItem.externalId);
+      if (workItemState !== undefined && !isActiveWorkItemState(workItemState)) {
         continue;
       }
       if (
@@ -665,6 +672,9 @@ export class ProviderRegistry {
     // catches its own errors and only logs them — exactly the anti-pattern
     // that providers.instructions.md warns against.
     this.updateHealth(providerId, 'healthy');
+    if (this._loadingProviders.has(providerId)) {
+      this.initialRefreshProducedItems.add(providerId);
+    }
     let wasTruncated = false;
     if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {
       logger.warn(

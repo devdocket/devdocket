@@ -689,7 +689,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     const project = safeDecodeComponent(rawProject);
     const id = parseInt(idStr, 10);
 
-    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
+    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?$expand=links&api-version=7.1`;
     const headers = await getAdoHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 

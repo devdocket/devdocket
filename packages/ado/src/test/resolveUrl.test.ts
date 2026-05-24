@@ -370,6 +370,10 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
       'https://dev.azure.com/myorg/MyProject/_workitems/edit/77',
     );
 
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_apis/wit/workitems/77?$expand=links&api-version=7.1',
+      expect.any(Object),
+    );
     expect(result?.itemType).toBe('issue');
     expect(result?.capabilities?.gitWork).toEqual({
       kind: 'issue',
@@ -624,7 +628,7 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
     // Verify retry was made with auth
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(mockFetch).toHaveBeenLastCalledWith(
-      'https://dev.azure.com/myorg/MyProject/_apis/wit/workitems/99?api-version=7.1',
+      'https://dev.azure.com/myorg/MyProject/_apis/wit/workitems/99?$expand=links&api-version=7.1',
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token',
