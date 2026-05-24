@@ -2,12 +2,22 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { InboxStateStore } from '../storage/inboxStateStore';
 import { JsonFileStore } from '../storage/fileStore';
+import { logger } from '../services/logger';
 import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 describe('InboxStateStore', () => {
   const fileUri = vscode.Uri.file('C:\\test\\inbox-state.json');
   let fileSystem: MockFileSystem;
   let store: InboxStateStore;
+
+  const persistedRecords = () => fileSystem.readJson<Array<{
+    providerId: string;
+    externalId: string;
+    inboxState: string;
+    version?: string;
+    resurfaceVersion?: string;
+    createdAt?: number;
+  }>>(fileUri) ?? [];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -30,13 +40,14 @@ describe('InboxStateStore', () => {
   it('should create a record and persist on setState', async () => {
     await store.setState('gh', 'issue-1', 'unseen');
 
-    const persisted = fileSystem.readJson<unknown[]>(fileUri);
+    const persisted = persistedRecords();
     expect(persisted).toHaveLength(1);
-    expect(persisted![0]).toEqual({
+    expect(persisted[0]).toEqual(expect.objectContaining({
       providerId: 'gh',
       externalId: 'issue-1',
       inboxState: 'unseen',
-    });
+      createdAt: expect.any(Number),
+    }));
   });
 
   it('should return state for a known item from getState', async () => {
@@ -57,6 +68,33 @@ describe('InboxStateStore', () => {
     const records = await store.loadAll();
     expect(records).toHaveLength(1);
     expect(records[0].inboxState).toBe('accepted');
+  });
+
+  it('skips no-op setState writes', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted', createdAt: 321 },
+    ]);
+    const listener = vi.fn();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(999);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    store2.onDidChange(listener);
+
+    try {
+      await store2.load();
+      await store2.setState('gh', 'issue-1', 'accepted');
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'issue-1',
+        inboxState: 'accepted',
+        createdAt: 321,
+      }));
+    } finally {
+      nowSpy.mockRestore();
+      store2.dispose();
+    }
   });
 
   it('should return all records from loadAll', async () => {
@@ -101,6 +139,137 @@ describe('InboxStateStore', () => {
 
     expect(store2.getState('gh', 'issue-1')).toBe('accepted');
     expect(store2.getState('gh', 'issue-2')).toBe('dismissed');
+    store2.dispose();
+  });
+
+  it('persists createdAt timestamps for new records', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_234);
+
+    try {
+      await store.setState('gh', 'issue-1', 'accepted');
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+      providerId: 'gh',
+      externalId: 'issue-1',
+      inboxState: 'accepted',
+      createdAt: 1_234,
+    }));
+  });
+
+  it('refreshes createdAt timestamps when an existing record is updated', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted', createdAt: 321 },
+    ]);
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(654);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    await store2.load();
+    await store2.setState('gh', 'issue-1', 'dismissed');
+
+    expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+      providerId: 'gh',
+      externalId: 'issue-1',
+      inboxState: 'dismissed',
+      createdAt: 654,
+    }));
+    expect(await store2.loadAll()).toEqual([
+      { providerId: 'gh', externalId: 'issue-1', inboxState: 'dismissed' },
+    ]);
+    nowSpy.mockRestore();
+    store2.dispose();
+  });
+
+  it('loads legacy records that do not have createdAt timestamps', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'legacy', inboxState: 'accepted' },
+    ]);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const records = await store2.loadAll();
+
+    expect(records).toEqual([
+      { providerId: 'gh', externalId: 'legacy', inboxState: 'accepted' },
+    ]);
+    expect(store2.getState('gh', 'legacy')).toBe('accepted');
+    store2.dispose();
+  });
+
+  it('deduplicates persisted inbox-state records while keeping the newest timestamp', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'dup', inboxState: 'accepted', createdAt: 1 },
+      { providerId: 'gh', externalId: 'dup', inboxState: 'dismissed', createdAt: 5 },
+      { providerId: 'gh', externalId: 'other', inboxState: 'unseen', createdAt: 3 },
+    ]);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const records = await store2.loadAll();
+
+    expect(records).toEqual([
+      { providerId: 'gh', externalId: 'dup', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'other', inboxState: 'unseen' },
+    ]);
+    expect(store2.getState('gh', 'dup')).toBe('dismissed');
+    expect(store2.getState('gh', 'other')).toBe('unseen');
+    store2.dispose();
+  });
+
+  it('keeps cached inbox records when the remote snapshot is temporarily unavailable', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted', createdAt: 1 },
+    ]);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    await store2.load();
+    await vscode.workspace.fs.delete(fileUri);
+    await store2.setState('gh', 'fresh', 'dismissed');
+
+    expect((await store2.loadAll()).sort((a, b) => a.externalId.localeCompare(b.externalId))).toEqual([
+      { providerId: 'gh', externalId: 'fresh', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted' },
+    ]);
+    store2.dispose();
+  });
+
+  it('keeps cached inbox records when the remote snapshot is malformed', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted', createdAt: 1 },
+    ]);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    await store2.load();
+    fileSystem.writeJson(fileUri, { invalid: true });
+    await store2.setState('gh', 'fresh', 'dismissed');
+
+    expect((await store2.loadAll()).sort((a, b) => a.externalId.localeCompare(b.externalId))).toEqual([
+      { providerId: 'gh', externalId: 'fresh', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted' },
+    ]);
+    expect(warnSpy).toHaveBeenCalledWith('Inbox state snapshot is not an array; falling back to the in-memory snapshot');
+    warnSpy.mockRestore();
+    store2.dispose();
+  });
+
+  it('keeps cached inbox records when the remote snapshot is an invalid array', async () => {
+    fileSystem.writeJson(fileUri, [
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted', createdAt: 1 },
+    ]);
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    await store2.load();
+    fileSystem.writeJson(fileUri, [42]);
+    await store2.setState('gh', 'fresh', 'dismissed');
+
+    expect((await store2.loadAll()).sort((a, b) => a.externalId.localeCompare(b.externalId))).toEqual([
+      { providerId: 'gh', externalId: 'fresh', inboxState: 'dismissed' },
+      { providerId: 'gh', externalId: 'keep', inboxState: 'accepted' },
+    ]);
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipping invalid inbox state record:'));
+    warnSpy.mockRestore();
     store2.dispose();
   });
 
@@ -544,6 +713,27 @@ describe('InboxStateStore', () => {
       expect(store.getVersion('gh', 'pr-1')).toBe('sha-new');
     });
 
+    it('refreshes createdAt when only the version changes via setState', async () => {
+      fileSystem.writeJson(fileUri, [
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-old', createdAt: 10 },
+      ]);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(20);
+
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      await freshStore.load();
+      await freshStore.setState('gh', 'pr-1', 'accepted', 'sha-new');
+
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'pr-1',
+        inboxState: 'accepted',
+        version: 'sha-new',
+        createdAt: 20,
+      }));
+      nowSpy.mockRestore();
+      freshStore.dispose();
+    });
+
     it('should persist version to the backing JSON file', async () => {
       await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
 
@@ -568,6 +758,55 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pr-1', state: 'accepted' },
       ]);
       expect(store.getVersion('gh', 'pr-1')).toBe('sha-abc');
+    });
+
+    it('refreshes createdAt when setStates updates an existing record', async () => {
+      fileSystem.writeJson(fileUri, [
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', createdAt: 50 },
+      ]);
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(75);
+
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      await freshStore.load();
+      await freshStore.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'dismissed' },
+      ]);
+
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'pr-1',
+        inboxState: 'dismissed',
+        createdAt: 75,
+      }));
+      nowSpy.mockRestore();
+      freshStore.dispose();
+    });
+
+    it('skips no-op setStates writes', async () => {
+      fileSystem.writeJson(fileUri, [
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-1', resurfaceVersion: 'rv-1', createdAt: 44 },
+      ]);
+      const listener = vi.fn();
+      const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(99);
+
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      freshStore.onDidChange(listener);
+      await freshStore.load();
+      await freshStore.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-1', resurfaceVersion: 'rv-1' },
+      ]);
+
+      expect(listener).not.toHaveBeenCalled();
+      expect(persistedRecords()[0]).toEqual(expect.objectContaining({
+        providerId: 'gh',
+        externalId: 'pr-1',
+        inboxState: 'accepted',
+        version: 'sha-1',
+        resurfaceVersion: 'rv-1',
+        createdAt: 44,
+      }));
+      nowSpy.mockRestore();
+      freshStore.dispose();
     });
 
     it('should update version in setStates when provided', async () => {
@@ -670,6 +909,68 @@ describe('InboxStateStore', () => {
   });
 
   // ── prune ──────────────────────────────────────────────────────────
+
+  describe('capacity management', () => {
+    it('caps persisted records and evicts the oldest records first on write', async () => {
+      let currentTime = 0;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime++);
+
+      try {
+        await store.setStates(Array.from({ length: 6_000 }, (_, i) => ({
+          providerId: 'gh',
+          externalId: `issue-${i}`,
+          state: 'accepted' as const,
+        })));
+      } finally {
+        nowSpy.mockRestore();
+      }
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
+      expect(store.getState('gh', 'issue-0')).toBeUndefined();
+      expect(store.getState('gh', 'issue-999')).toBeUndefined();
+      expect(store.getState('gh', 'issue-1000')).toBe('accepted');
+      expect(store.getState('gh', 'issue-5999')).toBe('accepted');
+    });
+
+    it('trims oversized persisted state on load and logs once', async () => {
+      const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+      fileSystem.writeJson(fileUri, Array.from({ length: 6_000 }, (_, i) => ({
+        providerId: 'gh',
+        externalId: `issue-${i}`,
+        inboxState: 'dismissed',
+        createdAt: i,
+      })));
+
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      await store2.load();
+
+      expect(await store2.loadAll()).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
+      expect(store2.getState('gh', 'issue-0')).toBeUndefined();
+      expect(store2.getState('gh', 'issue-1000')).toBe('dismissed');
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed inbox-state.json from 6000 to 5000 entries while loading'));
+      store2.dispose();
+      infoSpy.mockRestore();
+    });
+
+    it('keeps trimmed inbox entries in memory when persisting the load-time trim fails', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const failingStore = new InboxStateStore({
+        read: vi.fn(async () => Array.from({ length: 6_000 }, (_, i) => ({ providerId: 'gh', externalId: `issue-${i}`, inboxState: 'accepted', createdAt: i }))),
+        write: vi.fn(async () => { throw new Error('disk full'); }),
+      });
+
+      await expect(failingStore.load()).resolves.toBeUndefined();
+      expect((await failingStore.loadAll())).toHaveLength(5_000);
+      expect(failingStore.getState('gh', 'issue-0')).toBeUndefined();
+      expect(failingStore.getState('gh', 'issue-1000')).toBe('accepted');
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist trimmed inbox state while loading; continuing with 5000 in-memory entries'), expect.any(Error));
+      warnSpy.mockRestore();
+      failingStore.dispose();
+    });
+  });
 
   describe('prune', () => {
     it('should remove stale records for providers that have active items', async () => {

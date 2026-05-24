@@ -7,10 +7,13 @@ import {
   requiredString,
   optionalString,
   requiredEnum,
+  optionalFiniteNumber,
 } from './validation';
+import { trimByAge } from './trimByAge';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
+const MAX_TOTAL_ENTRIES = 5_000;
 
 export type InboxState = (typeof inboxStates)[number];
 
@@ -27,6 +30,21 @@ export interface InboxStateRecord {
   resurfaceVersion?: string;
 }
 
+interface PersistedInboxStateRecord extends InboxStateRecord {
+  /** Legacy field name: stores the last-write timestamp used for eviction so recently updated inbox decisions survive trimming. */
+  createdAt: number;
+}
+
+interface InboxStateSnapshot {
+  records: PersistedInboxStateRecord[];
+  available: boolean;
+}
+
+function toInboxStateRecord(record: PersistedInboxStateRecord): InboxStateRecord {
+  const { createdAt: _createdAt, ...publicRecord } = record;
+  return publicRecord;
+}
+
 /**
  * Validates that a parsed JSON value has the required shape of an InboxStateRecord.
  * Returns a descriptive error string if invalid, or undefined if valid.
@@ -40,7 +58,8 @@ function validateInboxStateRecord(value: unknown, index: number): string | undef
     ?? requiredString(result, 'externalId', ctx)
     ?? requiredEnum(result, 'inboxState', validInboxStates, ctx)
     ?? optionalString(result, 'version', ctx)
-    ?? optionalString(result, 'resurfaceVersion', ctx);
+    ?? optionalString(result, 'resurfaceVersion', ctx)
+    ?? optionalFiniteNumber(result, 'createdAt', ctx);
 }
 
 /**
@@ -51,7 +70,7 @@ function validateInboxStateRecord(value: unknown, index: number): string | undef
  * always read live from the provider.
  */
 export class InboxStateStore {
-  private readonly cache = new Map<string, InboxStateRecord>();
+  private readonly cache = new Map<string, PersistedInboxStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private loaded = false;
@@ -93,10 +112,17 @@ export class InboxStateStore {
    * keys win, and locally removed keys stay removed.
    */
   private async persist(): Promise<void> {
-    const merged = new Map<string, InboxStateRecord>();
+    const snapshot = await this.parseFromFileStore();
+    const merged = new Map<string, PersistedInboxStateRecord>();
 
-    for (const remote of await this.parseFromFileStore()) {
-      merged.set(this.key(remote.providerId, remote.externalId), remote);
+    if (snapshot.available) {
+      for (const remote of snapshot.records) {
+        merged.set(this.key(remote.providerId, remote.externalId), remote);
+      }
+    } else {
+      for (const [key, record] of this.cache) {
+        merged.set(key, record);
+      }
     }
 
     for (const k of this.removedKeys) {
@@ -110,29 +136,55 @@ export class InboxStateStore {
       }
     }
 
-    await this.fileStore.write(Array.from(merged.values()));
+    const trimmed = trimByAge(Array.from(merged.values()), {
+      maxEntries: MAX_TOTAL_ENTRIES,
+      getTimestamp: record => record.createdAt,
+      getKey: record => this.key(record.providerId, record.externalId),
+    });
+    await this.fileStore.write(trimmed);
     this.cache.clear();
-    for (const [k, record] of merged) {
-      this.cache.set(k, record);
+    for (const record of trimmed) {
+      this.cache.set(this.key(record.providerId, record.externalId), record);
     }
     this.dirtyKeys.clear();
     this.removedKeys.clear();
   }
 
   /** Parse and validate inbox state records from the backing JSON file. */
-  private async parseFromFileStore(): Promise<InboxStateRecord[]> {
+  private async parseFromFileStore(): Promise<InboxStateSnapshot> {
     const parsed = await this.fileStore.read();
-    if (!Array.isArray(parsed)) { return []; }
-    const records: InboxStateRecord[] = [];
+    if (parsed === undefined) { return { records: [], available: false }; }
+    if (!Array.isArray(parsed)) {
+      logger.warn('Inbox state snapshot is not an array; falling back to the in-memory snapshot');
+      return { records: [], available: false };
+    }
+    const records: PersistedInboxStateRecord[] = [];
+    let invalidCount = 0;
     for (let i = 0; i < parsed.length; i++) {
       const error = validateInboxStateRecord(parsed[i], i);
       if (error) {
+        invalidCount++;
         logger.warn(`Skipping invalid inbox state record: ${error}`);
         continue;
       }
-      records.push(parsed[i] as InboxStateRecord);
+      const record = parsed[i] as InboxStateRecord & { createdAt?: number };
+      records.push({
+        ...record,
+        createdAt: record.createdAt ?? i,
+      });
     }
-    return records;
+
+    const available = invalidCount === 0;
+    const deduped = new Map<string, PersistedInboxStateRecord>();
+    for (const record of records) {
+      const key = this.key(record.providerId, record.externalId);
+      const existing = deduped.get(key);
+      if (!existing || record.createdAt >= existing.createdAt) {
+        deduped.set(key, record);
+      }
+    }
+
+    return { records: Array.from(deduped.values()), available };
   }
 
   /**
@@ -145,14 +197,27 @@ export class InboxStateStore {
     if (!this.loaded) { await this.load(); }
     const k = this.key(providerId, externalId);
     const previousValue = this.cache.get(k);
-    const newRecord: InboxStateRecord = { providerId, externalId, inboxState: state };
-    if (version !== undefined) {
-      newRecord.version = version;
-    } else if (previousValue?.version !== undefined) {
-      newRecord.version = previousValue.version;
+    const nextVersion = version ?? previousValue?.version;
+    const nextResurfaceVersion = previousValue?.resurfaceVersion;
+    if (
+      previousValue
+      && previousValue.inboxState === state
+      && previousValue.version === nextVersion
+      && previousValue.resurfaceVersion === nextResurfaceVersion
+    ) {
+      return;
     }
-    if (previousValue?.resurfaceVersion !== undefined) {
-      newRecord.resurfaceVersion = previousValue.resurfaceVersion;
+    const newRecord: PersistedInboxStateRecord = {
+      providerId,
+      externalId,
+      inboxState: state,
+      createdAt: Date.now(),
+    };
+    if (nextVersion !== undefined) {
+      newRecord.version = nextVersion;
+    }
+    if (nextResurfaceVersion !== undefined) {
+      newRecord.resurfaceVersion = nextResurfaceVersion;
     }
     this.cache.set(k, newRecord);
     this.dirtyKeys.add(k);
@@ -167,24 +232,38 @@ export class InboxStateStore {
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }>): Promise<void> {
     if (!this.loaded) { await this.load(); }
     if (items.length === 0) { return; }
+    let changed = false;
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
       const previousRecord = this.cache.get(k);
-      const newRecord: InboxStateRecord = { providerId: item.providerId, externalId: item.externalId, inboxState: item.state };
-      if (item.version !== undefined) {
-        newRecord.version = item.version;
-      } else if (previousRecord?.version !== undefined) {
-        newRecord.version = previousRecord.version;
+      const nextVersion = item.version ?? previousRecord?.version;
+      const nextResurfaceVersion = item.resurfaceVersion ?? previousRecord?.resurfaceVersion;
+      if (
+        previousRecord
+        && previousRecord.inboxState === item.state
+        && previousRecord.version === nextVersion
+        && previousRecord.resurfaceVersion === nextResurfaceVersion
+      ) {
+        continue;
       }
-      if (item.resurfaceVersion !== undefined) {
-        newRecord.resurfaceVersion = item.resurfaceVersion;
-      } else if (previousRecord?.resurfaceVersion !== undefined) {
-        newRecord.resurfaceVersion = previousRecord.resurfaceVersion;
+      const newRecord: PersistedInboxStateRecord = {
+        providerId: item.providerId,
+        externalId: item.externalId,
+        inboxState: item.state,
+        createdAt: Date.now(),
+      };
+      if (nextVersion !== undefined) {
+        newRecord.version = nextVersion;
+      }
+      if (nextResurfaceVersion !== undefined) {
+        newRecord.resurfaceVersion = nextResurfaceVersion;
       }
       this.cache.set(k, newRecord);
       this.dirtyKeys.add(k);
       this.removedKeys.delete(k);
+      changed = true;
     }
+    if (!changed) { return; }
     await this.persist();
     this._onDidChange.fire();
   }
@@ -194,7 +273,7 @@ export class InboxStateStore {
    */
   async loadAll(): Promise<InboxStateRecord[]> {
     await this.load();
-    return Array.from(this.cache.values());
+    return Array.from(this.cache.values(), record => toInboxStateRecord(record));
   }
 
   /**
@@ -203,13 +282,27 @@ export class InboxStateStore {
   async load(): Promise<void> {
     if (this.loaded) { return; }
     this.cache.clear();
-    const records = await this.parseFromFileStore();
-    for (const record of records) {
+    const snapshot = await this.parseFromFileStore();
+    const records = snapshot.records;
+    const trimmedRecords = trimByAge(records, {
+      maxEntries: MAX_TOTAL_ENTRIES,
+      getTimestamp: record => record.createdAt,
+      getKey: record => this.key(record.providerId, record.externalId),
+    });
+    if (trimmedRecords.length !== records.length) {
+      try {
+        await this.fileStore.write(trimmedRecords);
+        logger.info(`Trimmed inbox-state.json from ${records.length} to ${trimmedRecords.length} entries while loading to enforce the ${MAX_TOTAL_ENTRIES}-entry cap`);
+      } catch (err) {
+        logger.warn(`Failed to persist trimmed inbox state while loading; continuing with ${trimmedRecords.length} in-memory entries`, err);
+      }
+    }
+    for (const record of trimmedRecords) {
       this.cache.set(this.key(record.providerId, record.externalId), record);
     }
     this.dirtyKeys.clear();
     this.removedKeys.clear();
-    if (records.length > 0) {
+    if (trimmedRecords.length > 0) {
       logger.debug(`Loaded inbox state: ${this.cache.size} entries`);
     }
     this.loaded = true;
