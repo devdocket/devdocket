@@ -261,7 +261,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   }
 
   private showGitHubSsoNotification(error: GitHubSsoError, retry: (() => Promise<void> | void) | undefined, dedupeByOrg = false): void {
-    const dedupeKey = error.orgName ?? error.ssoUrl ?? error.message;
+    const dedupeKey = error.orgName ?? error.ssoUrl ?? `${this.id}:${error.message}`;
     if (dedupeByOrg && notifiedGitHubSsoOrgs.has(dedupeKey)) {
       return;
     }

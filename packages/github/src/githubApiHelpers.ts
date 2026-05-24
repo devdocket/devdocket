@@ -69,7 +69,7 @@ export class GitHubSsoError extends Error implements RecoverableError {
     const safeAuthorizationUrl = authorizationUrl ? isSafeUrl(authorizationUrl) : null;
     super(typeof messageOrOpts === 'string' ? messageOrOpts : buildGitHubSsoMessage(resolvedOptions.orgName));
     this.name = 'GitHubSsoError';
-    this.ssoUrl = resolvedOptions.ssoUrl;
+    this.ssoUrl = safeAuthorizationUrl?.href;
     this.orgName = resolvedOptions.orgName;
     this.actions = safeAuthorizationUrl
       ? [createAuthorizeInBrowserAction(safeAuthorizationUrl.href)]

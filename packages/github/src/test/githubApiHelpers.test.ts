@@ -73,6 +73,13 @@ describe('GitHubSsoError', () => {
     expect(new GitHubSsoError().actions).toBeUndefined();
     expect(new GitHubSsoError({ ssoUrl: 'file:///not-safe' }).actions).toBeUndefined();
   });
+
+  it('stores only safe SSO URLs on the error surface', () => {
+    expect(new GitHubSsoError({
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    }).ssoUrl).toBe('https://github.com/orgs/example/sso?authorization_request=abc123');
+    expect(new GitHubSsoError({ ssoUrl: 'file:///not-safe' }).ssoUrl).toBeUndefined();
+  });
 });
 
 describe('isMergedGitHubPr', () => {

@@ -264,4 +264,29 @@ describe('BaseGitHubProvider repository filtering', () => {
 
     provider.dispose();
   });
+
+  it('does not deduplicate unrelated providers when an SSO error has no org or URL', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'token' } as any);
+    selectErrorAction('Dismiss');
+    selectErrorAction('Dismiss');
+
+    class SecondTestGitHubProvider extends TestGitHubProvider {
+      override readonly id = 'test-github-second';
+    }
+
+    const firstProvider = new TestGitHubProvider();
+    const secondProvider = new SecondTestGitHubProvider();
+    const error = new GitHubSsoError();
+    firstProvider.fetchImpl.mockRejectedValue(error);
+    secondProvider.fetchImpl.mockRejectedValue(error);
+
+    await expect(firstProvider.refreshInBackground()).rejects.toThrow(error);
+    await expect(secondProvider.refreshInBackground()).rejects.toThrow(error);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showErrorMessage).toHaveBeenCalledTimes(2);
+
+    firstProvider.dispose();
+    secondProvider.dispose();
+  });
 });
