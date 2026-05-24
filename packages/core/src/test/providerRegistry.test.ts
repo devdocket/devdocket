@@ -274,7 +274,6 @@ describe('ProviderRegistry', () => {
         notes: 'Imported notes',
         url: 'https://example.com/42',
         externalId: 'owner/repo#canonical-42',
-        providerId: 'gh',
         itemType: 'issue' as const,
       })),
     };
@@ -293,6 +292,9 @@ describe('ProviderRegistry', () => {
     reg.register(provider);
     await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
     expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
   });
 
   it('retries rehydration on a later refresh after a transient startup failure', async () => {

@@ -383,6 +383,9 @@ export class ProviderRegistry {
           continue;
         }
         if (resolved.externalId !== importedItem.externalId) {
+          logger.debug(
+            `Rehydration skipped for ${provider.id}:${importedItem.externalId}: provider returned externalId ${resolved.externalId}`,
+          );
           continue;
         }
 
