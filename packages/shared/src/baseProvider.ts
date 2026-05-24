@@ -199,9 +199,12 @@ export interface ResolvedItem extends ProviderItem {
   notes: string;
   /** URL-imported items always carry a canonical source URL. */
   url: string;
-  /** Stamped by ProviderRegistry on returned results; providers may omit it. */
-  providerId?: string;
+  /** Stamped by ProviderRegistry to identify which registered provider returned this item. */
+  providerId: string;
 }
+
+/** Provider-facing resolveUrl result before ProviderRegistry stamps providerId. */
+export type ProviderResolvedItem = Omit<ResolvedItem, 'providerId'>;
 
 /**
  * Abstraction over window focus state, allowing BaseProvider to gate

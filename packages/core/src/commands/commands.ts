@@ -11,7 +11,6 @@ import { WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../vi
 import { IncomingPreviewPanel, type IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
 import { type InboxItem, type SourceItemNode, type SourcesElement } from './commandItemTypes';
 import { logger } from '../services/logger';
-import type { ResolvedItem } from '../api/types';
 import { WatcherService } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';

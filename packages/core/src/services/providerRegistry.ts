@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, ProviderItem, type ResolveUrlOptions, type ResolvedItem } from '../api/types';
+import { DevDocketProvider, ProviderItem, type ProviderResolvedItem, type ResolveUrlOptions, type ResolvedItem } from '../api/types';
 import type { WindowStateProvider } from '@devdocket/shared';
 import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
@@ -44,7 +44,7 @@ function isWindowStateAwareProvider(provider: DevDocketProvider): provider is De
   return typeof (provider as Partial<WindowStateAwareProvider>).setWindowState === 'function';
 }
 
-function toSyntheticProviderItem(details: ResolvedItem): ProviderItem | undefined {
+function toSyntheticProviderItem(details: ProviderResolvedItem | ResolvedItem): ProviderItem | undefined {
   if (
     !details.itemType
     && !details.capabilities
@@ -61,8 +61,8 @@ function toSyntheticProviderItem(details: ResolvedItem): ProviderItem | undefine
     return undefined;
   }
 
-  const { providerId: _providerId, notes: _notes, ...item } = details;
-  return { ...item };
+  const { notes: _notes, providerId: _providerId, ...item } = details as ProviderResolvedItem & { providerId?: string };
+  return { ...(item as ProviderItem) };
 }
 
 /**
@@ -336,7 +336,7 @@ export class ProviderRegistry {
     externalIds.add(externalId);
   }
 
-  registerSyntheticResolvedItem(providerId: string, details: ResolvedItem): void {
+  registerSyntheticResolvedItem(providerId: string, details: ProviderResolvedItem | ResolvedItem): void {
     const item = toSyntheticProviderItem(details);
     if (!item) {
       return;
