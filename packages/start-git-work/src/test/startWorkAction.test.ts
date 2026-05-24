@@ -844,7 +844,7 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).not.toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['remote', '-v'],
-        ['remote', 'add', 'devdocket-fork-MyProject-myrepo', 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo'],
+        ['remote', 'add', 'devdocket-fork-MyProject-myrepo', 'https://dev.azure.com/myorg/MyProject/_git/myrepo'],
         ['fetch', 'devdocket-fork-MyProject-myrepo', '+refs/heads/users/me/fix:refs/remotes/devdocket-fork-MyProject-myrepo/users/me/fix'],
         ['rev-parse', '--verify', 'refs/heads/users/me/fix'],
         ['worktree', 'add', '--detach', path.join('/mock', 'myrepo-pr-1'), 'devdocket-fork-MyProject-myrepo/users/me/fix'],
@@ -862,6 +862,23 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
       expect(window.showInputBox).not.toHaveBeenCalled();
       expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('strips usernames from Azure DevOps head clone URLs before persisting remotes', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr',
+        cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/base',
+        headCloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/fork',
+        ref: 'users/me/fix',
+        repoLabel: 'MyProject/fork',
+      })));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'remote', 'add', 'devdocket-fork-MyProject-fork', 'https://dev.azure.com/myorg/MyProject/_git/fork',
+      ]);
     });
 
     it('rejects an invalid ref returned by a lazy resolver', async () => {

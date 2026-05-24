@@ -34,6 +34,22 @@ function isValidRef(ref: unknown): ref is string {
 /** Rejects whitespace and control characters in clone URLs. */
 const UNSAFE_URL_CHARS = /[\s\x00-\x1f\x7f]/;
 
+function normalizeCloneUrl(url: string): string {
+  if (!url.startsWith('https://')) {
+    return url;
+  }
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.toLowerCase() !== 'dev.azure.com' || !parsed.username) {
+      return url;
+    }
+    parsed.username = '';
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
 function isValidCloneUrl(url: unknown): url is string {
   if (typeof url !== 'string' || url.length === 0 || UNSAFE_URL_CHARS.test(url)) {
     return false;
@@ -150,7 +166,15 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     try {
-      return typeof capability === 'function' ? await capability() : capability;
+      const gitWork = typeof capability === 'function' ? await capability() : capability;
+      if (!gitWork) {
+        return undefined;
+      }
+      return {
+        ...gitWork,
+        cloneUrl: normalizeCloneUrl(gitWork.cloneUrl),
+        ...(gitWork.headCloneUrl ? { headCloneUrl: normalizeCloneUrl(gitWork.headCloneUrl) } : {}),
+      };
     } catch (err) {
       logger.error('Provider gitWork capability failed', err);
       const message = err instanceof Error ? err.message : String(err);
