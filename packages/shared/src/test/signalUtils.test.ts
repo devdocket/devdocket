@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { combineSignals, getSessionWithAuthFallback, raceWithAbort } from '../signalUtils';
+import { abortFromToken, combineSignals, createAbortError, getSessionWithAuthFallback, raceWithAbort } from '../signalUtils';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -10,6 +10,44 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+describe('abortFromToken', () => {
+  it('aborts immediately when the token is already cancelled', () => {
+    const controller = abortFromToken({ isCancellationRequested: true });
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toMatchObject({ name: 'AbortError', message: 'The operation was aborted.' });
+  });
+
+  it('aborts when the token later requests cancellation', () => {
+    let listener: (() => void) | undefined;
+    const dispose = vi.fn();
+    const controller = abortFromToken({
+      isCancellationRequested: false,
+      onCancellationRequested: (registeredListener) => {
+        listener = registeredListener;
+        return { dispose };
+      },
+    });
+
+    listener?.();
+
+    expect(controller.signal.aborted).toBe(true);
+    expect(controller.signal.reason).toMatchObject({ name: 'AbortError', message: 'The operation was aborted.' });
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes the token subscription when aborted externally', () => {
+    const dispose = vi.fn();
+    const controller = abortFromToken({
+      isCancellationRequested: false,
+      onCancellationRequested: () => ({ dispose }),
+    });
+
+    controller.abort(createAbortError());
+
+    expect(dispose).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe('combineSignals', () => {
   afterEach(() => {

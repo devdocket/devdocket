@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mockLogOutputChannel } from 'vscode';
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
 import type { RepoManager } from '../repoManager';
+import type { DevDocketApi } from '../types';
 import { createWorkItem, createMockRepoManager } from './testFactories';
 
 vi.mock('child_process', () => ({
@@ -22,6 +23,7 @@ function createMockSendRequest(text = 'Review feedback here') {
 describe('AiReviewAction', () => {
   let action: AiReviewAction;
   let mockRepoManager: RepoManager;
+  let mockApi: Pick<DevDocketApi, 'addActivity'>;
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -34,7 +36,10 @@ describe('AiReviewAction', () => {
       cb(null, 'M\tpackages/ai-reviewer/src/aiReviewAction.ts', '');
     });
     mockRepoManager = createMockRepoManager();
-    action = new AiReviewAction(mockRepoManager, mockLogOutputChannel as never);
+    mockApi = {
+      addActivity: vi.fn().mockResolvedValue(undefined),
+    };
+    action = new AiReviewAction(mockRepoManager, mockLogOutputChannel as never, mockApi as DevDocketApi);
 
     // Reset default mocks
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'mock-token' } as never);
@@ -317,6 +322,47 @@ describe('AiReviewAction', () => {
       await action.run(item);
 
       expect(workspace.openTextDocument).not.toHaveBeenCalled();
+    });
+
+    it('records cancellation activity when worktree preparation is aborted', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      }));
+      vi.mocked(mockRepoManager.ensureWorktree).mockRejectedValue(Object.assign(new Error('Cancelled during clone repository'), {
+        name: 'AbortError',
+      }));
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockApi.addActivity).toHaveBeenCalledWith(
+        item.id,
+        'action-executed',
+        'AI code review cancelled during clone repository.',
+      );
+      expect(window.showErrorMessage).not.toHaveBeenCalled();
+      expect(workspace.openTextDocument).not.toHaveBeenCalled();
+    });
+
+    it('does not surface worktree cancellation as a diff-only fallback warning', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      }));
+      vi.mocked(mockRepoManager.ensureWorktree).mockRejectedValue(Object.assign(new Error('Cancelled during fetch base branch'), {
+        name: 'AbortError',
+      }));
+
+      await action.run(createWorkItem());
+
+      expect(mockLogOutputChannel.warn).not.toHaveBeenCalledWith(
+        expect.stringContaining('Worktree preparation failed (continuing with diff only)'),
+      );
+      expect(window.showErrorMessage).not.toHaveBeenCalled();
+      expect(window.showWarningMessage).not.toHaveBeenCalledWith(
+        expect.stringContaining('Failed to prepare repository'),
+      );
     });
 
     it('prompts for confirmation before starting work', async () => {

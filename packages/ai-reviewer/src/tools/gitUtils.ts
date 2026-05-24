@@ -1,4 +1,5 @@
 import { execFile } from 'child_process';
+import { createAbortError } from '@devdocket/shared';
 
 /** Error thrown by gitExec, exposing the process exit code. */
 export class GitExecError extends Error {
@@ -12,7 +13,7 @@ export class GitExecError extends Error {
 export function gitExec(
   args: string[],
   cwd: string,
-  options?: { timeout?: number; env?: Record<string, string | undefined> },
+  options?: { timeout?: number; env?: Record<string, string | undefined>; signal?: AbortSignal },
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -22,6 +23,7 @@ export function gitExec(
         cwd,
         maxBuffer: 10 * 1024 * 1024,
         timeout: options?.timeout ?? 30_000,
+        signal: options?.signal,
         env: options?.env
           ? Object.fromEntries(
               Object.entries({ ...process.env, ...options.env })
@@ -31,8 +33,12 @@ export function gitExec(
       },
       (err, stdout, stderr) => {
         if (err) {
-          const errorOutput = stderr?.trim() || 'git command failed';
           const rawCode = 'code' in err ? (err as { code?: unknown }).code : undefined;
+          if ((err as { name?: string }).name === 'AbortError' || rawCode === 'ABORT_ERR') {
+            reject(createAbortError());
+            return;
+          }
+          const errorOutput = stderr?.trim() || 'git command failed';
           const exitCode = typeof rawCode === 'number' ? rawCode : null;
           reject(new GitExecError(`git ${args[0]} failed: ${errorOutput}`, exitCode));
         } else {
