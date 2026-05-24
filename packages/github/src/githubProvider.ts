@@ -97,7 +97,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     return {
       externalId: `${repoName}#${issue.number}`,
       title: `#${issue.number}: ${issue.title}`,
-      description: issue.body ?? undefined,
+      ...(issue.body != null ? { description: issue.body } : {}),
       url: issue.html_url,
       ...(issue.user?.login ? {
         author: {

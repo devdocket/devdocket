@@ -159,7 +159,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const item: ProviderItem = {
       externalId: `${repoName}#${pr.number}`,
       title: `#${pr.number}: ${pr.title}`,
-      description: pr.body ?? undefined,
+      ...(pr.body != null ? { description: pr.body } : {}),
       url: pr.html_url,
       ...(pr.user?.login ? {
         author: {

@@ -374,6 +374,9 @@ export class ProviderRegistry {
       this.markImportedItemRehydrated(provider.id, importedItem.externalId);
       try {
         const resolved = await provider.resolveUrl(importedItem.url, AbortSignal.timeout(30_000), { interactive: false });
+        if (this._disposed || !this.providers.has(provider.id)) {
+          return;
+        }
         if (!resolved) {
           this.rehydratedImportedItems.get(provider.id)?.delete(importedItem.externalId);
           logger.debug(`Rehydration returned no result for ${provider.id}:${importedItem.externalId}`);
