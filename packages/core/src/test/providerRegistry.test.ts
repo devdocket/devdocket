@@ -165,6 +165,22 @@ describe('ProviderRegistry', () => {
     expect((registry.getProviderItems('gh')[0] as any).capabilities.foo).toEqual({ enabled: true });
   });
 
+  it('does not create a synthetic provider item when a resolved item has no provider metadata', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticResolvedItem('gh', {
+      title: '#100: Imported item',
+      notes: 'Body',
+      url: 'https://example.com/100',
+      externalId: 'owner/repo#100',
+      providerId: 'gh',
+    });
+
+    expect(registry.findProviderItem('gh', 'owner/repo#100')).toBeUndefined();
+  });
+
   it('prefers live provider items over synthetic URL-imported items with the same external id', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
@@ -218,6 +234,65 @@ describe('ProviderRegistry', () => {
       expect.any(AbortSignal),
       { interactive: false },
     );
+  });
+
+  it('marks metadata-free rehydrated imports so they are not re-resolved on later refreshes', async () => {
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported issue',
+        notes: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        providerId: 'gh',
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    await (reg as any).rehydrateSyntheticProviderItems(provider);
+    expect(provider.resolveUrl).toHaveBeenCalledTimes(1);
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+  });
+
+  it('skips rehydration when resolveUrl returns a different externalId', async () => {
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported issue',
+        notes: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#canonical-42',
+        providerId: 'gh',
+        itemType: 'issue' as const,
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
   });
 
   it('rehydrates only active imported work items', async () => {

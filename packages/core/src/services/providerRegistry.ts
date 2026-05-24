@@ -83,6 +83,7 @@ export class ProviderRegistry {
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly providerItems = new Map<string, ProviderItem[]>();
   private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
+  private readonly rehydratedImportedItems = new Map<string, Set<string>>();
   private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
   /** Fired whenever any provider's provider items change. */
   readonly onDidChangeProviderItems = this._onDidChangeProviderItems.event;
@@ -198,6 +199,9 @@ export class ProviderRegistry {
     if (!this.syntheticProviderItems.has(provider.id)) {
       this.syntheticProviderItems.set(provider.id, new Map());
     }
+    if (!this.rehydratedImportedItems.has(provider.id)) {
+      this.rehydratedImportedItems.set(provider.id, new Set());
+    }
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
@@ -247,6 +251,7 @@ export class ProviderRegistry {
       this.subscriptions.delete(provider.id);
       this.providerItems.delete(provider.id);
       this.syntheticProviderItems.delete(provider.id);
+      this.rehydratedImportedItems.delete(provider.id);
       this.previousDiscoveredIds.delete(provider.id);
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
@@ -317,8 +322,18 @@ export class ProviderRegistry {
       this.syntheticProviderItems.set(providerId, syntheticItems);
     }
 
+    this.markImportedItemRehydrated(providerId, item.externalId);
     syntheticItems.set(item.externalId, { ...item });
     this._onDidChangeProviderItems.fire();
+  }
+
+  private markImportedItemRehydrated(providerId: string, externalId: string): void {
+    let externalIds = this.rehydratedImportedItems.get(providerId);
+    if (!externalIds) {
+      externalIds = new Set<string>();
+      this.rehydratedImportedItems.set(providerId, externalIds);
+    }
+    externalIds.add(externalId);
   }
 
   registerSyntheticResolvedItem(providerId: string, details: ResolvedItem): void {
@@ -345,7 +360,10 @@ export class ProviderRegistry {
       if (this.getWorkItemState && !isActiveWorkItemState(this.getWorkItemState(provider.id, importedItem.externalId))) {
         continue;
       }
-      if (this.findProviderItem(provider.id, importedItem.externalId)) {
+      if (
+        this.findProviderItem(provider.id, importedItem.externalId)
+        || this.rehydratedImportedItems.get(provider.id)?.has(importedItem.externalId)
+      ) {
         continue;
       }
 
@@ -355,6 +373,7 @@ export class ProviderRegistry {
           continue;
         }
 
+        this.markImportedItemRehydrated(provider.id, importedItem.externalId);
         this.registerSyntheticResolvedItem(provider.id, resolved);
       } catch (error) {
         logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);
