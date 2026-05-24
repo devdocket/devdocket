@@ -159,7 +159,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (!response.ok && !wasAuthenticated && !signal?.aborted &&
+    if (!response.ok && !wasAuthenticated && !signal?.aborted && options?.interactive !== false &&
         (response.status === 404 || looksLikeRateLimited403(response))) {
       const retryResponse = await retryWithAuth(apiUrl, signal, { interactive: options?.interactive ?? true });
       if (retryResponse) { response = retryResponse; }

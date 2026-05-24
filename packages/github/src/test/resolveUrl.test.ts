@@ -367,6 +367,17 @@ describe('resolveUrl', () => {
       expect(result?.title).toBe('#111: Mixed case');
     });
 
+    it('skips interactive auth retry when issue resolveUrl is non-interactive', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/123', undefined, { interactive: false }),
+      ).rejects.toThrow('not found');
+
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('respects AbortSignal cancellation', async () => {
       const controller = new AbortController();
       controller.abort();
@@ -615,6 +626,17 @@ describe('resolveUrl', () => {
         expect.stringContaining('/repos/my-owner/my-repo/pulls/333'),
         expect.any(Object),
       );
+    });
+
+    it('skips interactive auth retry when PR resolveUrl is non-interactive', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/pull/123', undefined, { interactive: false }),
+      ).rejects.toThrow('not found');
+
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('respects AbortSignal cancellation', async () => {

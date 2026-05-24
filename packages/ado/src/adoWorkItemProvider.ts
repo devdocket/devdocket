@@ -721,7 +721,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }, org, gitWork);
     return {
       ...item,
-      notes: this.stripHtml(data.fields['System.Description'] ?? ''),
+      notes: item.description ?? '',
       providerId: this.id,
       url: htmlUrl,
     };

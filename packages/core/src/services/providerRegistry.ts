@@ -766,6 +766,10 @@ export class ProviderRegistry {
     if (!this._disposed) {
       this._onDidChangeProviderItems.fire();
       this._onDidRefreshProvider.fire(providerId);
+      const provider = this.providers.get(providerId);
+      if (provider) {
+        void this.rehydrateSyntheticProviderItems(provider);
+      }
     }
   }
 

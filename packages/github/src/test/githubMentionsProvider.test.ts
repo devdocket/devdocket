@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubMentionsProvider } from '../githubMentionsProvider';
 import { setLogger } from '../logger';
+import { makeErrorResponse } from './responseMocks';
 
 const mockFetch = vi.fn();
 
@@ -1582,6 +1583,17 @@ describe('GitHubMentionsProvider', () => {
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/issues/5'),
       ).rejects.toThrow(/rate limit exceeded/i);
+    });
+
+    it('skips interactive auth retry when mentions resolveUrl is non-interactive', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/5', undefined, { interactive: false }),
+      ).rejects.toThrow('not found');
+
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

@@ -195,8 +195,10 @@ export interface ProviderBadge {
  * the same capabilities and metadata as live-discovered items.
  */
 export interface ResolvedItem extends ProviderItem {
-  /** Optional notes seeded into the new WorkItem's notes field by the URL-add flow. */
-  notes?: string;
+  /** Notes seeded into the new WorkItem's notes field by the URL-add flow. */
+  notes: string;
+  /** URL-imported items always carry a canonical source URL. */
+  url: string;
   /** Set by ProviderRegistry to identify which registered provider returned this item. */
   providerId: string;
 }

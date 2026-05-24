@@ -38,6 +38,10 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
         pullRequestId: 42,
         title: 'Fix critical bug',
         description: 'This PR fixes a critical issue',
+        createdBy: {
+          displayName: 'Jane Doe',
+          uniqueName: 'jane@example.com',
+        },
         repository: {
           name: 'myrepo',
           project: { name: 'MyProject' },
@@ -59,6 +63,7 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       group: 'MyProject/myrepo',
       providerId: 'ado-pr-reviews',
       itemType: 'pr',
+      author: { displayName: 'Jane Doe', handle: 'jane@example.com' },
       capabilities: { gitWork: expect.any(Function) },
     }));
   });
