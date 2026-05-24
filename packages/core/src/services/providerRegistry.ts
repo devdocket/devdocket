@@ -380,6 +380,7 @@ export class ProviderRegistry {
 
         this.registerSyntheticResolvedItem(provider.id, resolved);
       } catch (error) {
+        this.rehydratedImportedItems.get(provider.id)?.delete(importedItem.externalId);
         logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);
       }
     }

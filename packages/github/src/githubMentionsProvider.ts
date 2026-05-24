@@ -183,6 +183,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     });
     return {
       ...item,
+      url: data.html_url,
       notes: item.description ?? '',
     };
   }

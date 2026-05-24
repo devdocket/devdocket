@@ -141,6 +141,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     });
     return {
       ...item,
+      url: data.html_url,
       notes: item.description ?? '',
     };
   }

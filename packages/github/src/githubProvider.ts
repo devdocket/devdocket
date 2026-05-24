@@ -83,6 +83,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     }, canonicalRepo);
     return {
       ...item,
+      url: data.html_url,
       notes: item.description ?? '',
     };
   }

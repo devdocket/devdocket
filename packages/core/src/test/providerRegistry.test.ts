@@ -295,7 +295,7 @@ describe('ProviderRegistry', () => {
     expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
   });
 
-  it('retries rehydration after a startup failure when the provider is registered again', async () => {
+  it('retries rehydration on a later refresh after a transient startup failure', async () => {
     const resolveUrl = vi.fn()
       .mockRejectedValueOnce(new Error('network error'))
       .mockResolvedValueOnce({
@@ -303,7 +303,6 @@ describe('ProviderRegistry', () => {
         notes: 'Imported notes',
         url: 'https://example.com/42',
         externalId: 'owner/repo#42',
-        providerId: 'gh',
         itemType: 'issue' as const,
       });
     const provider = {
@@ -322,15 +321,11 @@ describe('ProviderRegistry', () => {
       }],
     );
 
-    const firstRegistration = reg.register(provider);
+    reg.register(provider);
     await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(1));
     expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
 
-    firstRegistration.dispose();
-    reg.register({
-      ...createMockProvider('gh'),
-      resolveUrl,
-    });
+    provider.fireItems([]);
     await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(2));
     await vi.waitFor(() => expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
       expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'issue' }),
