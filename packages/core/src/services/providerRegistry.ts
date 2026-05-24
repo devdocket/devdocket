@@ -712,12 +712,6 @@ export class ProviderRegistry {
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
     this.providerItems.set(providerId, items);
-    const syntheticItems = this.syntheticProviderItems.get(providerId);
-    if (syntheticItems) {
-      for (const item of items) {
-        syntheticItems.delete(item.externalId);
-      }
-    }
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];

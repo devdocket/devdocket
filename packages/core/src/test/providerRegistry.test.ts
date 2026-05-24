@@ -200,7 +200,7 @@ describe('ProviderRegistry', () => {
     ]);
   });
 
-  it('does not resurface a stale synthetic item after a live item disappears', async () => {
+  it('keeps a synthetic item available after a matching live item disappears', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
     await vi.waitFor(() => expect(registry.loading).toBe(false));
@@ -216,7 +216,9 @@ describe('ProviderRegistry', () => {
     await vi.waitFor(() => expect(registry.findProviderItem('gh', 'owner/repo#42')?.title).toBe('#42: Live PR'));
 
     provider.fireItems([]);
-    await vi.waitFor(() => expect(registry.getProviderItems('gh')).toEqual([]));
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')).toEqual([
+      expect.objectContaining({ externalId: 'owner/repo#42', title: '#42: Imported PR' }),
+    ]));
   });
 
   it('rehydrates synthetic URL-imported items for registered providers on startup', async () => {
