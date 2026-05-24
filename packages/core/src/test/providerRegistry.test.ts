@@ -146,6 +146,25 @@ describe('ProviderRegistry', () => {
     );
   });
 
+  it('preserves arbitrary synthetic capabilities when registering resolved items', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticResolvedItem('gh', {
+      title: '#99: Imported item',
+      notes: 'Body',
+      description: 'Body',
+      url: 'https://example.com/99',
+      externalId: 'owner/repo#99',
+      providerId: 'gh',
+      itemType: 'issue',
+      capabilities: { foo: { enabled: true } } as any,
+    });
+
+    expect((registry.getProviderItems('gh')[0] as any).capabilities.foo).toEqual({ enabled: true });
+  });
+
   it('prefers live provider items over synthetic URL-imported items with the same external id', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);

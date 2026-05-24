@@ -169,6 +169,24 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
+    it('returns true for a URL-imported GitHub issue when a synthetic provider item supplies gitWork', () => {
+      const item = createWorkItem({ providerId: 'github', externalId: 'owner/repo#123' });
+      const { action } = createAction(discovered('github', 'owner/repo#123', {
+        kind: 'issue', cloneUrl: 'https://github.com/owner/repo.git', ref: 'issue123', repoLabel: 'owner/repo',
+      }));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for a URL-imported GitHub PR when a synthetic provider item supplies gitWork', () => {
+      const item = createWorkItem({ providerId: 'github-pr-reviews', externalId: 'owner/repo#42' });
+      const { action } = createAction(discovered('github-pr-reviews', 'owner/repo#42', async () => ({
+        kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic', repoLabel: 'owner/repo',
+      })));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
     it('returns true for a URL-imported ADO PR when a synthetic provider item supplies gitWork', () => {
       const item = createWorkItem({ providerId: 'ado-pr-reviews', externalId: 'myorg/MyProject/myrepo/42' });
       const { action } = createAction(discovered('ado-pr-reviews', 'myorg/MyProject/myrepo/42', async () => ({
