@@ -332,6 +332,43 @@ describe('ProviderRegistry', () => {
     ));
   });
 
+  it('retries rehydration on a later refresh when resolveUrl returns undefined', async () => {
+    const resolveUrl = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        title: '#42: Imported issue',
+        notes: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        itemType: 'issue' as const,
+      });
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl,
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(1));
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'issue' }),
+    ));
+  });
+
   it('rehydrates only active imported work items', async () => {
     const provider = {
       ...createMockProvider('ado-pr-reviews'),
@@ -786,10 +823,14 @@ describe('ProviderRegistry', () => {
 
     p1.fireItems([{ externalId: '1', title: 'GH item' }]);
     p2.fireItems([{ externalId: '2', title: 'Jira item' }]);
+    registry.registerSyntheticProviderItem('gh', { externalId: 'synthetic', title: 'Synthetic item', itemType: 'issue' });
 
     const all = registry.getAllProviderItems();
     expect(all.size).toBe(2);
-    expect(all.get('gh')).toHaveLength(1);
+    expect(all.get('gh')).toEqual([
+      expect.objectContaining({ externalId: '1' }),
+      expect.objectContaining({ externalId: 'synthetic', itemType: 'issue' }),
+    ]);
     expect(all.get('jira')).toHaveLength(1);
   });
 

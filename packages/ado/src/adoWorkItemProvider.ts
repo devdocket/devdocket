@@ -696,7 +696,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted && options?.interactive !== false) {
-      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: true });
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: options?.interactive ?? true });
       if (retryResponse) { response = retryResponse; }
     }
 
