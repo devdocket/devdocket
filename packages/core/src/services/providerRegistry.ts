@@ -61,24 +61,8 @@ function toSyntheticProviderItem(details: ResolvedItem): ProviderItem | undefine
     return undefined;
   }
 
-  return {
-    externalId: details.externalId,
-    title: details.title,
-    description: details.notes || undefined,
-    url: details.url,
-    group: details.group,
-    ...(details.author ? { author: details.author } : {}),
-    ...(details.authored !== undefined ? { authored: details.authored } : {}),
-    ...(details.badges ? { badges: details.badges } : {}),
-    ...(details.canonicalId ? { canonicalId: details.canonicalId } : {}),
-    ...(details.capabilities ? { capabilities: details.capabilities } : {}),
-    ...(details.itemType ? { itemType: details.itemType } : {}),
-    ...(details.reason ? { reason: details.reason } : {}),
-    ...(details.relatedItems ? { relatedItems: details.relatedItems } : {}),
-    ...(details.resurfaceVersion ? { resurfaceVersion: details.resurfaceVersion } : {}),
-    ...(details.state ? { state: details.state } : {}),
-    ...(details.version ? { version: details.version } : {}),
-  };
+  const { providerId: _providerId, notes: _notes, ...item } = details;
+  return { ...item };
 }
 
 /**
