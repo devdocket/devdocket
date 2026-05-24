@@ -16,8 +16,30 @@ export interface RecoverableError extends Error {
 }
 
 export function isRecoverableError(error: unknown): error is RecoverableError {
-  return typeof error === 'object'
-    && error !== null
-    && (error as { recoverable?: unknown }).recoverable === true
-    && typeof (error as { message?: unknown }).message === 'string';
+  if (typeof error !== 'object' || error === null) {
+    return false;
+  }
+
+  const candidate = error as {
+    recoverable?: unknown;
+    message?: unknown;
+    actions?: unknown;
+    retryable?: unknown;
+  };
+
+  const hasValidActions = candidate.actions === undefined || (
+    Array.isArray(candidate.actions)
+    && candidate.actions.every(action => typeof action === 'object'
+      && action !== null
+      && typeof (action as { label?: unknown }).label === 'string'
+      && typeof (action as { run?: unknown }).run === 'function'
+      && ((action as { retryAfterAction?: unknown }).retryAfterAction === undefined
+        || typeof (action as { retryAfterAction?: unknown }).retryAfterAction === 'boolean'))
+  );
+  const hasValidRetryable = candidate.retryable === undefined || typeof candidate.retryable === 'boolean';
+
+  return candidate.recoverable === true
+    && typeof candidate.message === 'string'
+    && hasValidActions
+    && hasValidRetryable;
 }

@@ -30,6 +30,9 @@ describe('isRecoverableError', () => {
     expect(isRecoverableError({ recoverable: false })).toBe(false);
     expect(isRecoverableError({ recoverable: true })).toBe(false);
     expect(isRecoverableError({ recoverable: true, message: 42 })).toBe(false);
+    expect(isRecoverableError({ recoverable: true, message: 'oops', actions: 'bad' })).toBe(false);
+    expect(isRecoverableError({ recoverable: true, message: 'oops', actions: [{ label: 'Retry' }] })).toBe(false);
+    expect(isRecoverableError({ recoverable: true, message: 'oops', retryable: 'sometimes' })).toBe(false);
     expect(isRecoverableError(null)).toBe(false);
     expect(isRecoverableError('recoverable')).toBe(false);
   });
