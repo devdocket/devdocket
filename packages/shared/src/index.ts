@@ -6,7 +6,9 @@ export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './
 export type { Logger, LogOutput, LoggerService } from './logger';
 export { BaseProvider } from './baseProvider';
 export type { ProviderItem, ProviderItemAuthor, ProviderItemCapabilities, Disposable, Event, EventEmitterLike, GitWorkInfo, ProviderBadge, RelatedItemRef, ResolvedItem, WindowStateProvider } from './baseProvider';
-export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment, safeDecodeComponent } from './urlValidation';
+export { isSafeUrl, isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment, safeDecodeComponent } from './urlValidation';
+export type { RecoverableError, RecoverableErrorAction } from './recoverableError';
+export { isRecoverableError } from './recoverableError';
 export { validateRefreshInterval } from './refreshInterval';
 export type { DevDocketRunWatcher, RunIdentifier, RunStatus, JobStatus, RunState, RunConclusion, CancellationTokenLike } from './runWatcher';
 export type { DevDocketPRWatcher, PRIdentifier, PRState, PRRunsSnapshot } from './prWatcher';
