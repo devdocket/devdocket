@@ -258,6 +258,11 @@ describe('RepoManager', () => {
       await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42', cancellation.token))
         .rejects.toMatchObject({ name: 'AbortError' });
       expect(authentication.getSession).not.toHaveBeenCalled();
+      expect(mockLogOutputChannel.info).toHaveBeenCalledWith('Cancellation detected before GitHub authentication');
+      const cancellationLogs = vi.mocked(mockLogOutputChannel.info).mock.calls
+        .map(call => String(call[0]))
+        .filter(message => message.includes('Cancellation '));
+      expect(cancellationLogs).toHaveLength(1);
     });
 
     it('checks for a silent GitHub session before prompting during worktree setup', async () => {
@@ -284,6 +289,96 @@ describe('RepoManager', () => {
       resolveSession(undefined);
 
       await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+    });
+
+    it('aborts an in-flight clone when cancellation is requested', async () => {
+      const cancellation = createCancellationToken();
+      let cloneSignal: AbortSignal | undefined;
+      let resolveCloneStarted!: () => void;
+      const cloneStarted = new Promise<void>(resolve => {
+        resolveCloneStarted = resolve;
+      });
+
+      vi.mocked(execFile).mockImplementation((_cmd: string, args: string[], opts: unknown, cb: Function) => {
+        if (args?.includes('version')) {
+          cb(null, 'git version 2.45.0.windows.1', '');
+          return;
+        }
+        if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+          cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
+          return;
+        }
+        if (args?.includes('clone')) {
+          cloneSignal = (opts as { signal?: AbortSignal } | undefined)?.signal;
+          resolveCloneStarted();
+          cloneSignal?.addEventListener('abort', () => {
+            cb(Object.assign(new Error('aborted'), { name: 'AbortError', code: 'ABORT_ERR' }), '', '');
+          }, { once: true });
+          return;
+        }
+        cb(null, '', '');
+      });
+
+      const promise = manager.ensureWorktree('https://github.com/owner/repo/pull/42', cancellation.token);
+      await cloneStarted;
+      expect(cloneSignal).toBeInstanceOf(AbortSignal);
+
+      cancellation.cancel();
+
+      await expect(promise).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Cancelled during clone repository',
+      });
+      expect(mockLogOutputChannel.info).toHaveBeenCalledWith('Cancellation received during clone repository');
+    });
+
+    it('aborts an in-flight Azure Repos clone when cancellation is requested', async () => {
+      mockAdoPrDetails();
+      const cancellation = createCancellationToken();
+      let cloneSignal: AbortSignal | undefined;
+      let resolveCloneStarted!: () => void;
+      const cloneStarted = new Promise<void>(resolve => {
+        resolveCloneStarted = resolve;
+      });
+
+      vi.mocked(execFile).mockImplementation((_cmd: string, args: string[], opts: unknown, cb: Function) => {
+        if (args?.includes('version')) {
+          cb(null, 'git version 2.45.0.windows.1', '');
+          return;
+        }
+        if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+          cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
+          return;
+        }
+        if (args?.includes('clone')) {
+          cloneSignal = (opts as { signal?: AbortSignal } | undefined)?.signal;
+          resolveCloneStarted();
+          cloneSignal?.addEventListener('abort', () => {
+            cb(Object.assign(new Error('aborted'), { name: 'AbortError', code: 'ABORT_ERR' }), '', '');
+          }, { once: true });
+          return;
+        }
+        cb(null, '', '');
+      });
+
+      const promise = manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42', cancellation.token);
+      await cloneStarted;
+      expect(cloneSignal).toBeInstanceOf(AbortSignal);
+
+      cancellation.cancel();
+
+      await expect(promise).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Cancelled during clone repository',
+      });
+      expect(mockLogOutputChannel.info).toHaveBeenCalledWith('Cancellation received during clone repository');
+    });
+
+    it('runs clone without an abort signal when no token is provided', async () => {
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+      expect((cloneCall?.[2] as { signal?: AbortSignal } | undefined)?.signal).toBeUndefined();
     });
 
     it('does not include query strings or fragments in invalid URL errors', async () => {
