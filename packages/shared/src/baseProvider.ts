@@ -190,21 +190,14 @@ export interface ProviderBadge {
 }
 
 /**
- * Result returned by a provider's `resolveUrl` method when it recognizes a URL.
- * Reuses the provider's {@link ProviderItem} shape so URL-imported items expose
- * the same capabilities and metadata as live-discovered items.
+ * Pairing of provider identity and the resolved {@link ProviderItem} for URL imports.
  */
-export interface ResolvedItem extends ProviderItem {
-  /** Notes seeded into the new WorkItem's notes field by the URL-add flow. Defaults to description when providers have no custom note content. */
-  notes: string;
-  /** URL-imported items always carry a canonical source URL. */
-  url: string;
-  /** Stamped by ProviderRegistry to identify which registered provider returned this item. */
-  providerId: string;
+export interface ResolvedUrlResult {
+  /** Registered provider identifier that resolved the URL. */
+  readonly providerId: string;
+  /** Provider item returned by the matching provider. */
+  readonly item: ProviderItem;
 }
-
-/** Provider-facing resolveUrl result before ProviderRegistry stamps providerId. */
-export type ProviderResolvedItem = Omit<ResolvedItem, 'providerId'>;
 
 /**
  * Abstraction over window focus state, allowing BaseProvider to gate

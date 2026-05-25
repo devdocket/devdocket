@@ -154,11 +154,11 @@ interface DevDocketProvider {
 
   /**
    * Optional. Called when the user invokes "Create Item from URL" with a URL
-   * your provider may recognize. Return a `ResolvedItem` if you can produce
+   * your provider may recognize. Return a `ProviderItem` if you can produce
    * one, or `undefined` to let another provider try. The first provider that
    * returns a non-undefined result wins.
    */
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ProviderItem | undefined>;
 
   /**
    * Check which of the given external items have been closed or completed.
@@ -170,19 +170,11 @@ interface DevDocketProvider {
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
-interface ResolvedItem {
-  /** Title to populate the new work item with. */
-  title: string;
-  /** Free-form notes (e.g. excerpted description). */
-  notes: string;
-  /** Canonical URL the user typed (after normalization). */
-  url: string;
-  /** Provider-stable identifier (same shape as ProviderItem.externalId). */
-  externalId: string;
-  /** Optional grouping label. */
-  group?: string;
-  /** The provider id that resolved the URL — required. Set this to your provider's id (`this.id`) so DevDocket records correct provenance. */
+interface ResolvedUrlResult {
+  /** The provider id that resolved the URL. */
   providerId: string;
+  /** The resolved provider item. */
+  item: ProviderItem;
 }
 ```
 
