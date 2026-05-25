@@ -1512,7 +1512,6 @@ describe('GitHubMentionsProvider', () => {
       expect(result).toEqual(expect.objectContaining({
         title: '#5: Bug report',
         description: 'Some description',
-        notes: 'Some description',
         url: 'https://github.com/owner/repo/issues/5',
         externalId: 'owner/repo#5',
         group: 'owner/repo',
@@ -1543,7 +1542,6 @@ describe('GitHubMentionsProvider', () => {
       expect(result).toEqual(expect.objectContaining({
         title: '#10: Feature PR',
         description: 'PR description',
-        notes: 'PR description',
         url: 'https://github.com/owner/repo/pull/10',
         externalId: 'owner/repo#10',
         group: 'owner/repo',

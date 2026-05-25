@@ -365,27 +365,29 @@ describe('registerCommands', () => {
 
   describe('devdocket.createItemFromUrl', () => {
     const fakeDetails = {
-      title: '#42: Fix bug',
-      notes: 'Description',
-      url: 'https://github.com/owner/repo/pull/42',
-      externalId: 'owner/repo#42',
-      group: 'owner/repo',
       providerId: 'github-pr-reviews',
-      itemType: 'pr',
-      capabilities: {
-        gitWork: vi.fn(async () => ({
-          kind: 'pr',
-          cloneUrl: 'https://github.com/owner/repo.git',
-          ref: 'feature/topic',
-          repoLabel: 'owner/repo',
-        })),
+      item: {
+        title: '#42: Fix bug',
+        description: 'Description',
+        url: 'https://github.com/owner/repo/pull/42',
+        externalId: 'owner/repo#42',
+        group: 'owner/repo',
+        itemType: 'pr',
+        capabilities: {
+          gitWork: vi.fn(async () => ({
+            kind: 'pr',
+            cloneUrl: 'https://github.com/owner/repo.git',
+            ref: 'feature/topic',
+            repoLabel: 'owner/repo',
+          })),
+        },
       },
     };
 
     beforeEach(() => {
       providerRegistry.resolveUrl.mockResolvedValue(fakeDetails);
       workGraph.findItemByProvenance.mockReturnValue(undefined);
-      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.externalId }));
+      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.item.externalId }));
     });
 
     it('creates item when user provides a valid URL', async () => {
@@ -406,11 +408,33 @@ describe('registerCommands', () => {
         expect.objectContaining({
           externalId: 'owner/repo#42',
           itemType: 'pr',
+          description: 'Description',
           capabilities: expect.objectContaining({ gitWork: expect.any(Function) }),
         }),
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('Created'),
+      );
+    });
+
+    it('seeds notes from description and falls back to an empty string', async () => {
+      providerRegistry.resolveUrl.mockResolvedValueOnce({
+        providerId: 'github',
+        item: {
+          title: '#43: Empty body',
+          url: 'https://github.com/owner/repo/issues/43',
+          externalId: 'owner/repo#43',
+          itemType: 'issue',
+        },
+      });
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ providerId: 'github', externalId: 'owner/repo#43' }));
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/issues/43');
+
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '#43: Empty body', notes: '' }),
+        expect.any(Object),
       );
     });
 

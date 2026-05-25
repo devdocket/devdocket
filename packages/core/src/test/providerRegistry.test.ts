@@ -133,10 +133,8 @@ describe('ProviderRegistry', () => {
 
     registry.registerSyntheticResolvedItem('gh', {
       title: '#42: Imported PR',
-      notes: '',
       url: 'https://example.com/42',
       externalId: 'owner/repo#42',
-      providerId: 'gh',
       reason: 'review_requested',
       state: 'open',
     });
@@ -153,11 +151,9 @@ describe('ProviderRegistry', () => {
 
     registry.registerSyntheticResolvedItem('gh', {
       title: '#99: Imported item',
-      notes: 'Body',
       description: 'Body',
       url: 'https://example.com/99',
       externalId: 'owner/repo#99',
-      providerId: 'gh',
       itemType: 'issue',
       capabilities: { foo: { enabled: true } } as any,
     });
@@ -172,10 +168,8 @@ describe('ProviderRegistry', () => {
 
     registry.registerSyntheticResolvedItem('gh', {
       title: '#100: Imported item',
-      notes: 'Body',
       url: 'https://example.com/100',
       externalId: 'owner/repo#100',
-      providerId: 'gh',
     });
 
     expect(registry.findProviderItem('gh', 'owner/repo#100')).toBeUndefined();
@@ -226,10 +220,9 @@ describe('ProviderRegistry', () => {
       ...createMockProvider('ado-pr-reviews'),
       resolveUrl: vi.fn(async () => ({
         title: '#42: Imported PR',
-        notes: 'Imported notes',
+        description: 'Imported notes',
         url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
         externalId: 'myorg/MyProject/myrepo/42',
-        providerId: 'ado-pr-reviews',
         itemType: 'pr' as const,
         capabilities: { gitWork: { kind: 'pr' as const, cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix' } },
       })),
@@ -262,10 +255,9 @@ describe('ProviderRegistry', () => {
       ...createMockProvider('gh'),
       resolveUrl: vi.fn(async () => ({
         title: '#42: Imported issue',
-        notes: 'Imported notes',
+        description: 'Imported notes',
         url: 'https://example.com/42',
         externalId: 'owner/repo#42',
-        providerId: 'gh',
       })),
     };
     const reg = new ProviderRegistry(
@@ -292,7 +284,7 @@ describe('ProviderRegistry', () => {
       ...createMockProvider('gh'),
       resolveUrl: vi.fn(async () => ({
         title: '#42: Imported issue',
-        notes: 'Imported notes',
+        description: 'Imported notes',
         url: 'https://example.com/42',
         externalId: 'owner/repo#canonical-42',
         itemType: 'issue' as const,
@@ -323,7 +315,7 @@ describe('ProviderRegistry', () => {
       .mockRejectedValueOnce(new Error('network error'))
       .mockResolvedValueOnce({
         title: '#42: Imported issue',
-        notes: 'Imported notes',
+        description: 'Imported notes',
         url: 'https://example.com/42',
         externalId: 'owner/repo#42',
         itemType: 'issue' as const,
@@ -360,7 +352,7 @@ describe('ProviderRegistry', () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({
         title: '#42: Imported issue',
-        notes: 'Imported notes',
+        description: 'Imported notes',
         url: 'https://example.com/42',
         externalId: 'owner/repo#42',
         itemType: 'issue' as const,
@@ -397,10 +389,9 @@ describe('ProviderRegistry', () => {
       ...createMockProvider('ado-pr-reviews'),
       resolveUrl: vi.fn(async () => ({
         title: '#42: Imported PR',
-        notes: 'Imported notes',
+        description: 'Imported notes',
         url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
         externalId: 'myorg/MyProject/myrepo/42',
-        providerId: 'ado-pr-reviews',
         itemType: 'pr' as const,
         capabilities: { gitWork: { kind: 'pr' as const, cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix' } },
       })),
@@ -2387,10 +2378,9 @@ describe('ProviderRegistry', () => {
       const p2 = createMockProvider('b');
       (p2 as any).resolveUrl = vi.fn(async () => ({
         title: 'Issue 1',
-        notes: 'body',
+        description: 'body',
         url: 'https://example.com/1',
         externalId: '1',
-        providerId: 'ignored',
       }));
       registry.register(p1);
       registry.register(p2);
@@ -2398,29 +2388,38 @@ describe('ProviderRegistry', () => {
 
       const result = await registry.resolveUrl('https://example.com/1');
       expect(result).toEqual({
-        title: 'Issue 1',
-        notes: 'body',
-        url: 'https://example.com/1',
-        externalId: '1',
         providerId: 'b',
+        item: {
+          title: 'Issue 1',
+          description: 'body',
+          url: 'https://example.com/1',
+          externalId: '1',
+        },
       });
       expect((p1 as any).resolveUrl).toHaveBeenCalled();
     });
 
-    it('overrides providerId with the provider id', async () => {
+    it('returns the provider id alongside the resolved item', async () => {
       const p1 = createMockProvider('real-id');
       (p1 as any).resolveUrl = vi.fn(async () => ({
         title: 'T',
-        notes: 'N',
+        description: 'N',
         url: 'https://u',
         externalId: 'e',
-        providerId: 'wrong-id',
       }));
       registry.register(p1);
       await nextTick();
 
       const result = await registry.resolveUrl('https://u');
-      expect(result?.providerId).toBe('real-id');
+      expect(result).toEqual({
+        providerId: 'real-id',
+        item: {
+          title: 'T',
+          description: 'N',
+          url: 'https://u',
+          externalId: 'e',
+        },
+      });
     });
 
     it('re-throws AbortError without trying remaining providers', async () => {
@@ -2430,7 +2429,7 @@ describe('ProviderRegistry', () => {
       (p1 as any).resolveUrl = vi.fn(async () => { throw abortError; });
       const p2 = createMockProvider('b');
       (p2 as any).resolveUrl = vi.fn(async () => ({
-        title: 'T', notes: 'N', url: 'https://u', externalId: 'e', providerId: 'b',
+        title: 'T', description: 'N', url: 'https://u', externalId: 'e',
       }));
       registry.register(p1);
       registry.register(p2);
@@ -2453,7 +2452,7 @@ describe('ProviderRegistry', () => {
       const p1 = createMockProvider('no-resolve');
       const p2 = createMockProvider('has-resolve');
       (p2 as any).resolveUrl = vi.fn(async () => ({
-        title: 'T', notes: 'N', url: 'https://u', externalId: 'e', providerId: 'has-resolve',
+        title: 'T', description: 'N', url: 'https://u', externalId: 'e',
       }));
       registry.register(p1);
       registry.register(p2);

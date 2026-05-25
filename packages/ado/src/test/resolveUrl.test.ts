@@ -31,7 +31,7 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
     expect(result).toBeUndefined();
   });
 
-  it('returns correct ResolvedItem for valid ADO PR URL', async () => {
+  it('returns correct ProviderItem for valid ADO PR URL', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -57,7 +57,6 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
     expect(result).toEqual(expect.objectContaining({
       title: 'PR 42: Fix critical bug',
       description: 'This PR fixes a critical issue',
-      notes: 'This PR fixes a critical issue',
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
       externalId: 'myorg/MyProject/myrepo/42',
       group: 'MyProject/myrepo',
@@ -145,7 +144,7 @@ describe('AdoPrReviewProvider.resolveUrl', () => {
       'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
     );
 
-    expect(result?.notes).toBe('');
+    expect(result?.description).toBeUndefined();
   });
 
   it('handles URL with encoded segments', async () => {
@@ -273,7 +272,7 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
     expect(result).toBeUndefined();
   });
 
-  it('returns correct ResolvedItem for valid work item URL', async () => {
+  it('returns correct ProviderItem for valid work item URL', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
       id: 'session-1',
@@ -312,7 +311,6 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
     expect(result).toEqual(expect.objectContaining({
       title: 'User Story 99: Implement feature X',
       description: 'Add support for new feature',
-      notes: 'Add support for new feature',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/99',
       externalId: 'myorg/MyProject/99',
       group: 'myorg/MyProject',
@@ -412,7 +410,7 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
       'https://dev.azure.com/myorg/MyProject/_workitems/edit/5',
     );
 
-    expect(result?.notes).toBe('Bold text and link');
+    expect(result?.description).toBe('Bold text and link');
   });
 
   it('handles complex HTML with br and p tags', async () => {
@@ -446,8 +444,8 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
     );
 
     // HTML entities and line breaks should be cleaned up
-    expect(result?.notes).toContain('First paragraph');
-    expect(result?.notes).toContain('Second paragraph');
+    expect(result?.description).toContain('First paragraph');
+    expect(result?.description).toContain('Second paragraph');
   });
 
   it('handles null description gracefully', async () => {
@@ -479,7 +477,7 @@ describe('AdoWorkItemProvider.resolveUrl', () => {
       'https://dev.azure.com/myorg/MyProject/_workitems/edit/10',
     );
 
-    expect(result?.notes).toBe('');
+    expect(result?.description).toBeUndefined();
   });
 
   it('throws on 404 response', async () => {

@@ -48,7 +48,7 @@ describe('resolveUrl', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('returns correct ResolvedItem for valid issue URL', async () => {
+    it('returns correct ProviderItem for valid issue URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -63,11 +63,10 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#123: Fix login bug');
-      expect(result?.notes).toBe('The login page is broken');
+      expect(result?.description).toBe('The login page is broken');
       expect(result?.url).toBe('https://github.com/owner/repo/issues/123');
       expect(result?.externalId).toBe('owner/repo#123');
       expect(result?.group).toBe('owner/repo');
-      expect(result?.description).toBe('The login page is broken');
       expect(result?.canonicalId).toBe('github:issue:owner/repo#123');
       expect(result?.itemType).toBe('issue');
       expect(result?.capabilities?.gitWork).toEqual({
@@ -101,7 +100,7 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#456: Empty issue');
-      expect(result?.notes).toBe('');
+      expect(result?.description).toBeUndefined();
       expect(result?.externalId).toBe('owner/repo#456');
     });
 
@@ -414,7 +413,7 @@ describe('resolveUrl', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('returns correct ResolvedItem for valid PR URL', async () => {
+    it('returns correct ProviderItem for valid PR URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -429,11 +428,10 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#456: Add new feature');
-      expect(result?.notes).toBe('This PR adds a new feature');
+      expect(result?.description).toBe('This PR adds a new feature');
       expect(result?.url).toBe('https://github.com/owner/repo/pull/456');
       expect(result?.externalId).toBe('owner/repo#456');
       expect(result?.group).toBe('owner/repo');
-      expect(result?.description).toBe('This PR adds a new feature');
       expect(result?.canonicalId).toBe('github:pull:owner/repo#456');
       expect(result?.itemType).toBe('pr');
       expect(result?.capabilities?.gitWork).toEqual(expect.any(Function));
@@ -462,7 +460,7 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#789: Empty PR');
-      expect(result?.notes).toBe('');
+      expect(result?.description).toBeUndefined();
       expect(result?.externalId).toBe('owner/repo#789');
     });
 
