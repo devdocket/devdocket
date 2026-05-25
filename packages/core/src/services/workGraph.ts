@@ -5,6 +5,11 @@ import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } fr
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 import { isSafeUrl } from '../utils/url';
+import { encodeUpdatedDetail, type UpdatedDetailInput } from './updateDetail';
+
+interface UpdateItemOptions {
+  source?: 'user' | 'provider-sync';
+}
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -242,29 +247,49 @@ export class WorkGraph {
   }
 
   /** Apply a partial update (title, notes, description, and/or url) to an existing work item. */
-  async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
-    return this.withLock(() => this.doUpdateItem(id, patch));
+  async updateItem(id: string, patch: Partial<WorkItemInput>, options?: UpdateItemOptions): Promise<void> {
+    return this.withLock(() => this.doUpdateItem(id, patch, options));
   }
 
-  private async doUpdateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
+  private async doUpdateItem(id: string, patch: Partial<WorkItemInput>, options?: UpdateItemOptions): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    const changes: string[] = [];
-    if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
+
+    const detailChanges: UpdatedDetailInput = {};
+    if (patch.title !== undefined && patch.title !== item.title) {
+      detailChanges.title = { from: item.title, to: patch.title };
+    }
     // Detect notes changes including clearing (patch.notes === undefined with key present)
-    if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
-    // Detect description changes including clearing
-    if ('description' in patch && patch.description !== item.description) { changes.push('description'); }
+    if ('notes' in patch) {
+      const currentNotes = item.notes ?? '';
+      const nextNotes = patch.notes ?? '';
+      if (nextNotes !== currentNotes) {
+        detailChanges.notes = { from: currentNotes, to: nextNotes };
+      }
+    }
+    if ('description' in patch) {
+      const currentDescription = item.description ?? '';
+      const nextDescription = patch.description ?? '';
+      if (nextDescription !== currentDescription) {
+        detailChanges.description = options?.source === 'provider-sync'
+          ? {}
+          : { from: currentDescription, to: nextDescription };
+      }
+    }
     // Detect url changes including clearing (patch.url === undefined with key present)
     if ('url' in patch) {
       const sanitized = patch.url ? isSafeUrl(patch.url.trim())?.href : undefined;
       if (sanitized !== patch.url) { patch = { ...patch, url: sanitized }; }
-      if (sanitized !== item.url) { changes.push('url'); }
+      const currentUrl = item.url ?? '';
+      const nextUrl = sanitized ?? '';
+      if (nextUrl !== currentUrl) {
+        detailChanges.url = { from: currentUrl, to: nextUrl };
+      }
     }
     // Skip save/event when no fields actually changed (e.g. autosave with identical values)
-    if (changes.length === 0) {
+    if (Object.keys(detailChanges).length === 0) {
       return;
     }
     const now = Date.now();
@@ -274,7 +299,7 @@ export class WorkGraph {
       activityLog: WorkGraph.appendLogEntry(item.activityLog, {
         timestamp: now,
         type: 'updated' as const,
-        detail: changes.join(', '),
+        detail: encodeUpdatedDetail(detailChanges),
       }),
       updatedAt: now,
     };

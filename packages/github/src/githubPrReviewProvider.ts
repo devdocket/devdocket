@@ -194,6 +194,9 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     );
 
     if (!response.ok) {
+      if (response.headers?.get?.('x-github-sso')) {
+        await throwApiError(response, 'GitHub PR review requests');
+      }
       logger.error(`Failed to fetch PR review requests: ${response.status}`);
       return { prs: [], failed: true };
     }

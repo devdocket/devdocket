@@ -76,6 +76,45 @@ describe('ActivityLog', () => {
     expect(detail!.textContent).toBe(rawDetail);
   });
 
+  it('renders updated diffs supplied through displayDetail.fields', () => {
+    renderActivityLog([{
+      timestamp: Date.now(),
+      type: 'updated',
+      detail: 'ignored raw payload',
+      displayDetail: {
+        kind: 'fields',
+        rows: [
+          { label: 'Title', value: "'Fix login bug' → 'Fix SSO login bug on Safari'" },
+          { label: 'Notes', value: "'' → 'Repro on Safari 17.4'" },
+        ],
+      },
+    }]);
+
+    expandActivityLog();
+
+    const detail = container!.querySelector('.activity-entry-detail--structured');
+    expect(detail).toBeInstanceOf(HTMLDListElement);
+    expect(detail!.textContent).toContain('Title:');
+    expect(detail!.textContent).toContain("'Fix login bug' → 'Fix SSO login bug on Safari'");
+    expect(detail!.textContent).toContain('Notes:');
+    expect(detail!.textContent).toContain("'' → 'Repro on Safari 17.4'");
+  });
+
+  it('renders updated legacy summaries supplied through displayDetail.text', () => {
+    renderActivityLog([{
+      timestamp: Date.now(),
+      type: 'updated',
+      detail: 'ignored raw payload',
+      displayDetail: { kind: 'text', text: 'fields changed: title, notes' },
+    }]);
+
+    expandActivityLog();
+
+    const detail = container!.querySelector('.activity-entry-detail');
+    expect(detail).toBeInstanceOf(HTMLSpanElement);
+    expect(detail!.textContent).toBe('fields changed: title, notes');
+  });
+
   it('renders plain detail strings verbatim', () => {
     renderActivityLog([{ timestamp: Date.now(), type: 'state-changed', detail: 'New → InProgress' }]);
 

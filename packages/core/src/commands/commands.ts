@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isRecoverableError, type RecoverableError } from '@devdocket/shared';
 import { WorkItemState } from '../models/workItem';
 import { ACTIVITY_TYPES, type ActivityType } from '../models/activityLog';
 import { WorkGraph } from '../services/workGraph';
@@ -60,8 +61,6 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return item.title;
 }
 
-// isSafeUrl is imported from ../utils/url.
-
 /**
  * Label for the notification action button that opens the VS Code Extensions
  * view filtered to DevDocket-published extensions. Shared between the action
@@ -69,6 +68,8 @@ function formatItemTitle(item: { group?: string; title: string }): string {
  * drift apart silently.
  */
 const BROWSE_PROVIDER_EXTENSIONS_ACTION = 'Browse Provider Extensions';
+const RETRY_ACTION = 'Retry';
+const DISMISS_ACTION = 'Dismiss';
 
 /**
  * Open the VS Code Extensions view filtered to extensions published by the
@@ -77,6 +78,57 @@ const BROWSE_PROVIDER_EXTENSIONS_ACTION = 'Browse Provider Extensions';
  */
 async function browseProviderExtensions(): Promise<void> {
   await vscode.commands.executeCommand('workbench.extensions.search', '@publisher:"devdocket"');
+}
+
+async function handleRecoverableError(
+  err: RecoverableError,
+  retry: () => Promise<void>,
+): Promise<void> {
+  const providerItems = (err.actions ?? []).map(action => ({
+    title: action.label,
+    action,
+  }));
+  const retryItem = err.retryable !== false
+    ? { title: RETRY_ACTION }
+    : undefined;
+  const dismissItem = { title: DISMISS_ACTION };
+  const items = [
+    ...providerItems,
+    ...(retryItem ? [retryItem] : []),
+    dismissItem,
+  ];
+  const selection = await vscode.window.showErrorMessage(err.message, ...items);
+
+  const providerItem = providerItems.find(item => item === selection);
+  if (providerItem) {
+    try {
+      await providerItem.action.run();
+    } catch (actionError) {
+      handleCommandError(`Recovery action failed: ${providerItem.action.label}`, actionError);
+      return;
+    }
+
+    if (providerItem.action.retryAfterAction) {
+      try {
+        await retry();
+      } catch (retryError) {
+        handleCommandError('Retry failed', retryError);
+      }
+    }
+    return;
+  }
+
+  if (!selection || selection === dismissItem) {
+    return;
+  }
+
+  if (selection === retryItem) {
+    try {
+      await retry();
+    } catch (retryError) {
+      handleCommandError('Retry failed', retryError);
+    }
+  }
 }
 
 /** Log the error and show a user-facing message. */
@@ -88,13 +140,20 @@ function handleCommandError(context: string, err: unknown): void {
 
 /** Wrap a command handler so unhandled errors are logged and shown to the user. */
 function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Promise<void> | void): (...args: T) => Promise<void> {
-  return async (...args: T) => {
+  const wrapped = async (...args: T): Promise<void> => {
     try {
       await fn(...args);
     } catch (err: unknown) {
+      if (isRecoverableError(err)) {
+        logger.error(label, err);
+        await handleRecoverableError(err, () => wrapped(...args));
+        return;
+      }
       handleCommandError(label, err);
     }
   };
+
+  return wrapped;
 }
 
 // ---------------------------------------------------------------------------
@@ -334,13 +393,15 @@ async function handleCreateItemFromUrl(
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
   editorPanelDependencies: WorkItemEditorPanelDependencies,
+  initialUrl?: string,
 ): Promise<void> {
-  const url = await vscode.window.showInputBox({
+  const inputUrl = initialUrl ?? await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
   });
-  if (!url?.trim()) { return; }
+  const url = inputUrl?.trim();
+  if (!url) { return; }
 
-  if (!isSafeUrl(url.trim())) {
+  if (!isSafeUrl(url)) {
     void vscode.window.showErrorMessage('DevDocket: Please enter a valid HTTP or HTTPS URL');
     return;
   }
@@ -352,11 +413,22 @@ async function handleCreateItemFromUrl(
       (_progress, token) => {
         const controller = new AbortController();
         token.onCancellationRequested(() => controller.abort());
-        return providerRegistry.resolveUrl(url.trim(), controller.signal, { interactive: true });
+        return providerRegistry.resolveUrl(url, controller.signal, { interactive: true });
       },
     );
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
+      return;
+    }
+    if (isRecoverableError(error)) {
+      await handleRecoverableError(error, () => handleCreateItemFromUrl(
+        context,
+        workGraph,
+        providerRegistry,
+        labelCache,
+        editorPanelDependencies,
+        url,
+      ));
       return;
     }
     throw error;

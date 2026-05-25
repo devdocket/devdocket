@@ -3,12 +3,16 @@ import * as vscode from 'vscode';
 import type { ProviderItem } from '../api/types';
 import { ReadStateStore } from '../storage/readStateStore';
 import { JsonFileStore } from '../storage/fileStore';
+import { logger } from '../services/logger';
 import { useMockFileSystem, type MockFileSystem } from './testFileSystem';
 
 describe('ReadStateStore', () => {
   const fileUri = vscode.Uri.file('C:\\test\\read-state.json');
   let fileSystem: MockFileSystem;
   let store: ReadStateStore;
+
+  const persistedRecords = () => fileSystem.readJson<Array<{ key: string; createdAt?: number }>>(fileUri) ?? [];
+  const persistedKeys = () => persistedRecords().map(record => record.key);
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -25,12 +29,12 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::1')).toBe(false);
   });
 
-  it('should add a key and persist to globalState', async () => {
+  it('should add a key and persist to the file store', async () => {
     await store.load();
     expect(await store.add('gh::issue-1')).toBe(true);
 
-    const persisted = fileSystem.readJson<string[]>(fileUri);
-    expect(persisted).toEqual(['gh::issue-1']);
+    const persisted = persistedRecords();
+    expect(persisted).toEqual([{ key: 'gh::issue-1', createdAt: expect.any(Number) }]);
   });
 
   it('should return false when adding a duplicate key', async () => {
@@ -57,8 +61,8 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::2')).toBe(true);
     expect(store.has('gh::3')).toBe(false);
 
-    const persisted = fileSystem.readJson<string[]>(fileUri);
-    expect(persisted).toEqual(['gh::2']);
+    const persisted = persistedRecords();
+    expect(persisted).toEqual([{ key: 'gh::2', createdAt: expect.any(Number) }]);
   });
 
   it('should ignore non-existent keys in deleteMany', async () => {
@@ -87,6 +91,63 @@ describe('ReadStateStore', () => {
     expect(store2.has('gh::1')).toBe(true);
     expect(store2.has('jira::2')).toBe(true);
     expect(store2.has('gh::3')).toBe(false);
+  });
+
+  it('persists createdAt timestamps for new keys', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(4_321);
+
+    try {
+      await store.load();
+      await store.add('gh::timed');
+    } finally {
+      nowSpy.mockRestore();
+    }
+
+    expect(persistedRecords()).toEqual([{ key: 'gh::timed', createdAt: 4_321 }]);
+  });
+
+  it('preserves createdAt timestamps across reload and rewrite', async () => {
+    fileSystem.writeJson(fileUri, [{ key: 'gh::legacy', createdAt: 123 }]);
+
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    await store2.load();
+    await store2.add('gh::new');
+
+    expect(persistedRecords()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'gh::legacy', createdAt: 123 }),
+      expect.objectContaining({ key: 'gh::new', createdAt: expect.any(Number) }),
+    ]));
+    store2.dispose();
+  });
+
+  it('loads legacy string entries without createdAt timestamps', async () => {
+    fileSystem.writeJson(fileUri, ['gh::legacy']);
+
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    await store2.load();
+
+    expect(store2.has('gh::legacy')).toBe(true);
+    store2.dispose();
+  });
+
+  it('deduplicates persisted read-state keys while keeping the oldest timestamp', async () => {
+    fileSystem.writeJson(fileUri, [
+      { key: 'gh::dup', createdAt: 5 },
+      { key: 'gh::dup', createdAt: 1 },
+      { key: 'gh::other', createdAt: 3 },
+    ]);
+
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    await store2.load();
+    await store2.add('gh::fresh');
+
+    expect([...store2.keys()].sort()).toEqual(['gh::dup', 'gh::fresh', 'gh::other']);
+    expect(persistedRecords()).toEqual([
+      { key: 'gh::dup', createdAt: 1 },
+      { key: 'gh::other', createdAt: 3 },
+      { key: 'gh::fresh', createdAt: expect.any(Number) },
+    ]);
+    store2.dispose();
   });
 
   it('should skip non-string elements in the array', async () => {
@@ -145,6 +206,21 @@ describe('ReadStateStore', () => {
     expect(result).toEqual([]);
   });
 
+  it('addMany only returns newly added keys that remain after capacity trimming', async () => {
+    let currentTime = 0;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime++);
+
+    try {
+      await store.load();
+      await store.addMany(Array.from({ length: 4_999 }, (_, i) => `gh::seed-${i}`));
+      const retained = await store.addMany(Array.from({ length: 10 }, (_, i) => `gh::new-${i}`));
+
+      expect(retained).toEqual(Array.from({ length: 10 }, (_, i) => `gh::new-${i}`));
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
   describe('merge-on-write', () => {
     it('preserves remote additions while persisting local changes', async () => {
       const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
@@ -154,7 +230,7 @@ describe('ReadStateStore', () => {
       await windowB.add('gh::remote');
       await windowA.add('gh::local');
 
-      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::local', 'gh::remote']);
+      expect(persistedKeys().sort()).toEqual(['gh::local', 'gh::remote']);
 
       windowA.dispose();
       windowB.dispose();
@@ -172,7 +248,7 @@ describe('ReadStateStore', () => {
       await windowA.deleteMany(['gh::remove']);
 
       expect([...windowA.keys()].sort()).toEqual(['gh::keep', 'gh::remote']);
-      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::keep', 'gh::remote']);
+      expect(persistedKeys().sort()).toEqual(['gh::keep', 'gh::remote']);
 
       windowA.dispose();
       windowB.dispose();
@@ -192,7 +268,7 @@ describe('ReadStateStore', () => {
 
       await windowA.add('gh::local');
 
-      expect(fileSystem.readJson<string[]>(fileUri)?.sort()).toEqual(['gh::local', 'gh::shared']);
+      expect(persistedKeys().sort()).toEqual(['gh::local', 'gh::shared']);
 
       windowA.dispose();
       windowB.dispose();
@@ -207,6 +283,129 @@ describe('ReadStateStore', () => {
       await store.load();
 
       expect([...store.keys()]).toEqual(['gh::issue-2']);
+    });
+  });
+
+  describe('capacity management', () => {
+    it('caps persisted keys and evicts the oldest keys first on write', async () => {
+      let currentTime = 0;
+      const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => currentTime++);
+
+      try {
+        await store.load();
+        const retained = await store.addMany(Array.from({ length: 6_000 }, (_, i) => `gh::issue-${i}`));
+
+        expect(retained).toEqual(Array.from({ length: 5_000 }, (_, i) => `gh::issue-${i + 1_000}`));
+      } finally {
+        nowSpy.mockRestore();
+      }
+
+      expect([...store.keys()]).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
+      expect(store.has('gh::issue-0')).toBe(false);
+      expect(store.has('gh::issue-999')).toBe(false);
+      expect(store.has('gh::issue-1000')).toBe(true);
+      expect(store.has('gh::issue-5999')).toBe(true);
+    });
+
+    it('trims oversized persisted read state on load and logs once', async () => {
+      const infoSpy = vi.spyOn(logger, 'info').mockImplementation(() => undefined);
+      fileSystem.writeJson(fileUri, Array.from({ length: 6_000 }, (_, i) => ({
+        key: `gh::issue-${i}`,
+        createdAt: i,
+      })));
+
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+
+      expect([...store2.keys()]).toHaveLength(5_000);
+      expect(persistedRecords()).toHaveLength(5_000);
+      expect(store2.has('gh::issue-0')).toBe(false);
+      expect(store2.has('gh::issue-1000')).toBe(true);
+      expect(infoSpy).toHaveBeenCalledWith(expect.stringContaining('Trimmed read-state.json from 6000 to 5000 entries while loading'));
+      store2.dispose();
+      infoSpy.mockRestore();
+    });
+
+    it('keeps trimmed entries in memory when persisting the load-time trim fails', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const failingStore = new ReadStateStore({
+        read: vi.fn(async () => Array.from({ length: 6_000 }, (_, i) => ({ key: `gh::issue-${i}`, createdAt: i }))),
+        write: vi.fn(async () => { throw new Error('disk full'); }),
+      });
+
+      await expect(failingStore.load()).resolves.toBeUndefined();
+      expect([...failingStore.keys()]).toHaveLength(5_000);
+      expect(failingStore.has('gh::issue-0')).toBe(false);
+      expect(failingStore.has('gh::issue-1000')).toBe(true);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Failed to persist trimmed read state while loading; continuing with 5000 in-memory entries'), expect.any(Error));
+      warnSpy.mockRestore();
+      failingStore.dispose();
+    });
+
+    it('does not resurrect keys evicted by another window', async () => {
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+
+      fileSystem.writeJson(fileUri, Array.from({ length: 6_000 }, (_, i) => ({
+        key: `gh::issue-${i}`,
+        createdAt: i,
+      })));
+
+      await windowA.load();
+      await windowB.load();
+      await windowA.add('gh::fresh');
+      await windowB.add('gh::another-fresh');
+
+      expect(persistedKeys()).not.toContain('gh::issue-0');
+      expect(persistedKeys()).not.toContain('gh::issue-999');
+      expect(persistedKeys()).toContain('gh::fresh');
+      expect(persistedKeys()).toContain('gh::another-fresh');
+
+      windowA.dispose();
+      windowB.dispose();
+    });
+
+    it('keeps cached keys when the remote snapshot is temporarily unavailable', async () => {
+      fileSystem.writeJson(fileUri, ['gh::keep']);
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+      await vscode.workspace.fs.delete(fileUri);
+
+      await store2.add('gh::fresh');
+
+      expect(persistedKeys().sort()).toEqual(['gh::fresh', 'gh::keep']);
+      store2.dispose();
+    });
+
+    it('keeps cached keys when the remote snapshot is malformed', async () => {
+      fileSystem.writeJson(fileUri, ['gh::keep']);
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+      fileSystem.writeJson(fileUri, { invalid: true });
+
+      await store2.add('gh::fresh');
+
+      expect(persistedKeys().sort()).toEqual(['gh::fresh', 'gh::keep']);
+      expect(warnSpy).toHaveBeenCalledWith('Read state snapshot is not an array; falling back to the in-memory snapshot');
+      warnSpy.mockRestore();
+      store2.dispose();
+    });
+
+    it('keeps cached keys when the remote snapshot is an invalid array', async () => {
+      fileSystem.writeJson(fileUri, ['gh::keep']);
+      const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      await store2.load();
+      fileSystem.writeJson(fileUri, [42]);
+
+      await store2.add('gh::fresh');
+
+      expect(persistedKeys().sort()).toEqual(['gh::fresh', 'gh::keep']);
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('Skipped 1 invalid read state entries'));
+      warnSpy.mockRestore();
+      store2.dispose();
     });
   });
 
@@ -303,7 +502,7 @@ describe('ReadStateStore', () => {
       expect(pruned).toBe(1);
       expect(freshStore.has('gh::keep')).toBe(true);
       expect(freshStore.has('gh::stale')).toBe(false);
-      expect(fileSystem.readJson<string[]>(fileUri)).toEqual(['gh::keep']);
+      expect(persistedKeys()).toEqual(['gh::keep']);
       freshStore.dispose();
     });
 
@@ -319,7 +518,7 @@ describe('ReadStateStore', () => {
 
       expect(pruned).toBe(1);
       expect([...freshStore.keys()]).toEqual(['legacy-key']);
-      expect(fileSystem.readJson<string[]>(fileUri)).toEqual(['legacy-key']);
+      expect(persistedKeys()).toEqual(['legacy-key']);
       freshStore.dispose();
     });
 

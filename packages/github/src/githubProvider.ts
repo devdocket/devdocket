@@ -2,7 +2,7 @@ import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, ty
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, looksLikeRateLimited403, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
+import { GitHubSsoError, getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, looksLikeRateLimited403, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 import { createGitHubIssueGitWork } from './gitWorkCapabilities';
 
@@ -125,6 +125,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       const items = await this.fetchPaginated<GitHubIssue>(
         'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
         token,
+        'assigned issues',
         10,
         signal,
       );
@@ -133,12 +134,13 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       return { issues, failed: false };
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
+      if (err instanceof GitHubSsoError) { throw err; }
       logger.error('Failed to fetch assigned issues', err);
       return { issues: [], failed: true };
     }
   }
 
-  private async fetchPaginated<T>(url: string, token: string, maxPages: number = 10, signal?: AbortSignal): Promise<T[]> {
+  private async fetchPaginated<T>(url: string, token: string, label: string, maxPages: number = 10, signal?: AbortSignal): Promise<T[]> {
     const allItems: T[] = [];
     let nextUrl: string | null = url;
     let page = 0;
@@ -169,6 +171,9 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       }
 
       if (!response.ok) {
+        if (response.headers?.get?.('x-github-sso')) {
+          await throwApiError(response, `GitHub ${label}`);
+        }
         if (allItems.length > 0) {
           logger.warn(
             `GitHub API returned ${response.status} on page ${page + 1}. ` +

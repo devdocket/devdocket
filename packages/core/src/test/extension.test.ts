@@ -54,6 +54,11 @@ function getMainProvider(): MainViewProvider {
   return registerWebviewViewProvider.mock.calls[0][1] as MainViewProvider;
 }
 
+function readReadStateKeys(fileSystem: MockFileSystem, fileUri: vscode.Uri): string[] {
+  const records = fileSystem.readJson<Array<string | { key: string }>>(fileUri) ?? [];
+  return records.map(record => typeof record === 'string' ? record : record.key);
+}
+
 describe('activate()', () => {
   let context: vscode.ExtensionContext;
   let fileSystem: MockFileSystem;
@@ -291,7 +296,7 @@ describe('activate()', () => {
 
       await vi.waitFor(() => {
         expect(pruneSpy).toHaveBeenCalled();
-        expect(fileSystem.readJson<string[]>(vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual([
+        expect(readReadStateKeys(fileSystem, vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual([
           'prune-provider::keep',
           'other-provider::stale',
         ]);
@@ -336,7 +341,7 @@ describe('activate()', () => {
 
       const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
       expect(active.get('empty-provider')).toEqual([]);
-      expect(fileSystem.readJson<string[]>(vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual(['empty-provider::stale']);
+      expect(readReadStateKeys(fileSystem, vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual(['empty-provider::stale']);
       expect(fileSystem.readJson<Array<{ providerId: string; externalId: string }>>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json'))).toEqual([
         { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
       ]);
@@ -425,7 +430,7 @@ describe('activate()', () => {
       await flushMicrotasks();
 
       expect(pruneSpy).not.toHaveBeenCalled();
-      expect(fileSystem.readJson<string[]>(vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual(['truncated-provider::stale']);
+      expect(readReadStateKeys(fileSystem, vscode.Uri.joinPath(context.globalStorageUri, 'read-state.json'))).toEqual(['truncated-provider::stale']);
       const discoveredRecords = fileSystem.readJson<Array<{ providerId: string; externalId: string }>>(vscode.Uri.joinPath(context.globalStorageUri, 'inbox-state.json')) ?? [];
       expect(discoveredRecords.some(record => record.providerId === 'truncated-provider' && record.externalId === 'stale')).toBe(true);
     } finally {

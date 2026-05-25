@@ -29,6 +29,7 @@ import { isSafeUrl } from './utils/url';
 import { logger, setLogger } from './services/logger';
 import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
+import { renderUpdatedActivityDetail } from './services/updateDetail';
 import { isFailedConclusion, toRunCompletionLabel } from './webview/shared/runConclusionLabels';
 import { performance } from 'perf_hooks';
 
@@ -499,6 +500,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
   const ar = new ActionRegistry();
   const adrr = new ActivityDetailRendererRegistry();
+  adrr.register('updated', renderUpdatedActivityDetail);
   const wr = new WatcherRegistry(logger);
   const pwr = new PRWatcherRegistry(logger);
   const watchStore = new WatchStore(createUserIntentStore(useFileBackedStorage, context.globalState, context.globalStorageUri, 'devdocket.watches', 'watches.json'));

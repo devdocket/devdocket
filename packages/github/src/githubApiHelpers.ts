@@ -1,5 +1,15 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, combineSignals, createAbortError, getSessionWithAuthFallback, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
+import {
+  isSafeUrl,
+  isValidGitHubRepo,
+  combineSignals,
+  createAbortError,
+  getSessionWithAuthFallback,
+  runWorkerPoolSettled,
+  type ProviderBadge,
+  type RecoverableError,
+  type RecoverableErrorAction,
+} from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubAuthOptions {
@@ -35,6 +45,71 @@ export interface GitHubPrMergeFields {
   state?: string;
   merged_at?: string | null;
   merged?: boolean;
+}
+
+const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
+
+interface GitHubSsoErrorOptions {
+  ssoUrl?: string;
+  orgName?: string;
+}
+
+export class GitHubSsoError extends Error implements RecoverableError {
+  readonly recoverable = true as const;
+  readonly retryable = true as const;
+  readonly ssoUrl: string | undefined;
+  readonly orgName: string | undefined;
+  readonly actions?: ReadonlyArray<RecoverableErrorAction>;
+
+  constructor(opts?: GitHubSsoErrorOptions);
+  constructor(message: string, opts?: GitHubSsoErrorOptions);
+  constructor(messageOrOpts: string | GitHubSsoErrorOptions = {}, opts: GitHubSsoErrorOptions = {}) {
+    const resolvedOptions = typeof messageOrOpts === 'string' ? opts : messageOrOpts;
+    const authorizationUrl = getGitHubSsoAuthorizationUrl(resolvedOptions);
+    const safeAuthorizationUrl = authorizationUrl ? isSafeUrl(authorizationUrl) : null;
+    const trustedAuthorizationUrl = safeAuthorizationUrl && isTrustedGitHubSsoUrl(safeAuthorizationUrl)
+      ? safeAuthorizationUrl
+      : null;
+    super(typeof messageOrOpts === 'string' ? messageOrOpts : buildGitHubSsoMessage(resolvedOptions.orgName));
+    this.name = 'GitHubSsoError';
+    this.ssoUrl = trustedAuthorizationUrl?.href;
+    this.orgName = resolvedOptions.orgName;
+    this.actions = trustedAuthorizationUrl
+      ? [createAuthorizeInBrowserAction(trustedAuthorizationUrl.href)]
+      : undefined;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+function buildGitHubSsoMessage(orgName?: string): string {
+  const orgLabel = orgName
+    ? `the "${orgName}" organization`
+    : 'this organization';
+  return `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore this item can be loaded.`;
+}
+
+function getGitHubSsoAuthorizationUrl(opts: GitHubSsoErrorOptions): string | undefined {
+  if (opts.ssoUrl) {
+    return opts.ssoUrl;
+  }
+  if (opts.orgName) {
+    return `https://github.com/orgs/${encodeURIComponent(opts.orgName)}/sso`;
+  }
+  return undefined;
+}
+
+function createAuthorizeInBrowserAction(authorizationUrl: string): RecoverableErrorAction {
+  return {
+    label: AUTHORIZE_IN_BROWSER,
+    retryAfterAction: true,
+    run: async () => {
+      await vscode.env.openExternal(vscode.Uri.parse(authorizationUrl));
+    },
+  };
+}
+
+function isTrustedGitHubSsoUrl(url: URL): boolean {
+  return url.hostname === 'github.com';
 }
 
 export function isMergedGitHubPr(item: GitHubPrMergeFields): boolean {
@@ -240,11 +315,8 @@ export async function throwApiError(response: Response, label: string): Promise<
     // Order matters: prefer the most specific signature so a coincidental
     // `remaining===0` doesn't mask SSO or secondary-rate-limit responses.
     if (sso) {
-      throw new Error(
-        `GitHub SSO authorization required for ${label}` +
-        `${apiMessage ? `: ${apiMessage}` : '.'}` +
-        ' Authorize the token for the organization, then retry.',
-      );
+      const { ssoUrl, orgName } = parseGitHubSsoInfo(sso);
+      throw new GitHubSsoError({ ssoUrl, orgName });
     }
     if (isSecondaryRateLimited(retryAfter, apiMessage)) {
       const wait = formatRetryAfter(retryAfter);
@@ -276,6 +348,34 @@ async function safeReadResponseBody(response: Response): Promise<string> {
     return text ?? '';
   } catch {
     return '';
+  }
+}
+
+function parseGitHubSsoInfo(headerValue: string | null): { ssoUrl?: string; orgName?: string } {
+  if (!headerValue) {
+    return {};
+  }
+
+  const ssoUrl = headerValue
+    .split(';')
+    .map(part => part.trim())
+    .find(part => part.toLowerCase().startsWith('url='))
+    ?.slice(4)
+    .trim();
+
+  if (!ssoUrl) {
+    return {};
+  }
+
+  try {
+    const parsed = new URL(ssoUrl);
+    const match = parsed.pathname.match(/^\/orgs\/([^/]+)\/sso\/?$/i);
+    return {
+      ssoUrl,
+      orgName: match?.[1] ? decodeURIComponent(match[1]) : undefined,
+    };
+  } catch {
+    return { ssoUrl };
   }
 }
 

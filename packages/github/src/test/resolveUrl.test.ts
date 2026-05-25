@@ -287,7 +287,7 @@ describe('resolveUrl', () => {
 
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/issues/123'),
-      ).rejects.toThrow(/SSO authorization required/i);
+      ).rejects.toThrow('DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore this item can be loaded.');
     });
 
     it('throws generic 403 error (not rate limit / SSO) with API message', async () => {
