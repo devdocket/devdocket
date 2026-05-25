@@ -44,26 +44,6 @@ function isWindowStateAwareProvider(provider: DevDocketProvider): provider is De
   return typeof (provider as Partial<WindowStateAwareProvider>).setWindowState === 'function';
 }
 
-function toSyntheticProviderItem(item: ProviderItem): ProviderItem | undefined {
-  if (
-    !item.itemType
-    && !item.capabilities
-    && !item.author
-    && item.authored === undefined
-    && !item.badges
-    && !item.canonicalId
-    && !item.reason
-    && !item.relatedItems
-    && !item.resurfaceVersion
-    && !item.state
-    && !item.version
-  ) {
-    return undefined;
-  }
-
-  return { ...item };
-}
-
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
@@ -357,19 +337,6 @@ export class ProviderRegistry {
     externalIds.add(externalId);
   }
 
-  registerSyntheticResolvedItem(providerId: string, item: ProviderItem): void {
-    if (this.providers.has(providerId)) {
-      this.markImportedItemRehydrated(providerId, item.externalId);
-    }
-
-    const syntheticItem = toSyntheticProviderItem(item);
-    if (!syntheticItem) {
-      return;
-    }
-
-    this.registerSyntheticProviderItem(providerId, syntheticItem);
-  }
-
   private queueRehydrateSyntheticProviderItems(provider: DevDocketProvider): void {
     const tail = this._rehydrateQueues.get(provider.id);
     const startNext = (): Promise<void> =>
@@ -427,7 +394,7 @@ export class ProviderRegistry {
           continue;
         }
 
-        this.registerSyntheticResolvedItem(provider.id, resolved);
+        this.registerSyntheticProviderItem(provider.id, resolved);
       } catch (error) {
         this.rehydratedImportedItems.get(provider.id)?.delete(importedItem.externalId);
         logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);

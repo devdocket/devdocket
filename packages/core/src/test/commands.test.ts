@@ -112,7 +112,7 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders' | 'registerSyntheticResolvedItem'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders' | 'registerSyntheticProviderItem'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
@@ -125,7 +125,7 @@ function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods
       { id: 'github', label: 'GitHub' },
       { id: 'ado', label: 'Azure DevOps' },
     ]),
-    registerSyntheticResolvedItem: vi.fn(),
+    registerSyntheticProviderItem: vi.fn(),
   };
 }
 
@@ -419,7 +419,7 @@ describe('registerCommands', () => {
         expect.any(AbortSignal),
         { interactive: true },
       );
-      expect(providerRegistry.registerSyntheticResolvedItem).toHaveBeenCalledWith(
+      expect(providerRegistry.registerSyntheticProviderItem).toHaveBeenCalledWith(
         'github-pr-reviews',
         expect.objectContaining({
           externalId: 'owner/repo#42',

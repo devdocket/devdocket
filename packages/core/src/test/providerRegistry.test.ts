@@ -131,7 +131,7 @@ describe('ProviderRegistry', () => {
     registry.register(provider);
     await vi.waitFor(() => expect(registry.loading).toBe(false));
 
-    registry.registerSyntheticResolvedItem('gh', {
+    registry.registerSyntheticProviderItem('gh', {
       title: '#42: Imported PR',
       url: 'https://example.com/42',
       externalId: 'owner/repo#42',
@@ -149,7 +149,7 @@ describe('ProviderRegistry', () => {
     registry.register(provider);
     await vi.waitFor(() => expect(registry.loading).toBe(false));
 
-    registry.registerSyntheticResolvedItem('gh', {
+    registry.registerSyntheticProviderItem('gh', {
       title: '#99: Imported item',
       description: 'Body',
       url: 'https://example.com/99',
@@ -161,18 +161,20 @@ describe('ProviderRegistry', () => {
     expect((registry.getProviderItems('gh')[0] as any).capabilities.foo).toEqual({ enabled: true });
   });
 
-  it('does not create a synthetic provider item when a resolved item has no provider metadata', async () => {
+  it('registers synthetic items even when only the minimal ProviderItem fields are present', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
     await vi.waitFor(() => expect(registry.loading).toBe(false));
 
-    registry.registerSyntheticResolvedItem('gh', {
+    registry.registerSyntheticProviderItem('gh', {
       title: '#100: Imported item',
       url: 'https://example.com/100',
       externalId: 'owner/repo#100',
     });
 
-    expect(registry.findProviderItem('gh', 'owner/repo#100')).toBeUndefined();
+    expect(registry.findProviderItem('gh', 'owner/repo#100')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#100', title: '#100: Imported item' }),
+    );
   });
 
   it('prefers live provider items over synthetic URL-imported items with the same external id', async () => {
@@ -250,7 +252,7 @@ describe('ProviderRegistry', () => {
     );
   });
 
-  it('marks metadata-free rehydrated imports so they are not re-resolved on later refreshes', async () => {
+  it('stores rehydrated imports and does not re-resolve them on later refreshes', async () => {
     const provider = {
       ...createMockProvider('gh'),
       resolveUrl: vi.fn(async () => ({
@@ -276,7 +278,9 @@ describe('ProviderRegistry', () => {
     await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
     await (reg as any).rehydrateSyntheticProviderItems(provider);
     expect(provider.resolveUrl).toHaveBeenCalledTimes(1);
-    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', title: '#42: Imported issue' }),
+    );
   });
 
   it('skips rehydration when resolveUrl returns a different externalId', async () => {

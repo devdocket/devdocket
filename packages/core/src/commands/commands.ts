@@ -463,7 +463,7 @@ async function handleCreateItemFromUrl(
     { providerId, externalId: item.externalId, url: provenanceUrl, ...(group ? { group } : {}) },
   );
 
-  providerRegistry.registerSyntheticResolvedItem(providerId, item);
+  providerRegistry.registerSyntheticProviderItem(providerId, item);
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
