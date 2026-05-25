@@ -450,7 +450,6 @@ export class ProviderRegistry {
     const liveItems = this.providerItems.get(providerId) ?? [];
     const syntheticItems = this.syntheticProviderItems.get(providerId);
     if (!syntheticItems || syntheticItems.size === 0) {
-      this.mergedProviderItems.set(providerId, liveItems);
       return liveItems;
     }
 
@@ -474,7 +473,7 @@ export class ProviderRegistry {
     if (!this.allProviderItemsCache) {
       this.allProviderItemsCache = new Map(Array.from(this.providers.keys(), providerId => [providerId, this.getProviderItems(providerId)]));
     }
-    return this.allProviderItemsCache;
+    return new Map(this.allProviderItemsCache);
   }
 
   /**
@@ -846,6 +845,9 @@ export class ProviderRegistry {
     this._disposed = true;
     // Clear providers first so cancellation handlers don't log spurious timeout warnings
     this.providers.clear();
+    this.providerItems.clear();
+    this.syntheticProviderItems.clear();
+    this.invalidateProviderItemCaches();
     for (const { cts, timeoutId } of this._pendingRefreshes.values()) {
       clearTimeout(timeoutId);
       cts.cancel();
