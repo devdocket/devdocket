@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, ProviderItem, type GitWorkInfo, type ProviderBadge, type ProviderRefreshOptions, type ProviderResolvedItem, type ResolveUrlOptions, isValidUrlSegment, combineSignals, safeDecodeComponent } from '@devdocket/shared';
+import { BaseProvider, ProviderItem, type GitWorkInfo, type ProviderBadge, type ProviderRefreshOptions, type ResolveUrlOptions, isValidUrlSegment, combineSignals, safeDecodeComponent } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
 import { ADO_AUTH_SCOPE, getAdoHeaders, getAdoSession, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
@@ -681,7 +681,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
   private static readonly ADO_WORKITEM_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_workitems\/edit\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined> {
     const match = url.trim().match(AdoWorkItemProvider.ADO_WORKITEM_PATTERN);
     if (!match) { return undefined; }
     const [, rawOrg, rawProject, idStr] = match;
@@ -719,11 +719,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         html: { href: data._links?.html?.href ?? htmlUrl },
       },
     }, org, gitWork);
-    return {
-      ...item,
-      notes: item.description ?? '',
-      url: htmlUrl,
-    };
+    return item;
   }
 
   private createProviderItem(wi: AdoWorkItem, org: string, gitWork?: GitWorkInfo, reason?: string): ProviderItem {

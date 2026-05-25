@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, ProviderItem, type ProviderResolvedItem, type ResolveUrlOptions, type ResolvedItem } from '../api/types';
+import { DevDocketProvider, ProviderItem, type ResolveUrlOptions, type ResolvedUrlResult } from '../api/types';
 import type { WindowStateProvider } from '@devdocket/shared';
 import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
@@ -44,25 +44,24 @@ function isWindowStateAwareProvider(provider: DevDocketProvider): provider is De
   return typeof (provider as Partial<WindowStateAwareProvider>).setWindowState === 'function';
 }
 
-function toSyntheticProviderItem(details: ProviderResolvedItem | ResolvedItem): ProviderItem | undefined {
+function toSyntheticProviderItem(item: ProviderItem): ProviderItem | undefined {
   if (
-    !details.itemType
-    && !details.capabilities
-    && !details.author
-    && details.authored === undefined
-    && !details.badges
-    && !details.canonicalId
-    && !details.reason
-    && !details.relatedItems
-    && !details.resurfaceVersion
-    && !details.state
-    && !details.version
+    !item.itemType
+    && !item.capabilities
+    && !item.author
+    && item.authored === undefined
+    && !item.badges
+    && !item.canonicalId
+    && !item.reason
+    && !item.relatedItems
+    && !item.resurfaceVersion
+    && !item.state
+    && !item.version
   ) {
     return undefined;
   }
 
-  const { notes: _notes, providerId: _providerId, ...item } = details as ProviderResolvedItem & { providerId?: string };
-  return { ...(item as ProviderItem) };
+  return { ...item };
 }
 
 /**
@@ -344,17 +343,17 @@ export class ProviderRegistry {
     externalIds.add(externalId);
   }
 
-  registerSyntheticResolvedItem(providerId: string, details: ProviderResolvedItem | ResolvedItem): void {
+  registerSyntheticResolvedItem(providerId: string, item: ProviderItem): void {
     if (this.providers.has(providerId)) {
-      this.markImportedItemRehydrated(providerId, details.externalId);
+      this.markImportedItemRehydrated(providerId, item.externalId);
     }
 
-    const item = toSyntheticProviderItem(details);
-    if (!item) {
+    const syntheticItem = toSyntheticProviderItem(item);
+    if (!syntheticItem) {
       return;
     }
 
-    this.registerSyntheticProviderItem(providerId, item);
+    this.registerSyntheticProviderItem(providerId, syntheticItem);
   }
 
   private queueRehydrateSyntheticProviderItems(provider: DevDocketProvider): void {
@@ -483,12 +482,12 @@ export class ProviderRegistry {
    * Ask each registered provider to resolve a URL.
    * Returns the first successful result, or `undefined` if no provider recognizes the URL.
    */
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedUrlResult | undefined> {
     for (const provider of this.providers.values()) {
       if (typeof provider.resolveUrl !== 'function') { continue; }
       try {
         const result = await provider.resolveUrl(url, signal, options);
-        if (result) { return { ...result, providerId: provider.id }; }
+        if (result) { return { providerId: provider.id, item: result }; }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { throw error; }
         // Provider recognized the URL but failed (e.g. 404, auth error) — surface to user

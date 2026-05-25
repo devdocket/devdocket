@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Lexer, type Token, type Tokens } from 'marked';
-import { ProviderItem, ProviderResolvedItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolveUrlOptions } from '@devdocket/shared';
+import { ProviderItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolveUrlOptions } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -139,7 +139,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   private static readonly GITHUB_ISSUE_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\b/i;
   private static readonly GITHUB_PR_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined> {
     const trimmed = url.trim();
     const issueMatch = trimmed.match(GitHubMentionsProvider.GITHUB_ISSUE_PATTERN);
     const prMatch = trimmed.match(GitHubMentionsProvider.GITHUB_PR_PATTERN);
@@ -181,11 +181,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     }, canonicalRepo, {
       ...(isPr ? { prApiUrl: data.url ?? apiUrl } : {}),
     });
-    return {
-      ...item,
-      url: data.html_url,
-      notes: item.description ?? '',
-    };
+    return item;
   }
 
   private createProviderItem(

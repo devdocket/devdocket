@@ -10,7 +10,6 @@ import {
   createAbortError,
   runWorkerPool,
   safeDecodeComponent,
-  type ProviderResolvedItem,
   type GitWorkInfo,
 } from '@devdocket/shared';
 import { logger } from './logger';
@@ -351,7 +350,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return parsed.filter(item => closedSet.has(item.id)).map(item => item.id);
   }
 
-  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined> {
     const match = url.trim().match(BaseAdoPrProvider.ADO_PR_PATTERN);
     if (!match) {
       return undefined;
@@ -402,11 +401,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         webUrl: data.repository.webUrl ?? `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`,
       },
     }, org);
-    return {
-      ...item,
-      notes: item.description ?? '',
-      url: htmlUrl,
-    };
+    return item;
   }
 
   private createBaseItem(pr: AdoPullRequest, org: string): ProviderItem {
