@@ -83,6 +83,7 @@ export class ProviderRegistry {
   private readonly providerItems = new Map<string, ProviderItem[]>();
   private readonly mergedProviderItems = new Map<string, ProviderItem[]>();
   private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
+  private allProviderItemsCache: Map<string, ProviderItem[]> | undefined;
   private readonly rehydratedImportedItems = new Map<string, Set<string>>();
   private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
   /** Fired whenever any provider's provider items change. */
@@ -235,7 +236,7 @@ export class ProviderRegistry {
     this.subscriptions.set(provider.id, sub);
 
     this._loadingProviders.add(provider.id);
-    this.invalidateMergedProviderItems(provider.id);
+    this.invalidateProviderItemCaches(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeProviderItems.fire();
     this.refreshWithTimeout(provider, undefined, false)
@@ -266,7 +267,7 @@ export class ProviderRegistry {
       this.initialRefreshProducedItems.delete(provider.id);
       this._handleQueues.delete(provider.id);
       this._rehydrateQueues.delete(provider.id);
-      this.invalidateMergedProviderItems(provider.id);
+      this.invalidateProviderItemCaches(provider.id);
       if (!this._disposed) {
         this._onDidChangeProviderItems.fire();
       }
@@ -302,12 +303,13 @@ export class ProviderRegistry {
     return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
   }
 
-  private invalidateMergedProviderItems(providerId?: string): void {
+  private invalidateProviderItemCaches(providerId?: string): void {
     if (providerId !== undefined) {
       this.mergedProviderItems.delete(providerId);
     } else {
       this.mergedProviderItems.clear();
     }
+    this.allProviderItemsCache = undefined;
   }
 
   /**
@@ -342,7 +344,7 @@ export class ProviderRegistry {
 
     this.markImportedItemRehydrated(providerId, item.externalId);
     syntheticItems.set(item.externalId, { ...item });
-    this.invalidateMergedProviderItems(providerId);
+    this.invalidateProviderItemCaches(providerId);
     this._onDidChangeProviderItems.fire();
   }
 
@@ -469,7 +471,10 @@ export class ProviderRegistry {
    * @returns A map keyed by provider ID, with each value being the provider's provider items.
    */
   getAllProviderItems(): Map<string, ProviderItem[]> {
-    return new Map(Array.from(this.providers.keys(), providerId => [providerId, this.getProviderItems(providerId)]));
+    if (!this.allProviderItemsCache) {
+      this.allProviderItemsCache = new Map(Array.from(this.providers.keys(), providerId => [providerId, this.getProviderItems(providerId)]));
+    }
+    return this.allProviderItemsCache;
   }
 
   /**
@@ -730,7 +735,7 @@ export class ProviderRegistry {
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
     this.providerItems.set(providerId, items);
-    this.invalidateMergedProviderItems(providerId);
+    this.invalidateProviderItemCaches(providerId);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
