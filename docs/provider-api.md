@@ -702,11 +702,14 @@ interface DevDocketProvider {
    * Return a ProviderItem if the URL matches a pattern your provider
    * owns (e.g. a GitHub issue URL), or undefined if not recognized.
    * Optional — providers that don't support URL import omit this.
+   * Core passes `{ interactive: true }` for the user-facing command and
+   * `{ interactive: false }` while rehydrating imported items in the background.
    *
    * @param url - The raw URL entered by the user.
    * @param signal - Optional AbortSignal for cancellation.
+   * @param options - Optional resolution flags such as `interactive`.
    */
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ProviderItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined>;
 
   /**
    * Check which of the given external items have been closed or completed.
