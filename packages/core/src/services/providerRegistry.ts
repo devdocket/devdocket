@@ -460,8 +460,9 @@ export class ProviderRegistry {
         merged.push(item);
       }
     }
-    this.mergedProviderItems.set(providerId, merged);
-    return merged;
+    const cachedMerged = Object.freeze(merged) as ProviderItem[];
+    this.mergedProviderItems.set(providerId, cachedMerged);
+    return cachedMerged;
   }
 
   /**
@@ -733,7 +734,7 @@ export class ProviderRegistry {
     const prevItems = this.providerItems.get(providerId) ?? [];
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
-    this.providerItems.set(providerId, items);
+    this.providerItems.set(providerId, Object.freeze(items) as ProviderItem[]);
     this.invalidateProviderItemCaches(providerId);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
