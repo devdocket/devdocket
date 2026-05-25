@@ -205,12 +205,17 @@ interface Event<T> {
   (listener: (e: T) => void): Disposable;
 }
 
+interface ResolveUrlOptions {
+  /** `interactive: false` means background rehydration must stay non-interactive. */
+  interactive?: boolean;
+}
+
 interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<ProviderItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ProviderItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined>;
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
