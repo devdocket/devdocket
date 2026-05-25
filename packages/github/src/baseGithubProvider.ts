@@ -1,14 +1,25 @@
 import * as vscode from 'vscode';
 import { BaseProvider, ProviderItem, createAbortError, runWorkerPool, type ProviderRefreshOptions, type RelatedItemRef } from '@devdocket/shared';
 import { fetchPrCrossReferencesBatch } from './githubGraphql';
-import { getGitHubSession } from './githubApiHelpers';
+import { GitHubSsoError, getGitHubSession } from './githubApiHelpers';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
 
 const RELATED_ITEMS_BATCH_SIZE = 10;
 const OPEN_SETTINGS = 'Open Settings';
 const SIGN_IN = 'Sign in';
+const RETRY = 'Retry';
+const DISMISS = 'Dismiss';
 const GITHUB_SETTINGS_QUERY = '@ext:devdocket.devdocket-github';
+// Background refreshes are deduplicated by the best available SSO identity
+// (org name first, then SSO URL, then message) until the user chooses
+// Authorize or Retry, so polling does not resurface the same SSO prompt
+// every few minutes while they have not acted on it.
+const notifiedGitHubSsoOrgs = new Set<string>();
+
+export function resetGitHubSsoNotificationDedupeForTests(): void {
+  notifiedGitHubSsoOrgs.clear();
+}
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -79,6 +90,9 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`${this.label} fetch aborted due to cancellation`);
       } else {
+        if (err instanceof GitHubSsoError) {
+          this.showGitHubSsoNotification(err, () => this.refresh(undefined, { interactive: true }), !interactive);
+        }
         logger.error(`Failed to fetch ${this.label}`, err);
       }
     } finally {
@@ -103,7 +117,14 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       return;
     }
 
-    await this.fetchAndPublish(session.accessToken, false);
+    try {
+      await this.fetchAndPublish(session.accessToken, false);
+    } catch (err) {
+      if (err instanceof GitHubSsoError) {
+        this.showGitHubSsoNotification(err, () => this.refreshInBackground(), true);
+      }
+      throw err;
+    }
   }
 
   /**
@@ -237,6 +258,74 @@ export abstract class BaseGitHubProvider extends BaseProvider {
           .catch(err => logger.error('GitHub sign-in failed', err));
       }
     });
+  }
+
+  private showGitHubSsoNotification(error: GitHubSsoError, retry: (() => Promise<void> | void) | undefined, dedupeByOrg = false): void {
+    const dedupeKey = error.orgName ?? error.ssoUrl ?? `${this.id}:${error.message}`;
+    if (dedupeByOrg && notifiedGitHubSsoOrgs.has(dedupeKey)) {
+      return;
+    }
+    if (dedupeByOrg) {
+      notifiedGitHubSsoOrgs.add(dedupeKey);
+    }
+
+    const orgLabel = error.orgName
+      ? `the "${error.orgName}" organization`
+      : 'this organization';
+    const message = `DevDocket: GitHub requires SSO authorization for ${orgLabel}\nbefore DevDocket can refresh items from it.`;
+    const providerItems = (error.actions ?? []).map(action => ({
+      title: action.label,
+      action,
+    }));
+    const retryItem = retry && error.retryable !== false
+      ? { title: RETRY }
+      : undefined;
+    const dismissItem = { title: DISMISS };
+    const items = [
+      ...providerItems,
+      ...(retryItem ? [retryItem] : []),
+      dismissItem,
+    ];
+
+    void Promise.resolve(vscode.window.showErrorMessage(message, ...items))
+      .then(async selection => {
+        const providerItem = providerItems.find(item => item === selection);
+        if (providerItem) {
+          if (dedupeByOrg) {
+            notifiedGitHubSsoOrgs.delete(dedupeKey);
+          }
+          try {
+            await providerItem.action.run();
+          } catch (actionError) {
+            logger.error(`GitHub SSO action failed: ${providerItem.action.label}`, actionError);
+            return;
+          }
+          if (providerItem.action.retryAfterAction && retry) {
+            try {
+              await retry();
+            } catch (retryError) {
+              logger.error('GitHub SSO retry failed', retryError);
+            }
+          }
+          return;
+        }
+
+        if (!selection || selection === dismissItem) {
+          return;
+        }
+
+        if (selection === retryItem && retry) {
+          if (dedupeByOrg) {
+            notifiedGitHubSsoOrgs.delete(dedupeKey);
+          }
+          try {
+            await retry();
+          } catch (retryError) {
+            logger.error('GitHub SSO retry failed', retryError);
+          }
+        }
+      })
+      .catch(notificationError => logger.error('GitHub SSO notification failed', notificationError));
   }
 
   private showGitHubSettingsWarning(message: string): void {

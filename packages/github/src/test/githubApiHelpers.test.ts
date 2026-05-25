@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { authentication } from 'vscode';
-import { filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
+import { authentication, env } from 'vscode';
+import { isRecoverableError } from '@devdocket/shared';
+import { GitHubSsoError, filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 import { makeErrorResponse } from './responseMocks';
 
@@ -26,6 +27,60 @@ function createPr(number: number, state: string): GitHubIssue {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+describe('GitHubSsoError', () => {
+  it('is recognized as a recoverable error', () => {
+    const error = new GitHubSsoError({
+      orgName: 'example',
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    });
+
+    expect(isRecoverableError(error)).toBe(true);
+    expect(error.recoverable).toBe(true);
+  });
+
+  it('includes an authorize action when a direct SSO URL is present', async () => {
+    const error = new GitHubSsoError({
+      orgName: 'example',
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    });
+
+    expect(error.actions).toHaveLength(1);
+    expect(error.actions?.[0]).toMatchObject({
+      label: 'Authorize in browser',
+      retryAfterAction: true,
+    });
+
+    await error.actions?.[0]?.run();
+
+    expect(env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ toString: expect.any(Function) }));
+    expect(env.openExternal.mock.calls[0][0].toString()).toBe('https://github.com/orgs/example/sso?authorization_request=abc123');
+  });
+
+  it('falls back to the organization SSO URL when no direct URL is present', async () => {
+    const error = new GitHubSsoError({ orgName: 'example-fallback' });
+
+    expect(error.actions).toHaveLength(1);
+
+    await error.actions?.[0]?.run();
+
+    expect(env.openExternal.mock.calls[0][0].toString()).toBe('https://github.com/orgs/example-fallback/sso');
+  });
+
+  it('omits the authorize action when no safe URL is available', () => {
+    expect(new GitHubSsoError().actions).toBeUndefined();
+    expect(new GitHubSsoError({ ssoUrl: 'file:///not-safe' }).actions).toBeUndefined();
+  });
+
+  it('stores only trusted GitHub SSO URLs on the error surface', () => {
+    expect(new GitHubSsoError({
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+    }).ssoUrl).toBe('https://github.com/orgs/example/sso?authorization_request=abc123');
+    expect(new GitHubSsoError({ ssoUrl: 'https://evil.example.com/orgs/example/sso' }).ssoUrl).toBeUndefined();
+    expect(new GitHubSsoError({ ssoUrl: 'file:///not-safe' }).ssoUrl).toBeUndefined();
+  });
 });
 
 describe('isMergedGitHubPr', () => {
@@ -236,14 +291,30 @@ describe('throwApiError', () => {
       .rejects.toThrow(/secondary rate limit.*Retry after \d+s/i);
   });
 
-  it('throws an SSO message for 403 with x-github-sso header', async () => {
+  it('throws a GitHubSsoError with org name and SSO URL from the response header', async () => {
     const response = makeErrorResponse({
       status: 403,
-      headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso' },
+      headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso?authorization_request=abc123' },
       bodyJson: { message: 'Resource protected by organization SAML enforcement. You must grant your OAuth token access to this organization.' },
     });
-    await expect(throwApiError(response, 'GitHub issue org/repo#1'))
-      .rejects.toThrow(/SSO authorization required.*organization/i);
+
+    await expect(throwApiError(response, 'GitHub issue org/repo#1')).rejects.toMatchObject({
+      name: 'GitHubSsoError',
+      message: 'DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore this item can be loaded.',
+      ssoUrl: 'https://github.com/orgs/example/sso?authorization_request=abc123',
+      orgName: 'example',
+      recoverable: true,
+      actions: [expect.objectContaining({
+        label: 'Authorize in browser',
+        retryAfterAction: true,
+      })],
+    });
+
+    await expect(throwApiError(makeErrorResponse({
+      status: 403,
+      headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso?authorization_request=abc123' },
+      bodyJson: { message: 'Resource protected by organization SAML enforcement.' },
+    }), 'GitHub issue org/repo#1')).rejects.toBeInstanceOf(GitHubSsoError);
   });
 
   it('prefers SSO classification over a coincidental remaining=0', async () => {
@@ -256,7 +327,11 @@ describe('throwApiError', () => {
       bodyJson: { message: 'Resource protected by organization SAML enforcement.' },
     });
     await expect(throwApiError(response, 'GitHub issue org/repo#1'))
-      .rejects.toThrow(/SSO authorization required/i);
+      .rejects.toMatchObject({
+        name: 'GitHubSsoError',
+        orgName: 'example',
+        message: 'DevDocket: GitHub requires SSO authorization for the "example" organization\nbefore this item can be loaded.',
+      });
   });
 
   it('prefers secondary-rate-limit classification over a coincidental remaining=0', async () => {

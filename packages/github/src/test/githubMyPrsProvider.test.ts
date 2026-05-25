@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubMyPrsProvider, type PrDetail, type PrReview } from '../githubMyPrsProvider';
+import { GitHubSsoError } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
@@ -87,6 +88,26 @@ describe('GitHubMyPrsProvider', () => {
 
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('propagates SSO errors from PR searches during background refresh', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return {
+          ok: false,
+          status: 403,
+          statusText: 'Forbidden',
+          headers: { get: (name: string) => name === 'x-github-sso' ? 'required; url=https://github.com/orgs/example/sso?authorization_request=abc123' : null },
+          text: async () => JSON.stringify({ message: 'Resource protected by organization SAML enforcement.' }),
+        };
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    await expect(provider.refreshInBackground()).rejects.toBeInstanceOf(GitHubSsoError);
   });
 
   it('excludes merged PRs by fetching details for closed authored and assigned search results', async () => {

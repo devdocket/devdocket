@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace, window } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
+import { GitHubSsoError } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 
 // Mock global fetch
@@ -56,6 +57,18 @@ describe('GitHubIssueProvider', () => {
 
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('propagates SSO errors during background refresh', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { get: (name: string) => name === 'x-github-sso' ? 'required; url=https://github.com/orgs/example-issues/sso?authorization_request=abc123' : null },
+      text: async () => JSON.stringify({ message: 'Resource protected by organization SAML enforcement.' }),
+    });
+
+    await expect(provider.refreshInBackground()).rejects.toBeInstanceOf(GitHubSsoError);
   });
 
   it('filters out configured repos via global fetch, keeps the rest', async () => {

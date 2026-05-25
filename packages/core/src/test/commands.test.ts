@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
+import { type RecoverableError } from '@devdocket/shared';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { registerCommands } from '../commands/commands';
 import { isSafeUrl } from '../utils/url';
@@ -57,6 +58,21 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
     url: 'https://github.com/org/repo/issues/2',
     ...overrides,
   };
+}
+
+function makeRecoverableError(overrides: Partial<RecoverableError> = {}): RecoverableError {
+  const error = new Error('Recoverable error') as RecoverableError;
+  Object.assign(error, {
+    recoverable: true as const,
+    ...overrides,
+  });
+  return error;
+}
+
+function selectErrorAction(label: string): void {
+  (vscode.window.showErrorMessage as Mock).mockImplementationOnce(async (_message: string, ...items: any[]) =>
+    items.find(item => (typeof item === 'string' ? item : item.title) === label),
+  );
 }
 
 type UsedWorkGraphMethods = Pick<
@@ -445,6 +461,106 @@ describe('registerCommands', () => {
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+    });
+
+    it('shows provider-supplied recovery actions and invokes the selected callback', async () => {
+      const run = vi.fn(async () => undefined);
+      const recoverableError = makeRecoverableError({
+        message: 'Recoverable error',
+        actions: [{
+          label: 'Reconnect',
+          run,
+        }],
+      });
+      providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      selectErrorAction('Reconnect');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(1);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Recoverable error',
+        expect.objectContaining({ title: 'Reconnect' }),
+        expect.objectContaining({ title: 'Retry' }),
+        expect.objectContaining({ title: 'Dismiss' }),
+      );
+    });
+
+    it('retries after a recovery action when retryAfterAction is true', async () => {
+      const authorize = vi.fn(async () => undefined);
+      const recoverableError = makeRecoverableError({
+        message: 'Recoverable error',
+        actions: [{
+          label: 'Authorize in browser',
+          run: authorize,
+          retryAfterAction: true,
+        }],
+      });
+      providerRegistry.resolveUrl
+        .mockRejectedValueOnce(recoverableError)
+        .mockResolvedValueOnce(fakeDetails);
+      (vscode.window.showInputBox as Mock).mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
+      selectErrorAction('Authorize in browser');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(authorize).toHaveBeenCalledTimes(1);
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(2);
+      expect(vscode.window.showInputBox).toHaveBeenCalledTimes(1);
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+    });
+
+    it('omits Retry when a recoverable error is not retryable', async () => {
+      const recoverableError = makeRecoverableError({
+        message: 'Recoverable error',
+        retryable: false,
+        actions: [{
+          label: 'Reconnect',
+          run: vi.fn(async () => undefined),
+        }],
+      });
+      providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      selectErrorAction('Dismiss');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Recoverable error',
+        expect.objectContaining({ title: 'Reconnect' }),
+        expect.objectContaining({ title: 'Dismiss' }),
+      );
+    });
+
+    it('falls back to Retry and Dismiss when a recoverable error has no actions', async () => {
+      const recoverableError = makeRecoverableError({ message: 'Recoverable error' });
+      providerRegistry.resolveUrl.mockRejectedValue(recoverableError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      selectErrorAction('Dismiss');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Recoverable error',
+        expect.objectContaining({ title: 'Retry' }),
+        expect.objectContaining({ title: 'Dismiss' }),
+      );
+    });
+
+    it('retries the command when the user selects Retry from a recoverable error notification', async () => {
+      const recoverableError = makeRecoverableError({ message: 'Recoverable error' });
+      providerRegistry.resolveUrl
+        .mockRejectedValueOnce(recoverableError)
+        .mockResolvedValueOnce(fakeDetails);
+      (vscode.window.showInputBox as Mock)
+        .mockResolvedValueOnce('https://github.com/owner/repo/pull/42');
+      selectErrorAction('Retry');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledTimes(2);
+      expect(vscode.window.showInputBox).toHaveBeenCalledTimes(1);
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Created'),
+      );
     });
 
     it('propagates non-abort fetch errors to wrapCommand handler', async () => {
