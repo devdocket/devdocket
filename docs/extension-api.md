@@ -156,9 +156,10 @@ interface DevDocketProvider {
    * Optional. Called when the user invokes "Create Item from URL" with a URL
    * your provider may recognize. Return a `ProviderItem` if you can produce
    * one, or `undefined` to let another provider try. The first provider that
-   * returns a non-undefined result wins.
+   * returns a non-undefined result wins. The optional `interactive` flag tells
+   * providers whether auth prompts are allowed while resolving.
    */
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ProviderItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined>;
 
   /**
    * Check which of the given external items have been closed or completed.
