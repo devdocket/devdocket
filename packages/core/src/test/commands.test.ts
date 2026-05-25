@@ -438,6 +438,27 @@ describe('registerCommands', () => {
       );
     });
 
+    it('falls back to the entered URL when the provider item omits url', async () => {
+      providerRegistry.resolveUrl.mockResolvedValueOnce({
+        providerId: 'github',
+        item: {
+          title: '#44: Missing link',
+          description: 'Body',
+          externalId: 'owner/repo#44',
+          itemType: 'issue',
+        },
+      });
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ providerId: 'github', externalId: 'owner/repo#44' }));
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/issues/44');
+
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '#44: Missing link', notes: 'Body' }),
+        expect.objectContaining({ url: 'https://github.com/owner/repo/issues/44' }),
+      );
+    });
+
     it('does nothing when user cancels the input box', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue(undefined);
       await invoke('devdocket.createItemFromUrl');
