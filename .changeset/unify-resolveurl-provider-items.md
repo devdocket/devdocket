@@ -3,6 +3,7 @@
 "devdocket": patch
 "devdocket-github": minor
 "devdocket-ado": patch
+"devdocket-start-git-work": patch
 ---
 
 Unify provider URL resolution with ProviderItem so imported items keep provider capabilities and metadata, enable Start Git Work for GitHub URL-imported issues and pull requests, and replace `ResolvedItem` / `ProviderResolvedItem` with `ResolvedUrlResult` for the registry-level pairing of `providerId` plus resolved item. Provider `resolveUrl` implementations now return `ProviderItem` directly, while `ProviderRegistry.resolveUrl` returns `ResolvedUrlResult`.
