@@ -151,12 +151,21 @@ interface ProviderItem {
 }
 
 
+interface ResolveUrlOptions {
+  /**
+   * When true (the default for the user-facing command), providers may prompt
+   * for auth while resolving the URL. Core passes false during background
+   * rehydration so providers stay non-interactive.
+   */
+  interactive?: boolean;
+}
+
 interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<ProviderItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ProviderItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined>;
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
