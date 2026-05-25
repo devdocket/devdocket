@@ -81,6 +81,7 @@ export class ProviderRegistry {
   private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly providerItems = new Map<string, ProviderItem[]>();
+  private readonly mergedProviderItems = new Map<string, ProviderItem[]>();
   private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
   private readonly rehydratedImportedItems = new Map<string, Set<string>>();
   private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
@@ -234,6 +235,7 @@ export class ProviderRegistry {
     this.subscriptions.set(provider.id, sub);
 
     this._loadingProviders.add(provider.id);
+    this.invalidateMergedProviderItems(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeProviderItems.fire();
     this.refreshWithTimeout(provider, undefined, false)
@@ -264,6 +266,7 @@ export class ProviderRegistry {
       this.initialRefreshProducedItems.delete(provider.id);
       this._handleQueues.delete(provider.id);
       this._rehydrateQueues.delete(provider.id);
+      this.invalidateMergedProviderItems(provider.id);
       if (!this._disposed) {
         this._onDidChangeProviderItems.fire();
       }
@@ -299,6 +302,14 @@ export class ProviderRegistry {
     return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
   }
 
+  private invalidateMergedProviderItems(providerId?: string): void {
+    if (providerId !== undefined) {
+      this.mergedProviderItems.delete(providerId);
+    } else {
+      this.mergedProviderItems.clear();
+    }
+  }
+
   /**
    * Get the health status for a provider.
    *
@@ -331,6 +342,7 @@ export class ProviderRegistry {
 
     this.markImportedItemRehydrated(providerId, item.externalId);
     syntheticItems.set(item.externalId, { ...item });
+    this.invalidateMergedProviderItems(providerId);
     this._onDidChangeProviderItems.fire();
   }
 
@@ -428,9 +440,15 @@ export class ProviderRegistry {
    * @returns The array of provider items, or an empty array if the provider has none.
    */
   getProviderItems(providerId: string): ProviderItem[] {
+    const cached = this.mergedProviderItems.get(providerId);
+    if (cached) {
+      return cached;
+    }
+
     const liveItems = this.providerItems.get(providerId) ?? [];
     const syntheticItems = this.syntheticProviderItems.get(providerId);
     if (!syntheticItems || syntheticItems.size === 0) {
+      this.mergedProviderItems.set(providerId, liveItems);
       return liveItems;
     }
 
@@ -441,6 +459,7 @@ export class ProviderRegistry {
         merged.push(item);
       }
     }
+    this.mergedProviderItems.set(providerId, merged);
     return merged;
   }
 
@@ -711,6 +730,7 @@ export class ProviderRegistry {
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
     this.providerItems.set(providerId, items);
+    this.invalidateMergedProviderItems(providerId);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
