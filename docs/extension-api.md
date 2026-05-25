@@ -171,6 +171,14 @@ interface DevDocketProvider {
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
+interface ResolveUrlOptions {
+  /**
+   * When true, providers may prompt for auth while resolving the URL.
+   * Core passes false during background rehydration.
+   */
+  interactive?: boolean;
+}
+
 interface ResolvedUrlResult {
   /** The provider id that resolved the URL. */
   providerId: string;
