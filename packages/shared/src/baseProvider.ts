@@ -236,6 +236,8 @@ export abstract class BaseProvider {
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private periodicRefreshIntervalMs: number | undefined;
   private periodicBackoffPolicy: BackoffPolicy | undefined;
+  protected periodicBackoffJitterRatio = 0.1;
+  protected periodicBackoffRandom: () => number = Math.random;
   private _lastRefreshTime = 0;
   private _lastRefreshAttemptTime = 0;
   protected _isRefreshing = false;
@@ -361,7 +363,8 @@ export abstract class BaseProvider {
     this.periodicBackoffPolicy = new BackoffPolicy({
       baseDelayMs: this.periodicRefreshIntervalMs,
       maxDelayMs: 60 * 60 * 1000,
-      jitterRatio: 0,
+      jitterRatio: this.periodicBackoffJitterRatio,
+      random: this.periodicBackoffRandom,
     });
     this._lastRefreshTime = startTime;
     this._lastRefreshAttemptTime = startTime;
