@@ -93,6 +93,9 @@ export class RunWatchPool implements vscode.Disposable {
       this.pollingBackoffRegistry.recordFailure(error);
       throw error;
     }
+    if (!options?.deferStatusFetch) {
+      this.pollingBackoffRegistry.recordSuccess(identifier.backoffKey);
+    }
     if (status.displayName) {
       identifier.displayName = status.displayName;
     }
