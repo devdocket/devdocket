@@ -14,7 +14,7 @@ describe('PollingBackoffRegistry', () => {
 
   it('adopts updated base delays for existing backoff buckets while preserving cooldowns', () => {
     let baseDelayMs = 15_000;
-    const registry = new PollingBackoffRegistry(() => baseDelayMs, 120_000);
+    const registry = new PollingBackoffRegistry(() => baseDelayMs, 120_000, { jitterRatio: 0, random: () => 0 });
     const error = new PollingBackoffError({
       message: 'Rate limited',
       backoffKey: 'api.github.com',

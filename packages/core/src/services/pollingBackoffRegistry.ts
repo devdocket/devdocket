@@ -8,11 +8,17 @@ export interface PollingBackoffSnapshot {
 
 export class PollingBackoffRegistry {
   private readonly policies = new Map<string, BackoffPolicy>();
+  private readonly jitterRatio: number;
+  private readonly random: () => number;
 
   constructor(
     private readonly getBaseDelayMs: () => number,
     private readonly maxDelayMs = 60 * 60 * 1000,
-  ) {}
+    options: { jitterRatio?: number; random?: () => number } = {},
+  ) {
+    this.jitterRatio = options.jitterRatio ?? 0.1;
+    this.random = options.random ?? Math.random;
+  }
 
   isCoolingDown(backoffKey: string | undefined, nowMs = Date.now()): boolean {
     if (!backoffKey) {
@@ -56,7 +62,8 @@ export class PollingBackoffRegistry {
       policy = new BackoffPolicy({
         baseDelayMs,
         maxDelayMs: this.maxDelayMs,
-        jitterRatio: 0,
+        jitterRatio: this.jitterRatio,
+        random: this.random,
       });
       this.policies.set(backoffKey, policy);
       return policy;

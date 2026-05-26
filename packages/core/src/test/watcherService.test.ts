@@ -76,9 +76,11 @@ describe('WatcherService', () => {
   let prRegistry: PRWatcherRegistry;
   let logger: ReturnType<typeof createMockLogger>;
   let watchStore: WatchStore;
+  let mathRandomSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    mathRandomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
     logger = createMockLogger();
     registry = new WatcherRegistry(logger);
     prRegistry = new PRWatcherRegistry(logger);
@@ -88,6 +90,7 @@ describe('WatcherService', () => {
 
   afterEach(() => {
     service.dispose();
+    mathRandomSpy.mockRestore();
     vi.useRealTimers();
   });
 
