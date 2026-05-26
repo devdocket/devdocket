@@ -660,8 +660,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 /**
  * Deactivate the DevDocket extension.
  *
- * Flush queued watch persistence before VS Code disposes subscriptions so
- * dismissals survive window reloads.
+ * Flush queued work-item and watch persistence before VS Code disposes
+ * subscriptions so recent edits and dismissals survive window reloads.
  */
 export async function deactivate(): Promise<void> {
   const workGraph = workGraphForDeactivation;
