@@ -257,12 +257,6 @@ export class JsonTaskStore implements ITaskStore {
       }
     }
 
-    for (const [id, persistedItem] of merged) {
-      if (!currentCache.has(id) && !this.removedIds.has(id)) {
-        currentCache.set(id, persistedItem);
-      }
-    }
-
     for (const [id, snapshotItem] of localSnapshot) {
       if (dirtyIdsSnapshot.has(id)) {
         const currentItem = currentCache.get(id);
