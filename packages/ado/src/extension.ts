@@ -81,6 +81,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const configureProviders = async () => {
     await disposeConfigurableDisposables();
+    if (isDisposed) {
+      return;
+    }
 
     const config = vscode.workspace.getConfiguration('devDocketAdo');
     const projects = config.get<string[]>('projects', []);
@@ -143,7 +146,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   let configureProvidersPromise = Promise.resolve();
   const queueConfigureProviders = () => {
     configureProvidersPromise = configureProvidersPromise
-      .then(() => configureProviders())
+      .then(() => {
+        if (isDisposed) {
+          return;
+        }
+        return configureProviders();
+      })
       .catch(error => {
         logger.error('Failed to configure ADO providers', error);
       });
