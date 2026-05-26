@@ -1,8 +1,16 @@
 import * as vscode from 'vscode';
-import type { JobStatus, RunIdentifier, RunStatus } from '@devdocket/shared';
+import { runWorkerPool, type JobStatus, type RunIdentifier, type RunStatus } from '@devdocket/shared';
 import { WatcherRegistry } from './watcherRegistry';
 import type { WatchedRun } from './watcherService';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
+
+const POLL_CONCURRENCY_PER_PROVIDER = 4;
+
+type RunPollFetchResult = {
+  key: string;
+  status?: RunStatus;
+  error?: unknown;
+};
 
 type WatcherLogger = {
   info: (msg: string) => void;
@@ -222,81 +230,96 @@ export class RunWatchPool implements vscode.Disposable {
     );
     if (pollableWatches.length === 0) return false;
 
+    const fetchResults = new Array<RunPollFetchResult>(pollableWatches.length);
+    await Promise.all(this.groupWatchesByProvider(pollableWatches).map(group => runWorkerPool(
+      group,
+      async ({ watch, index }) => {
+        const key = this.getWatchKey(watch.identifier);
+        try {
+          const watcher = this.watcherRegistry.get(watch.identifier.providerId);
+          if (!watcher) {
+            throw new Error(`Watcher '${watch.identifier.providerId}' is no longer registered`);
+          }
+
+          fetchResults[index] = {
+            key,
+            status: await watcher.getRunStatus(watch.identifier),
+          };
+        } catch (error) {
+          fetchResults[index] = { key, error };
+        }
+      },
+      POLL_CONCURRENCY_PER_PROVIDER,
+    )));
+
     let anyChanged = false;
 
-    for (const watch of pollableWatches) {
-      try {
-        const watcher = this.watcherRegistry.get(watch.identifier.providerId);
-        if (!watcher) {
-          throw new Error(`Watcher '${watch.identifier.providerId}' is no longer registered`);
-        }
+    for (let index = 0; index < pollableWatches.length; index += 1) {
+      const watch = pollableWatches[index];
+      const result = fetchResults[index];
+      const key = result?.key ?? this.getWatchKey(watch.identifier);
 
-        const newStatus = await watcher.getRunStatus(watch.identifier);
-        const key = this.getWatchKey(watch.identifier);
-        if (this.isDisposed()) return anyChanged;
-        if (this.watches.get(key) !== watch || watch.dismissed) {
-          continue;
-        }
-        watch.lastPolledAt = new Date().toISOString();
+      if (this.isDisposed()) return anyChanged;
+      if (this.watches.get(key) !== watch || watch.dismissed) {
+        continue;
+      }
 
-        const suppressStatusEvents = watch.suppressNextStatusEvents === true;
-        if (suppressStatusEvents) {
-          delete watch.suppressNextStatusEvents;
-          anyChanged = true;
-        }
+      if (result?.error !== undefined) {
+        anyChanged = this.handlePollFailure(watch, key, result.error) || anyChanged;
+        continue;
+      }
 
-        this.consecutiveFailures.delete(key);
-        watch.hasWarning = false;
-        watch.errorMessage = undefined;
+      const newStatus = result?.status;
+      if (!newStatus) {
+        continue;
+      }
 
-        const oldStatus = watch.status;
-        const statusChanged = oldStatus.overallState !== newStatus.overallState
-          || oldStatus.conclusion !== newStatus.conclusion
-          || oldStatus.jobs.length !== newStatus.jobs.length
-          || newStatus.jobs.some(newJob => {
+      watch.lastPolledAt = new Date().toISOString();
+
+      const suppressStatusEvents = watch.suppressNextStatusEvents === true;
+      if (suppressStatusEvents) {
+        delete watch.suppressNextStatusEvents;
+        anyChanged = true;
+      }
+
+      this.consecutiveFailures.delete(key);
+      watch.hasWarning = false;
+      watch.errorMessage = undefined;
+
+      const oldStatus = watch.status;
+      const statusChanged = oldStatus.overallState !== newStatus.overallState
+        || oldStatus.conclusion !== newStatus.conclusion
+        || oldStatus.jobs.length !== newStatus.jobs.length
+        || newStatus.jobs.some(newJob => {
+          const oldJob = newJob.id
+            ? oldStatus.jobs.find(j => j.id === newJob.id)
+            : oldStatus.jobs.find(j => j.name === newJob.name);
+          return !oldJob || oldJob.state !== newJob.state || oldJob.conclusion !== newJob.conclusion;
+        });
+      watch.status = newStatus;
+      if (newStatus.displayName && newStatus.displayName !== watch.identifier.displayName) {
+        watch.identifier.displayName = newStatus.displayName;
+        anyChanged = true;
+      }
+      if (statusChanged) {
+        anyChanged = true;
+      }
+
+      if (!suppressStatusEvents && newStatus.overallState !== 'completed') {
+        for (const newJob of newStatus.jobs) {
+          if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
             const oldJob = newJob.id
               ? oldStatus.jobs.find(j => j.id === newJob.id)
               : oldStatus.jobs.find(j => j.name === newJob.name);
-            return !oldJob || oldJob.state !== newJob.state || oldJob.conclusion !== newJob.conclusion;
-          });
-        watch.status = newStatus;
-        if (newStatus.displayName && newStatus.displayName !== watch.identifier.displayName) {
-          watch.identifier.displayName = newStatus.displayName;
-          anyChanged = true;
-        }
-        if (statusChanged) {
-          anyChanged = true;
-        }
-
-        if (!suppressStatusEvents && newStatus.overallState !== 'completed') {
-          for (const newJob of newStatus.jobs) {
-            if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
-              const oldJob = newJob.id
-                ? oldStatus.jobs.find(j => j.id === newJob.id)
-                : oldStatus.jobs.find(j => j.name === newJob.name);
-              if (!oldJob || oldJob.state !== 'completed' || oldJob.conclusion !== 'failure') {
-                this._onDidDetectJobFailure.fire({ run: watch, job: newJob });
-              }
+            if (!oldJob || oldJob.state !== 'completed' || oldJob.conclusion !== 'failure') {
+              this._onDidDetectJobFailure.fire({ run: watch, job: newJob });
             }
           }
         }
+      }
 
-        if (!suppressStatusEvents && oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
-          this._onDidCompleteRun.fire(watch);
-        }
-      } catch (err) {
-        const key = this.getWatchKey(watch.identifier);
-        const failures = (this.consecutiveFailures.get(key) || 0) + 1;
-        this.consecutiveFailures.set(key, failures);
-
-        if (failures >= 3) {
-          watch.hasWarning = true;
-          watch.errorMessage = err instanceof Error ? err.message : String(err);
-          anyChanged = true;
-          this.logger.warn(`3 consecutive failures for ${watch.identifier.displayName}, marking with warning`);
-        } else {
-          this.logger.warn(`Poll failed for ${watch.identifier.displayName} (attempt ${failures}/3): ${err}`);
-        }
+      if (!suppressStatusEvents && oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
+        this._onDidCompleteRun.fire(watch);
       }
     }
 
@@ -328,6 +351,31 @@ export class RunWatchPool implements vscode.Disposable {
     }
 
     return identifier;
+  }
+
+  private groupWatchesByProvider(watches: WatchedRun[]): Array<Array<{ watch: WatchedRun; index: number }>> {
+    const grouped = new Map<string, Array<{ watch: WatchedRun; index: number }>>();
+    for (const [index, watch] of watches.entries()) {
+      const providerGroup = grouped.get(watch.identifier.providerId) ?? [];
+      providerGroup.push({ watch, index });
+      grouped.set(watch.identifier.providerId, providerGroup);
+    }
+    return Array.from(grouped.values());
+  }
+
+  private handlePollFailure(watch: WatchedRun, key: string, err: unknown): boolean {
+    const failures = (this.consecutiveFailures.get(key) || 0) + 1;
+    this.consecutiveFailures.set(key, failures);
+
+    if (failures >= 3) {
+      watch.hasWarning = true;
+      watch.errorMessage = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`3 consecutive failures for ${watch.identifier.displayName}, marking with warning`);
+      return true;
+    }
+
+    this.logger.warn(`Poll failed for ${watch.identifier.displayName} (attempt ${failures}/3): ${err}`);
+    return false;
   }
 
   private static isFailedRun(watch: WatchedRun): boolean {
