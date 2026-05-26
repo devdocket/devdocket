@@ -51,8 +51,11 @@ export async function throwAdoApiError(response: Response, label: string, backof
   if (response.status === 404) { throw new Error(`${label} not found. It may be private or deleted.`); }
   if (response.status === 429 || response.status === 503) {
     const waitMessage = retryAfterMs !== undefined ? ` Retry after ${Math.ceil(retryAfterMs / 1000)}s.` : '';
+    const message = response.status === 429
+      ? `Azure DevOps throttled ${label}.${waitMessage}`
+      : `Azure DevOps is temporarily unavailable for ${label}.${waitMessage}`;
     throw new PollingBackoffError({
-      message: `Azure DevOps throttled ${label}.${waitMessage}`,
+      message,
       backoffKey,
       statusCode: response.status,
       retryAfterMs,
