@@ -280,6 +280,12 @@ export class JsonTaskStore implements ITaskStore {
     }
 
     for (const [id, persistedItem] of merged) {
+      if (!currentCache.has(id) && !this.removedIds.has(id)) {
+        currentCache.set(id, persistedItem);
+      }
+    }
+
+    for (const [id, persistedItem] of merged) {
       const currentItem = currentCache.get(id);
       if (currentItem === persistedItem && !this.dirtyIds.has(id) && !this.removedIds.has(id)) {
         this.syncedUpdatedAt.set(id, persistedItem.updatedAt);

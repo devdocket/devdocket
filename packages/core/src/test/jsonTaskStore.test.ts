@@ -488,6 +488,29 @@ describe('JsonTaskStore', () => {
       vi.useRealTimers();
     });
 
+    it('rehydrates newer remote items into cache after a queued delete loses to a newer update', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+      store = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'), { persistDelayMs: 25 });
+
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.flush();
+      await store.delete('shared');
+
+      fileSystem.writeJson(fileUri, [
+        makeItem({ id: 'shared', title: 'Remote resurrected', updatedAt: Date.now() + 1 }),
+      ]);
+
+      await store.flush();
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('shared');
+      expect(items[0].title).toBe('Remote resurrected');
+
+      vi.useRealTimers();
+    });
+
     it('invalidateCache forces re-read on next access', async () => {
       await store.save(makeItem({ id: 'a', title: 'Original' }));
       await store.flush();
