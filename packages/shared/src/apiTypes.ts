@@ -1,6 +1,6 @@
 import type { CancellationTokenLike, DevDocketRunWatcher } from './runWatcher';
 import type { DevDocketPRWatcher } from './prWatcher';
-import type { Disposable, Event, ProviderItem, ResolvedItem } from './baseProvider';
+import type { Disposable, Event, ProviderItem } from './baseProvider';
 import type { WorkItem, ActivityType } from './workItem';
 
 /**
@@ -64,6 +64,17 @@ export interface ProviderRefreshOptions {
 }
 
 /**
+ * Options that describe how URL resolution was initiated.
+ */
+export interface ResolveUrlOptions {
+  /**
+   * Whether resolving the URL may prompt for authentication when a cached
+   * session is unavailable. Background rehydration should pass `false`.
+   */
+  readonly interactive?: boolean;
+}
+
+/**
  * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link DevDocketApi.registerProvider} and emit
@@ -106,13 +117,13 @@ export interface DevDocketProvider {
    *
    * Providers that support URL import should parse the URL and, if it
    * matches a pattern they own (e.g. a GitHub issue URL), fetch the
-   * item details and return a {@link ResolvedItem}. Return `undefined`
+   * item details and return a {@link ProviderItem}. Return `undefined`
    * if the URL is not recognized by this provider.
    *
    * @param url - The raw URL entered by the user.
    * @param signal - Optional abort signal for cancellation.
    */
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  resolveUrl?(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined>;
   /**
    * Check which of the given external items have been closed or completed.
    *

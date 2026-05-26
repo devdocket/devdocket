@@ -5,7 +5,7 @@
 export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './logger';
 export type { Logger, LogOutput, LoggerService } from './logger';
 export { BaseProvider } from './baseProvider';
-export type { ProviderItem, ProviderItemAuthor, ProviderItemCapabilities, Disposable, Event, EventEmitterLike, GitWorkInfo, ProviderBadge, RelatedItemRef, ResolvedItem, WindowStateProvider } from './baseProvider';
+export type { ProviderItem, ProviderItemAuthor, ProviderItemCapabilities, Disposable, Event, EventEmitterLike, GitWorkInfo, ProviderBadge, RelatedItemRef, ResolvedUrlResult, WindowStateProvider } from './baseProvider';
 export { isSafeUrl, isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment, safeDecodeComponent } from './urlValidation';
 export type { RecoverableError, RecoverableErrorAction } from './recoverableError';
 export { isRecoverableError } from './recoverableError';
@@ -16,4 +16,4 @@ export { abortFromToken, combineSignals, createAbortError, raceWithAbort, getSes
 export { runWorkerPool, runWorkerPoolSettled } from './concurrency';
 export { WorkItemState } from './workItem';
 export type { WorkItem, WorkItemInput, ActivityLogEntry, ActivityType } from './workItem';
-export type { DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent, ProviderRefreshOptions, ActivityDetailRender, ActivityDetailRenderer } from './apiTypes';
+export type { DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent, ProviderRefreshOptions, ResolveUrlOptions, ActivityDetailRender, ActivityDetailRenderer } from './apiTypes';

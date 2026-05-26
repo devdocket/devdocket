@@ -1,4 +1,4 @@
-import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, type ResolveUrlOptions } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -36,32 +36,8 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       ? issuesWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : issuesWithRepo;
 
-    const items: ProviderItem[] = filteredIssues.map(({ issue, repoName }) => {
-      return {
-        externalId: `${repoName}#${issue.number}`,
-        title: `#${issue.number}: ${issue.title}`,
-        description: issue.body ?? undefined,
-        url: issue.html_url,
-        ...(issue.user?.login ? {
-          author: {
-            displayName: issue.user.login,
-            handle: issue.user.login,
-            avatarUrl: issue.user.avatar_url,
-            profileUrl: issue.user.html_url,
-          },
-        } : {}),
-        group: repoName,
-        reason: 'assigned',
-        canonicalId: `github:issue:${repoName}#${issue.number}`,
-        itemType: 'issue',
-        capabilities: { gitWork: createGitHubIssueGitWork(repoName, issue.number) },
-        badges: [
-          { label: 'Assigned', variant: 'warning' },
-          ...buildIssueStateBadge(issue.state),
-        ],
-        ...(issue.state ? { state: issue.state } : {}),
-      };
-    });
+    const items: ProviderItem[] = filteredIssues.map(({ issue, repoName }) =>
+      this.createProviderItem(issue, repoName, { reason: 'assigned' }));
 
     logger.info(`Discovered ${items.length} GitHub issues`);
     this.publishProviderItems(items, patterns);
@@ -73,7 +49,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
   private static readonly GITHUB_ISSUE_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined> {
     const match = url.trim().match(GitHubIssueProvider.GITHUB_ISSUE_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
@@ -87,9 +63,9 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (!response.ok && !wasAuthenticated && !signal?.aborted &&
+    if (!response.ok && !wasAuthenticated && !signal?.aborted && options?.interactive !== false &&
         (response.status === 404 || looksLikeRateLimited403(response))) {
-      const retryResponse = await retryWithAuth(apiUrl, signal, { interactive: true });
+      const retryResponse = await retryWithAuth(apiUrl, signal, { interactive: options?.interactive ?? true });
       if (retryResponse) { response = retryResponse; }
     }
 
@@ -97,15 +73,43 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       await throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
     }
 
-    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const data = await response.json() as GitHubIssue;
     const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
+    const item = this.createProviderItem({
+      ...data,
+      number,
+      html_url: data.html_url,
+      repository_url: data.repository_url ?? `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+    }, canonicalRepo);
+    return item;
+  }
+
+  private createProviderItem(issue: GitHubIssue, repoName: string, options?: { reason?: string }): ProviderItem {
+    const badges = [
+      ...(options?.reason ? [{ label: 'Assigned', variant: 'warning' as const }] : []),
+      ...buildIssueStateBadge(issue.state),
+    ];
+
     return {
-      title: `#${number}: ${data.title}`,
-      notes: data.body ?? '',
-      url: data.html_url,
-      externalId: `${canonicalRepo}#${number}`,
-      group: canonicalRepo,
-      providerId: this.id,
+      externalId: `${repoName}#${issue.number}`,
+      title: `#${issue.number}: ${issue.title}`,
+      ...(issue.body != null ? { description: issue.body } : {}),
+      url: issue.html_url,
+      ...(issue.user?.login ? {
+        author: {
+          displayName: issue.user.login,
+          handle: issue.user.login,
+          avatarUrl: issue.user.avatar_url,
+          profileUrl: issue.user.html_url,
+        },
+      } : {}),
+      group: repoName,
+      ...(options?.reason ? { reason: options.reason } : {}),
+      canonicalId: `github:issue:${repoName}#${issue.number}`,
+      itemType: 'issue',
+      capabilities: { gitWork: createGitHubIssueGitWork(repoName, issue.number) },
+      ...(badges.length > 0 ? { badges } : {}),
+      ...(issue.state ? { state: issue.state } : {}),
     };
   }
 

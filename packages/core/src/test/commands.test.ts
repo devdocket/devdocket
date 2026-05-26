@@ -112,7 +112,7 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders' | 'registerSyntheticProviderItem'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
@@ -125,6 +125,7 @@ function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods
       { id: 'github', label: 'GitHub' },
       { id: 'ado', label: 'Azure DevOps' },
     ]),
+    registerSyntheticProviderItem: vi.fn(),
   };
 }
 
@@ -380,27 +381,97 @@ describe('registerCommands', () => {
 
   describe('devdocket.createItemFromUrl', () => {
     const fakeDetails = {
-      title: '#42: Fix bug',
-      notes: 'Description',
-      url: 'https://github.com/owner/repo/pull/42',
-      externalId: 'owner/repo#42',
-      group: 'owner/repo',
       providerId: 'github-pr-reviews',
+      item: {
+        title: '#42: Fix bug',
+        description: 'Description',
+        url: 'https://github.com/owner/repo/pull/42',
+        externalId: 'owner/repo#42',
+        group: 'owner/repo',
+        itemType: 'pr',
+        capabilities: {
+          gitWork: vi.fn(async () => ({
+            kind: 'pr',
+            cloneUrl: 'https://github.com/owner/repo.git',
+            ref: 'feature/topic',
+            repoLabel: 'owner/repo',
+          })),
+        },
+      },
     };
 
     beforeEach(() => {
       providerRegistry.resolveUrl.mockResolvedValue(fakeDetails);
       workGraph.findItemByProvenance.mockReturnValue(undefined);
-      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.externalId }));
+      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.item.externalId }));
     });
 
     it('creates item when user provides a valid URL', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
       await invoke('devdocket.createItemFromUrl');
 
-      expect(workGraph.createItem).toHaveBeenCalled();
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '#42: Fix bug', notes: 'Description' }),
+        expect.any(Object),
+      );
+      expect(providerRegistry.resolveUrl).toHaveBeenCalledWith(
+        'https://github.com/owner/repo/pull/42',
+        expect.any(AbortSignal),
+        { interactive: true },
+      );
+      expect(providerRegistry.registerSyntheticProviderItem).toHaveBeenCalledWith(
+        'github-pr-reviews',
+        expect.objectContaining({
+          externalId: 'owner/repo#42',
+          itemType: 'pr',
+          description: 'Description',
+          capabilities: expect.objectContaining({ gitWork: expect.any(Function) }),
+        }),
+      );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('Created'),
+      );
+    });
+
+    it('seeds notes from description and falls back to an empty string', async () => {
+      providerRegistry.resolveUrl.mockResolvedValueOnce({
+        providerId: 'github',
+        item: {
+          title: '#43: Empty body',
+          url: 'https://github.com/owner/repo/issues/43',
+          externalId: 'owner/repo#43',
+          itemType: 'issue',
+        },
+      });
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ providerId: 'github', externalId: 'owner/repo#43' }));
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/issues/43');
+
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '#43: Empty body', notes: '' }),
+        expect.any(Object),
+      );
+    });
+
+    it('falls back to the entered URL when the provider item omits url', async () => {
+      providerRegistry.resolveUrl.mockResolvedValueOnce({
+        providerId: 'github',
+        item: {
+          title: '#44: Missing link',
+          description: 'Body',
+          externalId: 'owner/repo#44',
+          itemType: 'issue',
+        },
+      });
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ providerId: 'github', externalId: 'owner/repo#44' }));
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/issues/44');
+
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        expect.objectContaining({ title: '#44: Missing link', notes: 'Body' }),
+        expect.objectContaining({ url: 'https://github.com/owner/repo/issues/44' }),
       );
     });
 

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, ProviderItem, type GitWorkInfo, type ProviderBadge, type ProviderRefreshOptions, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, ProviderItem, type GitWorkInfo, type ProviderBadge, type ProviderRefreshOptions, type ResolveUrlOptions, isValidUrlSegment, combineSignals, safeDecodeComponent } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
 import { ADO_AUTH_SCOPE, getAdoHeaders, getAdoSession, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
@@ -315,28 +315,8 @@ export class AdoWorkItemProvider extends BaseProvider {
     const items: ProviderItem[] = [];
     for (const wi of activeWorkItems) {
       const projectName = wi.fields['System.TeamProject'];
-      const wiType = wi.fields['System.WorkItemType'];
-      const state = wi.fields['System.State'];
-      const stateBadge: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
       const gitWork = await this.resolveWorkItemGitWork(token, org, projectName, wi, signal);
-      items.push({
-        externalId: `${org}/${projectName}/${wi.id}`,
-        title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
-        description: wi.fields['System.Description']?.replace(/<[^>]*(>|$)/g, '') ?? undefined,
-        url: wi._links.html.href,
-        ...(wi.fields['System.CreatedBy']?.displayName ? {
-          author: {
-            displayName: wi.fields['System.CreatedBy'].displayName,
-            handle: wi.fields['System.CreatedBy'].uniqueName,
-          },
-        } : {}),
-        group: `${org}/${projectName}`,
-        reason: 'assigned',
-        state,
-        itemType: 'issue',
-        ...(gitWork ? { capabilities: { gitWork } } : {}),
-        ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
-      });
+      items.push(this.createProviderItem(wi, org, gitWork, 'assigned'));
     }
 
     return { items, failed: batchFailed };
@@ -701,7 +681,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
   private static readonly ADO_WORKITEM_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_workitems\/edit\/(\d+)\b/i;
 
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined> {
     const match = url.trim().match(AdoWorkItemProvider.ADO_WORKITEM_PATTERN);
     if (!match) { return undefined; }
     const [, rawOrg, rawProject, idStr] = match;
@@ -709,14 +689,14 @@ export class AdoWorkItemProvider extends BaseProvider {
     const project = safeDecodeComponent(rawProject);
     const id = parseInt(idStr, 10);
 
-    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
+    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?$expand=links&api-version=7.1`;
     const headers = await getAdoHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: true });
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted && options?.interactive !== false) {
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: options?.interactive ?? true });
       if (retryResponse) { response = retryResponse; }
     }
 
@@ -724,17 +704,58 @@ export class AdoWorkItemProvider extends BaseProvider {
       throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`);
     }
 
-    const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
+    const data = await response.json() as AdoWorkItem;
     const teamProject = data.fields['System.TeamProject'];
     const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(teamProject)}/_workitems/edit/${id}`;
+    const token = this.extractBearerToken(headers)
+      ?? (await getAdoSession({ interactive: false, signal }))?.accessToken;
+    const gitWork = token
+      ? await this.resolveWorkItemGitWork(token, org, teamProject, data, signal)
+      : undefined;
+    const item = this.createProviderItem({
+      ...data,
+      id,
+      _links: {
+        html: { href: data._links?.html?.href ?? htmlUrl },
+      },
+    }, org, gitWork);
+    return item;
+  }
+
+  private createProviderItem(wi: AdoWorkItem, org: string, gitWork?: GitWorkInfo, reason?: string): ProviderItem {
+    const projectName = wi.fields['System.TeamProject'];
+    const wiType = wi.fields['System.WorkItemType'];
+    const state = wi.fields['System.State'];
+    const badges: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
+    const description = this.stripHtml(wi.fields['System.Description'] ?? '');
+
     return {
-      title: `#${id}: ${data.fields['System.Title']}`,
-      notes: this.stripHtml(data.fields['System.Description'] ?? ''),
-      url: htmlUrl,
-      externalId: `${org}/${teamProject}/${id}`,
-      group: `${org}/${teamProject}`,
-      providerId: this.id,
+      externalId: `${org}/${projectName}/${wi.id}`,
+      title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
+      ...(description ? { description } : {}),
+      url: wi._links.html.href,
+      ...(wi.fields['System.CreatedBy']?.displayName ? {
+        author: {
+          displayName: wi.fields['System.CreatedBy'].displayName,
+          handle: wi.fields['System.CreatedBy'].uniqueName,
+        },
+      } : {}),
+      group: `${org}/${projectName}`,
+      ...(reason ? { reason } : {}),
+      ...(state ? { state } : {}),
+      itemType: 'issue',
+      ...(gitWork ? { capabilities: { gitWork } } : {}),
+      ...(badges.length > 0 ? { badges } : {}),
     };
+  }
+
+  private extractBearerToken(headers: Record<string, string>): string | undefined {
+    const authorization = headers['Authorization'];
+    if (!authorization) {
+      return undefined;
+    }
+    const match = authorization.match(/^Bearer\s+(.+)$/i);
+    return match?.[1];
   }
 
   private stripHtml(html: string): string {

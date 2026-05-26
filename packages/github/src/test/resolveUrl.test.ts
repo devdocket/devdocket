@@ -48,7 +48,7 @@ describe('resolveUrl', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('returns correct ResolvedItem for valid issue URL', async () => {
+    it('returns correct ProviderItem for valid issue URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -63,11 +63,18 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#123: Fix login bug');
-      expect(result?.notes).toBe('The login page is broken');
+      expect(result?.description).toBe('The login page is broken');
       expect(result?.url).toBe('https://github.com/owner/repo/issues/123');
       expect(result?.externalId).toBe('owner/repo#123');
       expect(result?.group).toBe('owner/repo');
-      expect(result?.providerId).toBe('github');
+      expect(result?.canonicalId).toBe('github:issue:owner/repo#123');
+      expect(result?.itemType).toBe('issue');
+      expect(result?.capabilities?.gitWork).toEqual({
+        kind: 'issue',
+        cloneUrl: 'https://github.com/owner/repo.git',
+        ref: 'issue123',
+        repoLabel: 'owner/repo',
+      });
 
       expect(mockFetch).toHaveBeenCalledOnce();
       expect(mockFetch).toHaveBeenCalledWith(
@@ -93,7 +100,7 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#456: Empty issue');
-      expect(result?.notes).toBe('');
+      expect(result?.description).toBeUndefined();
       expect(result?.externalId).toBe('owner/repo#456');
     });
 
@@ -358,6 +365,17 @@ describe('resolveUrl', () => {
       expect(result?.title).toBe('#111: Mixed case');
     });
 
+    it('skips interactive auth retry when issue resolveUrl is non-interactive', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/123', undefined, { interactive: false }),
+      ).rejects.toThrow('not found');
+
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
     it('respects AbortSignal cancellation', async () => {
       const controller = new AbortController();
       controller.abort();
@@ -395,7 +413,7 @@ describe('resolveUrl', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('returns correct ResolvedItem for valid PR URL', async () => {
+    it('returns correct ProviderItem for valid PR URL', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -410,11 +428,13 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#456: Add new feature');
-      expect(result?.notes).toBe('This PR adds a new feature');
+      expect(result?.description).toBe('This PR adds a new feature');
       expect(result?.url).toBe('https://github.com/owner/repo/pull/456');
       expect(result?.externalId).toBe('owner/repo#456');
       expect(result?.group).toBe('owner/repo');
-      expect(result?.providerId).toBe('github-pr-reviews');
+      expect(result?.canonicalId).toBe('github:pull:owner/repo#456');
+      expect(result?.itemType).toBe('pr');
+      expect(result?.capabilities?.gitWork).toEqual(expect.any(Function));
 
       expect(mockFetch).toHaveBeenCalledOnce();
       expect(mockFetch).toHaveBeenCalledWith(
@@ -440,7 +460,7 @@ describe('resolveUrl', () => {
 
       expect(result).toBeDefined();
       expect(result?.title).toBe('#789: Empty PR');
-      expect(result?.notes).toBe('');
+      expect(result?.description).toBeUndefined();
       expect(result?.externalId).toBe('owner/repo#789');
     });
 
@@ -602,6 +622,17 @@ describe('resolveUrl', () => {
         expect.stringContaining('/repos/my-owner/my-repo/pulls/333'),
         expect.any(Object),
       );
+    });
+
+    it('skips interactive auth retry when PR resolveUrl is non-interactive', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/pull/123', undefined, { interactive: false }),
+      ).rejects.toThrow('not found');
+
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
 
     it('respects AbortSignal cancellation', async () => {

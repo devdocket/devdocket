@@ -12,7 +12,6 @@ import { WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../vi
 import { IncomingPreviewPanel, type IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
 import { type InboxItem, type SourceItemNode, type SourcesElement } from './commandItemTypes';
 import { logger } from '../services/logger';
-import type { ResolvedItem } from '../api/types';
 import { WatcherService } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
@@ -407,14 +406,14 @@ async function handleCreateItemFromUrl(
     return;
   }
 
-  let details: ResolvedItem | undefined;
+  let details: Awaited<ReturnType<ProviderRegistry['resolveUrl']>>;
   try {
     details = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },
       (_progress, token) => {
         const controller = new AbortController();
         token.onCancellationRequested(() => controller.abort());
-        return providerRegistry.resolveUrl(url, controller.signal);
+        return providerRegistry.resolveUrl(url, controller.signal, { interactive: true });
       },
     );
   } catch (error) {
@@ -446,8 +445,10 @@ async function handleCreateItemFromUrl(
     return;
   }
 
+  const { providerId, item } = details;
+
   // Prevent duplicate items for the same provider-backed source item
-  const existing = workGraph.findItemByProvenance(details.providerId, details.externalId);
+  const existing = workGraph.findItemByProvenance(providerId, item.externalId);
   if (existing) {
     const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
     WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, editorPanelDependencies, providerLabel);
@@ -455,15 +456,18 @@ async function handleCreateItemFromUrl(
     return;
   }
 
-  const group = details.group?.trim() || undefined;
+  const group = item.group?.trim() || undefined;
+  const provenanceUrl = item.url?.trim() || url.trim();
   const createdItem = await workGraph.createItem(
-    { title: details.title, notes: details.notes },
-    { providerId: details.providerId, externalId: details.externalId, url: details.url, ...(group ? { group } : {}) },
+    { title: item.title, notes: item.description ?? '' },
+    { providerId, externalId: item.externalId, url: provenanceUrl, ...(group ? { group } : {}) },
   );
+
+  providerRegistry.registerSyntheticProviderItem(providerId, item);
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
-  void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
+  void vscode.window.showInformationMessage(`DevDocket: Created "${item.title}"`);
 }
 
 async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {

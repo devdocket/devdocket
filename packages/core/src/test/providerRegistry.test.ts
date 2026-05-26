@@ -106,6 +106,328 @@ describe('ProviderRegistry', () => {
     expect(typeof disposable.dispose).toBe('function');
   });
 
+  it('exposes synthetic provider items registered from URL resolution', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      externalId: 'owner/repo#42',
+      title: '#42: Imported PR',
+      itemType: 'pr',
+      capabilities: { gitWork: { kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic' } },
+    });
+
+    expect(registry.getProviderItems('gh')).toEqual([
+      expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'pr' }),
+    ]);
+    expect(registry.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42' }),
+    );
+  });
+
+  it('keeps synthetic items when only metadata fields like state or reason are present', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      title: '#42: Imported PR',
+      url: 'https://example.com/42',
+      externalId: 'owner/repo#42',
+      reason: 'review_requested',
+      state: 'open',
+    });
+
+    expect(registry.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', reason: 'review_requested', state: 'open' }),
+    );
+  });
+
+  it('preserves arbitrary synthetic capabilities when registering resolved items', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      title: '#99: Imported item',
+      description: 'Body',
+      url: 'https://example.com/99',
+      externalId: 'owner/repo#99',
+      itemType: 'issue',
+      capabilities: { foo: { enabled: true } } as any,
+    });
+
+    expect((registry.getProviderItems('gh')[0] as any).capabilities.foo).toEqual({ enabled: true });
+  });
+
+  it('registers synthetic items even when only the minimal ProviderItem fields are present', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      title: '#100: Imported item',
+      url: 'https://example.com/100',
+      externalId: 'owner/repo#100',
+    });
+
+    expect(registry.findProviderItem('gh', 'owner/repo#100')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#100', title: '#100: Imported item' }),
+    );
+  });
+
+  it('prefers live provider items over synthetic URL-imported items with the same external id', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      externalId: 'owner/repo#42',
+      title: '#42: Imported PR',
+      itemType: 'pr',
+      capabilities: { gitWork: { kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic' } },
+    });
+    provider.fireItems([{ externalId: 'owner/repo#42', title: '#42: Live PR' }]);
+
+    await vi.waitFor(() => expect(registry.findProviderItem('gh', 'owner/repo#42')?.title).toBe('#42: Live PR'));
+    expect(registry.getProviderItems('gh')).toEqual([
+      expect.objectContaining({ externalId: 'owner/repo#42', title: '#42: Live PR' }),
+    ]);
+  });
+
+  it('keeps a synthetic item available after a matching live item disappears', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+    registry.registerSyntheticProviderItem('gh', {
+      externalId: 'owner/repo#42',
+      title: '#42: Imported PR',
+      itemType: 'pr',
+      capabilities: { gitWork: { kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic' } },
+    });
+
+    provider.fireItems([{ externalId: 'owner/repo#42', title: '#42: Live PR' }]);
+    await vi.waitFor(() => expect(registry.findProviderItem('gh', 'owner/repo#42')?.title).toBe('#42: Live PR'));
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')).toEqual([
+      expect.objectContaining({ externalId: 'owner/repo#42', title: '#42: Imported PR' }),
+    ]));
+  });
+
+  it('rehydrates synthetic URL-imported items for registered providers on startup', async () => {
+    const provider = {
+      ...createMockProvider('ado-pr-reviews'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported PR',
+        description: 'Imported notes',
+        url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+        externalId: 'myorg/MyProject/myrepo/42',
+        itemType: 'pr' as const,
+        capabilities: { gitWork: { kind: 'pr' as const, cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix' } },
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'ado-pr-reviews',
+        externalId: 'myorg/MyProject/myrepo/42',
+        url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(reg.findProviderItem('ado-pr-reviews', 'myorg/MyProject/myrepo/42')).toEqual(
+      expect.objectContaining({ externalId: 'myorg/MyProject/myrepo/42', itemType: 'pr' }),
+    ));
+    expect(provider.resolveUrl).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+      expect.any(AbortSignal),
+      { interactive: false },
+    );
+  });
+
+  it('stores rehydrated imports and does not re-resolve them on later refreshes', async () => {
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported issue',
+        description: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    await (reg as any).rehydrateSyntheticProviderItems(provider);
+    expect(provider.resolveUrl).toHaveBeenCalledTimes(1);
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', title: '#42: Imported issue' }),
+    );
+  });
+
+  it('skips rehydration when resolveUrl returns a different externalId', async () => {
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported issue',
+        description: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#canonical-42',
+        itemType: 'issue' as const,
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+  });
+
+  it('retries rehydration on a later refresh after a transient startup failure', async () => {
+    const resolveUrl = vi.fn()
+      .mockRejectedValueOnce(new Error('network error'))
+      .mockResolvedValueOnce({
+        title: '#42: Imported issue',
+        description: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        itemType: 'issue' as const,
+      });
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl,
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(1));
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'issue' }),
+    ));
+  });
+
+  it('retries rehydration on a later refresh when resolveUrl returns undefined', async () => {
+    const resolveUrl = vi.fn()
+      .mockResolvedValueOnce(undefined)
+      .mockResolvedValueOnce({
+        title: '#42: Imported issue',
+        description: 'Imported notes',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        itemType: 'issue' as const,
+      });
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl,
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(1));
+    expect(reg.findProviderItem('gh', 'owner/repo#42')).toBeUndefined();
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(resolveUrl).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(reg.findProviderItem('gh', 'owner/repo#42')).toEqual(
+      expect.objectContaining({ externalId: 'owner/repo#42', itemType: 'issue' }),
+    ));
+  });
+
+  it('rehydrates only active imported work items', async () => {
+    const provider = {
+      ...createMockProvider('ado-pr-reviews'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Imported PR',
+        description: 'Imported notes',
+        url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+        externalId: 'myorg/MyProject/myrepo/42',
+        itemType: 'pr' as const,
+        capabilities: { gitWork: { kind: 'pr' as const, cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix' } },
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      (_providerId, externalId) => externalId === 'myorg/MyProject/myrepo/42' ? WorkItemState.Archived : WorkItemState.InProgress,
+      undefined,
+      () => [
+        {
+          providerId: 'ado-pr-reviews',
+          externalId: 'myorg/MyProject/myrepo/42',
+          url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/42',
+        },
+        {
+          providerId: 'ado-pr-reviews',
+          externalId: 'myorg/MyProject/myrepo/43',
+          url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/43',
+        },
+      ],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    expect(provider.resolveUrl).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/43',
+      expect.any(AbortSignal),
+      { interactive: false },
+    );
+  });
+
   it('throws on duplicate provider id', () => {
     const provider1 = createMockProvider('dup');
     const provider2 = createMockProvider('dup');
@@ -519,10 +841,14 @@ describe('ProviderRegistry', () => {
 
     p1.fireItems([{ externalId: '1', title: 'GH item' }]);
     p2.fireItems([{ externalId: '2', title: 'Jira item' }]);
+    registry.registerSyntheticProviderItem('gh', { externalId: 'synthetic', title: 'Synthetic item', itemType: 'issue' });
 
     const all = registry.getAllProviderItems();
     expect(all.size).toBe(2);
-    expect(all.get('gh')).toHaveLength(1);
+    expect(all.get('gh')).toEqual([
+      expect.objectContaining({ externalId: '1' }),
+      expect.objectContaining({ externalId: 'synthetic', itemType: 'issue' }),
+    ]);
     expect(all.get('jira')).toHaveLength(1);
   });
 
@@ -2056,10 +2382,9 @@ describe('ProviderRegistry', () => {
       const p2 = createMockProvider('b');
       (p2 as any).resolveUrl = vi.fn(async () => ({
         title: 'Issue 1',
-        notes: 'body',
+        description: 'body',
         url: 'https://example.com/1',
         externalId: '1',
-        providerId: 'ignored',
       }));
       registry.register(p1);
       registry.register(p2);
@@ -2067,29 +2392,38 @@ describe('ProviderRegistry', () => {
 
       const result = await registry.resolveUrl('https://example.com/1');
       expect(result).toEqual({
-        title: 'Issue 1',
-        notes: 'body',
-        url: 'https://example.com/1',
-        externalId: '1',
         providerId: 'b',
+        item: {
+          title: 'Issue 1',
+          description: 'body',
+          url: 'https://example.com/1',
+          externalId: '1',
+        },
       });
       expect((p1 as any).resolveUrl).toHaveBeenCalled();
     });
 
-    it('overrides providerId with the provider id', async () => {
+    it('returns the provider id alongside the resolved item', async () => {
       const p1 = createMockProvider('real-id');
       (p1 as any).resolveUrl = vi.fn(async () => ({
         title: 'T',
-        notes: 'N',
+        description: 'N',
         url: 'https://u',
         externalId: 'e',
-        providerId: 'wrong-id',
       }));
       registry.register(p1);
       await nextTick();
 
       const result = await registry.resolveUrl('https://u');
-      expect(result?.providerId).toBe('real-id');
+      expect(result).toEqual({
+        providerId: 'real-id',
+        item: {
+          title: 'T',
+          description: 'N',
+          url: 'https://u',
+          externalId: 'e',
+        },
+      });
     });
 
     it('re-throws AbortError without trying remaining providers', async () => {
@@ -2099,7 +2433,7 @@ describe('ProviderRegistry', () => {
       (p1 as any).resolveUrl = vi.fn(async () => { throw abortError; });
       const p2 = createMockProvider('b');
       (p2 as any).resolveUrl = vi.fn(async () => ({
-        title: 'T', notes: 'N', url: 'https://u', externalId: 'e', providerId: 'b',
+        title: 'T', description: 'N', url: 'https://u', externalId: 'e',
       }));
       registry.register(p1);
       registry.register(p2);
@@ -2122,7 +2456,7 @@ describe('ProviderRegistry', () => {
       const p1 = createMockProvider('no-resolve');
       const p2 = createMockProvider('has-resolve');
       (p2 as any).resolveUrl = vi.fn(async () => ({
-        title: 'T', notes: 'N', url: 'https://u', externalId: 'e', providerId: 'has-resolve',
+        title: 'T', description: 'N', url: 'https://u', externalId: 'e',
       }));
       registry.register(p1);
       registry.register(p2);
@@ -2141,7 +2475,17 @@ describe('ProviderRegistry', () => {
 
       const signal = AbortSignal.abort();
       await registry.resolveUrl('https://u', signal);
-      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', signal);
+      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', signal, undefined);
+    });
+
+    it('passes resolveUrl options to the provider', async () => {
+      const p1 = createMockProvider('opts');
+      (p1 as any).resolveUrl = vi.fn(async () => undefined);
+      registry.register(p1);
+      await nextTick();
+
+      await registry.resolveUrl('https://u', undefined, { interactive: false });
+      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', undefined, { interactive: false });
     });
   });
 });

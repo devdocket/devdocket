@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, ProviderItem, type ResolvedItem } from '../api/types';
+import { DevDocketProvider, ProviderItem, type ResolveUrlOptions, type ResolvedUrlResult } from '../api/types';
 import type { WindowStateProvider } from '@devdocket/shared';
 import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
@@ -61,6 +61,10 @@ export class ProviderRegistry {
   private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly providerItems = new Map<string, ProviderItem[]>();
+  private readonly mergedProviderItems = new Map<string, ProviderItem[]>();
+  private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
+  private allProviderItemsCache: Map<string, ProviderItem[]> | undefined;
+  private readonly rehydratedImportedItems = new Map<string, Set<string>>();
   private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
   /** Fired whenever any provider's provider items change. */
   readonly onDidChangeProviderItems = this._onDidChangeProviderItems.event;
@@ -91,6 +95,8 @@ export class ProviderRegistry {
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  private readonly initialRefreshProducedItems = new Set<string>();
+  private readonly _rehydrateQueues = new Map<string, Promise<void>>();
   /**
    * Per-provider serialization queue for handleProviderItems. A provider that
    * fires onDidDiscoverItems twice in rapid succession would otherwise have two
@@ -118,6 +124,7 @@ export class ProviderRegistry {
     private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
     // Kept for constructor compatibility; suppressed version bumps no longer log activity.
     _addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
+    private readonly getImportedWorkItems?: () => Array<{ providerId?: string; externalId?: string; url?: string }>,
   ) {}
 
   /**
@@ -172,6 +179,12 @@ export class ProviderRegistry {
     if (!this.providerItems.has(provider.id)) {
       this.providerItems.set(provider.id, []);
     }
+    if (!this.syntheticProviderItems.has(provider.id)) {
+      this.syntheticProviderItems.set(provider.id, new Map());
+    }
+    if (!this.rehydratedImportedItems.has(provider.id)) {
+      this.rehydratedImportedItems.set(provider.id, new Set());
+    }
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
@@ -203,13 +216,19 @@ export class ProviderRegistry {
     this.subscriptions.set(provider.id, sub);
 
     this._loadingProviders.add(provider.id);
+    this.invalidateProviderItemCaches(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeProviderItems.fire();
     this.refreshWithTimeout(provider, undefined, false)
       .finally(() => {
+        const producedItemsDuringInitialRefresh = this.initialRefreshProducedItems.has(provider.id);
+        this.initialRefreshProducedItems.delete(provider.id);
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
           this._onDidChangeProviderItems.fire();
+          if (!producedItemsDuringInitialRefresh) {
+            this.queueRehydrateSyntheticProviderItems(provider);
+          }
         }
       });
 
@@ -219,11 +238,16 @@ export class ProviderRegistry {
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
       this.providerItems.delete(provider.id);
+      this.syntheticProviderItems.delete(provider.id);
+      this.rehydratedImportedItems.delete(provider.id);
       this.previousDiscoveredIds.delete(provider.id);
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
+      this.initialRefreshProducedItems.delete(provider.id);
       this._handleQueues.delete(provider.id);
+      this._rehydrateQueues.delete(provider.id);
+      this.invalidateProviderItemCaches(provider.id);
       if (!this._disposed) {
         this._onDidChangeProviderItems.fire();
       }
@@ -259,6 +283,15 @@ export class ProviderRegistry {
     return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
   }
 
+  private invalidateProviderItemCaches(providerId?: string): void {
+    if (providerId !== undefined) {
+      this.mergedProviderItems.delete(providerId);
+    } else {
+      this.mergedProviderItems.clear();
+    }
+    this.allProviderItemsCache = undefined;
+  }
+
   /**
    * Get the health status for a provider.
    *
@@ -275,13 +308,128 @@ export class ProviderRegistry {
   }
 
   /**
+   * Cache a provider item synthesized from URL resolution so actions can use its
+   * capabilities before the provider rediscovers it naturally.
+   */
+  registerSyntheticProviderItem(providerId: string, item: ProviderItem): void {
+    if (!this.providers.has(providerId)) {
+      return;
+    }
+
+    let syntheticItems = this.syntheticProviderItems.get(providerId);
+    if (!syntheticItems) {
+      syntheticItems = new Map<string, ProviderItem>();
+      this.syntheticProviderItems.set(providerId, syntheticItems);
+    }
+
+    this.markImportedItemRehydrated(providerId, item.externalId);
+    syntheticItems.set(item.externalId, { ...item });
+    this.invalidateProviderItemCaches(providerId);
+    this._onDidChangeProviderItems.fire();
+  }
+
+  private markImportedItemRehydrated(providerId: string, externalId: string): void {
+    let externalIds = this.rehydratedImportedItems.get(providerId);
+    if (!externalIds) {
+      externalIds = new Set<string>();
+      this.rehydratedImportedItems.set(providerId, externalIds);
+    }
+    externalIds.add(externalId);
+  }
+
+  private queueRehydrateSyntheticProviderItems(provider: DevDocketProvider): void {
+    const tail = this._rehydrateQueues.get(provider.id);
+    const startNext = (): Promise<void> =>
+      this.rehydrateSyntheticProviderItems(provider)
+        .catch(error => logger.debug(`Failed to queue rehydrate URL-imported items for ${provider.id}`, error));
+    const next = tail
+      ? tail.catch(() => undefined).then(startNext)
+      : startNext();
+    const tracked = next.finally(() => {
+      if (this._rehydrateQueues.get(provider.id) === tracked) {
+        this._rehydrateQueues.delete(provider.id);
+      }
+    });
+    this._rehydrateQueues.set(provider.id, tracked);
+  }
+
+  private async rehydrateSyntheticProviderItems(provider: DevDocketProvider): Promise<void> {
+    if (typeof provider.resolveUrl !== 'function' || !this.getImportedWorkItems) {
+      return;
+    }
+
+    for (const importedItem of this.getImportedWorkItems()) {
+      if (this._disposed || !this.providers.has(provider.id)) {
+        return;
+      }
+      if (importedItem.providerId !== provider.id || !importedItem.externalId || !importedItem.url) {
+        continue;
+      }
+      const workItemState = this.getWorkItemState?.(provider.id, importedItem.externalId);
+      if (workItemState !== undefined && !isActiveWorkItemState(workItemState)) {
+        continue;
+      }
+      if (
+        this.findProviderItem(provider.id, importedItem.externalId)
+        || this.rehydratedImportedItems.get(provider.id)?.has(importedItem.externalId)
+      ) {
+        continue;
+      }
+
+      this.markImportedItemRehydrated(provider.id, importedItem.externalId);
+      try {
+        const resolved = await provider.resolveUrl(importedItem.url, AbortSignal.timeout(30_000), { interactive: false });
+        if (this._disposed || !this.providers.has(provider.id)) {
+          return;
+        }
+        if (!resolved) {
+          this.rehydratedImportedItems.get(provider.id)?.delete(importedItem.externalId);
+          logger.debug(`Rehydration returned no result for ${provider.id}:${importedItem.externalId}`);
+          continue;
+        }
+        if (resolved.externalId !== importedItem.externalId) {
+          logger.debug(
+            `Rehydration skipped for ${provider.id}:${importedItem.externalId}: provider returned externalId ${resolved.externalId}`,
+          );
+          continue;
+        }
+
+        this.registerSyntheticProviderItem(provider.id, resolved);
+      } catch (error) {
+        this.rehydratedImportedItems.get(provider.id)?.delete(importedItem.externalId);
+        logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);
+      }
+    }
+  }
+
+  /**
    * Get the provider items for a specific provider.
    *
    * @param providerId - The provider identifier.
    * @returns The array of provider items, or an empty array if the provider has none.
    */
   getProviderItems(providerId: string): ProviderItem[] {
-    return this.providerItems.get(providerId) ?? [];
+    const cached = this.mergedProviderItems.get(providerId);
+    if (cached) {
+      return cached;
+    }
+
+    const liveItems = this.providerItems.get(providerId) ?? [];
+    const syntheticItems = this.syntheticProviderItems.get(providerId);
+    if (!syntheticItems || syntheticItems.size === 0) {
+      return liveItems;
+    }
+
+    const liveExternalIds = new Set(liveItems.map(item => item.externalId));
+    const merged = [...liveItems];
+    for (const [externalId, item] of syntheticItems) {
+      if (!liveExternalIds.has(externalId)) {
+        merged.push(item);
+      }
+    }
+    const cachedMerged = Object.freeze(merged) as ProviderItem[];
+    this.mergedProviderItems.set(providerId, cachedMerged);
+    return cachedMerged;
   }
 
   /**
@@ -290,7 +438,10 @@ export class ProviderRegistry {
    * @returns A map keyed by provider ID, with each value being the provider's provider items.
    */
   getAllProviderItems(): Map<string, ProviderItem[]> {
-    return this.providerItems;
+    if (!this.allProviderItemsCache) {
+      this.allProviderItemsCache = new Map(Array.from(this.providers.keys(), providerId => [providerId, this.getProviderItems(providerId)]));
+    }
+    return new Map(this.allProviderItemsCache);
   }
 
   /**
@@ -322,12 +473,12 @@ export class ProviderRegistry {
    * Ask each registered provider to resolve a URL.
    * Returns the first successful result, or `undefined` if no provider recognizes the URL.
    */
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ResolvedUrlResult | undefined> {
     for (const provider of this.providers.values()) {
       if (typeof provider.resolveUrl !== 'function') { continue; }
       try {
-        const result = await provider.resolveUrl(url, signal);
-        if (result) { return { ...result, providerId: provider.id }; }
+        const result = await provider.resolveUrl(url, signal, options);
+        if (result) { return { providerId: provider.id, item: result }; }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { throw error; }
         // Provider recognized the URL but failed (e.g. 404, auth error) — surface to user
@@ -529,6 +680,9 @@ export class ProviderRegistry {
     // catches its own errors and only logs them — exactly the anti-pattern
     // that providers.instructions.md warns against.
     this.updateHealth(providerId, 'healthy');
+    if (this._loadingProviders.has(providerId)) {
+      this.initialRefreshProducedItems.add(providerId);
+    }
     let wasTruncated = false;
     if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {
       logger.warn(
@@ -547,7 +701,8 @@ export class ProviderRegistry {
     const prevItems = this.providerItems.get(providerId) ?? [];
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
-    this.providerItems.set(providerId, items);
+    this.providerItems.set(providerId, Object.freeze(items) as ProviderItem[]);
+    this.invalidateProviderItemCaches(providerId);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
@@ -646,6 +801,10 @@ export class ProviderRegistry {
     if (!this._disposed) {
       this._onDidChangeProviderItems.fire();
       this._onDidRefreshProvider.fire(providerId);
+      const provider = this.providers.get(providerId);
+      if (provider) {
+        this.queueRehydrateSyntheticProviderItems(provider);
+      }
     }
   }
 
@@ -654,6 +813,9 @@ export class ProviderRegistry {
     this._disposed = true;
     // Clear providers first so cancellation handlers don't log spurious timeout warnings
     this.providers.clear();
+    this.providerItems.clear();
+    this.syntheticProviderItems.clear();
+    this.invalidateProviderItemCaches();
     for (const { cts, timeoutId } of this._pendingRefreshes.values()) {
       clearTimeout(timeoutId);
       cts.cancel();

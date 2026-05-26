@@ -169,6 +169,33 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
+    it('returns true for a URL-imported GitHub issue when a synthetic provider item supplies gitWork', () => {
+      const item = createWorkItem({ providerId: 'github', externalId: 'owner/repo#123' });
+      const { action } = createAction(discovered('github', 'owner/repo#123', {
+        kind: 'issue', cloneUrl: 'https://github.com/owner/repo.git', ref: 'issue123', repoLabel: 'owner/repo',
+      }));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for a URL-imported GitHub PR when a synthetic provider item supplies gitWork', () => {
+      const item = createWorkItem({ providerId: 'github-pr-reviews', externalId: 'owner/repo#42' });
+      const { action } = createAction(discovered('github-pr-reviews', 'owner/repo#42', async () => ({
+        kind: 'pr', cloneUrl: 'https://github.com/owner/repo.git', ref: 'feature/topic', repoLabel: 'owner/repo',
+      })));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for a URL-imported ADO PR when a synthetic provider item supplies gitWork', () => {
+      const item = createWorkItem({ providerId: 'ado-pr-reviews', externalId: 'myorg/MyProject/myrepo/42' });
+      const { action } = createAction(discovered('ado-pr-reviews', 'myorg/MyProject/myrepo/42', async () => ({
+        kind: 'pr', cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix', repoLabel: 'MyProject/myrepo',
+      })));
+
+      expect(action.canRun(item)).toBe(true);
+    });
+
     it('returns false when no capability is present', () => {
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1'));
@@ -829,6 +856,54 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
       expect(window.showInputBox).not.toHaveBeenCalled();
       expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('accepts Azure DevOps HTTPS clone URLs that include a username', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr', cloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/myrepo', ref: 'users/me/fix', repoLabel: 'MyProject/myrepo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).not.toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['remote', 'add', 'devdocket-fork-MyProject-myrepo', 'https://dev.azure.com/myorg/MyProject/_git/myrepo'],
+        ['fetch', 'devdocket-fork-MyProject-myrepo', '+refs/heads/users/me/fix:refs/remotes/devdocket-fork-MyProject-myrepo/users/me/fix'],
+        ['rev-parse', '--verify', 'refs/heads/users/me/fix'],
+        ['worktree', 'add', '--detach', path.join('/mock', 'myrepo-pr-1'), 'devdocket-fork-MyProject-myrepo/users/me/fix'],
+      ]);
+    });
+
+    it('rejects HTTPS clone URLs with usernames on non-ADO hosts', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://token@github.com/owner/repo.git', ref: 'issue123', repoLabel: 'owner/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('strips usernames from Azure DevOps head clone URLs before persisting remotes', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr',
+        cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/base',
+        headCloneUrl: 'https://myorg@dev.azure.com/myorg/MyProject/_git/fork',
+        ref: 'users/me/fix',
+        repoLabel: 'MyProject/fork',
+      })));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'remote', 'add', 'devdocket-fork-MyProject-fork', 'https://dev.azure.com/myorg/MyProject/_git/fork',
+      ]);
     });
 
     it('rejects an invalid ref returned by a lazy resolver', async () => {

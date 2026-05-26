@@ -3,6 +3,7 @@ import { authentication, workspace } from 'vscode';
 import { GitHubMentionsProvider } from '../githubMentionsProvider';
 import { GitHubSsoError } from '../githubApiHelpers';
 import { setLogger } from '../logger';
+import { makeErrorResponse } from './responseMocks';
 
 const mockFetch = vi.fn();
 
@@ -1521,14 +1522,16 @@ describe('GitHubMentionsProvider', () => {
       });
 
       const result = await provider.resolveUrl('https://github.com/owner/repo/issues/5');
-      expect(result).toEqual({
+      expect(result).toEqual(expect.objectContaining({
         title: '#5: Bug report',
-        notes: 'Some description',
+        description: 'Some description',
         url: 'https://github.com/owner/repo/issues/5',
         externalId: 'owner/repo#5',
         group: 'owner/repo',
-        providerId: 'github-mentions',
-      });
+        canonicalId: 'github:issue:owner/repo#5',
+        itemType: 'issue',
+        capabilities: { gitWork: expect.any(Object) },
+      }));
     });
 
     it('resolves PR URLs', async () => {
@@ -1549,14 +1552,16 @@ describe('GitHubMentionsProvider', () => {
       });
 
       const result = await provider.resolveUrl('https://github.com/owner/repo/pull/10');
-      expect(result).toEqual({
+      expect(result).toEqual(expect.objectContaining({
         title: '#10: Feature PR',
-        notes: 'PR description',
+        description: 'PR description',
         url: 'https://github.com/owner/repo/pull/10',
         externalId: 'owner/repo#10',
         group: 'owner/repo',
-        providerId: 'github-mentions',
-      });
+        canonicalId: 'github:pull:owner/repo#10',
+        itemType: 'pr',
+        capabilities: { gitWork: expect.any(Function) },
+      }));
     });
 
     it('returns undefined for non-GitHub URLs', async () => {
@@ -1587,6 +1592,17 @@ describe('GitHubMentionsProvider', () => {
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/issues/5'),
       ).rejects.toThrow(/rate limit exceeded/i);
+    });
+
+    it('skips interactive auth retry when mentions resolveUrl is non-interactive', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/5', undefined, { interactive: false }),
+      ).rejects.toThrow('not found');
+
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
     });
   });
 });

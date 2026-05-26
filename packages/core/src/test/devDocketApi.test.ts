@@ -146,6 +146,27 @@ describe('DevDocketApiImpl', () => {
       expect(api.getProviderItem('test-provider', 'missing')).toBeUndefined();
       expect(api.getProviderItem('missing-provider', 'item-1')).toBeUndefined();
     });
+
+    it('returns synthetic provider items registered from URL resolution', () => {
+      const emitter = new vscode.EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn().mockResolvedValue(undefined),
+      };
+
+      api.registerProvider(provider);
+      providerRegistry.registerSyntheticProviderItem('test-provider', {
+        externalId: 'item-2',
+        title: 'Imported Item',
+        itemType: 'pr',
+      });
+
+      expect(api.getProviderItem('test-provider', 'item-2')).toEqual(
+        expect.objectContaining({ externalId: 'item-2', itemType: 'pr' }),
+      );
+    });
   });
 
   describe('registerAction', () => {

@@ -190,16 +190,13 @@ export interface ProviderBadge {
 }
 
 /**
- * Result returned by a provider's `resolveUrl` method when it recognizes a URL.
- * Contains enough detail for the core extension to create a work item.
+ * Pairing of provider identity and the resolved {@link ProviderItem} for URL imports.
  */
-export interface ResolvedItem {
-  title: string;
-  notes: string;
-  url: string;
-  externalId: string;
-  group?: string;
-  providerId: string;
+export interface ResolvedUrlResult {
+  /** Registered provider identifier that resolved the URL. */
+  readonly providerId: string;
+  /** Provider item returned by the matching provider. */
+  readonly item: ProviderItem;
 }
 
 /**

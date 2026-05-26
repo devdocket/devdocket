@@ -4,12 +4,12 @@ import {
   ProviderItem,
   type ProviderBadge,
   type ProviderRefreshOptions,
+  type ResolveUrlOptions,
   isValidUrlSegment,
   combineSignals,
   createAbortError,
   runWorkerPool,
   safeDecodeComponent,
-  type ResolvedItem,
   type GitWorkInfo,
 } from '@devdocket/shared';
 import { logger } from './logger';
@@ -350,7 +350,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return parsed.filter(item => closedSet.has(item.id)).map(item => item.id);
   }
 
-  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+  async resolveUrl(url: string, signal?: AbortSignal, options?: ResolveUrlOptions): Promise<ProviderItem | undefined> {
     const match = url.trim().match(BaseAdoPrProvider.ADO_PR_PATTERN);
     if (!match) {
       return undefined;
@@ -367,8 +367,8 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: true });
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted && options?.interactive !== false) {
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal, { interactive: options?.interactive ?? true });
       if (retryResponse) {
         response = retryResponse;
       }
@@ -378,22 +378,30 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       throwAdoApiError(response, `ADO PR ${org}/${project}/${repo}#${id}`);
     }
 
-    const data = await response.json() as {
+    const data = await response.json() as AdoPullRequest & {
       title: string;
       description: string | null;
-      repository: { name: string; project: { name: string } };
+      repository: {
+        name: string;
+        project: { name: string };
+        webUrl?: string;
+        remoteUrl?: string;
+      };
     };
     const projectName = data.repository.project.name;
     const repoName = data.repository.name;
     const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}/pullrequest/${id}`;
-    return {
-      title: `#${id}: ${data.title}`,
-      notes: data.description ?? '',
-      url: htmlUrl,
-      externalId: `${org}/${projectName}/${repoName}/${id}`,
-      group: `${projectName}/${repoName}`,
-      providerId: this.id,
-    };
+    const item = this.createBaseItem({
+      ...data,
+      pullRequestId: id,
+      repository: {
+        ...data.repository,
+        name: repoName,
+        project: { name: projectName },
+        webUrl: data.repository.webUrl ?? `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`,
+      },
+    }, org);
+    return item;
   }
 
   private createBaseItem(pr: AdoPullRequest, org: string): ProviderItem {
