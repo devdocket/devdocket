@@ -4,6 +4,7 @@ import { WatcherRegistry } from './watcherRegistry';
 import { PRWatcherRegistry } from './prWatcherRegistry';
 import { RunWatchPool } from './runWatchPool';
 import { PRWatchPool } from './prWatchPool';
+import { PollingBackoffRegistry } from './pollingBackoffRegistry';
 import { WatchPersistence } from './watchPersistence';
 import { WatchStore } from '../storage/watchStore';
 
@@ -72,6 +73,7 @@ export class WatcherService implements vscode.Disposable {
   private configSubscription: vscode.Disposable | undefined;
   private readonly runPool: RunWatchPool;
   private readonly prPool: PRWatchPool;
+  private readonly pollingBackoffRegistry: PollingBackoffRegistry;
   private readonly persistence: WatchPersistence;
   private readonly poolSubscriptions: vscode.Disposable[];
 
@@ -97,8 +99,10 @@ export class WatcherService implements vscode.Disposable {
     private logger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void }
   ) {
     this.persistence = new WatchPersistence(watchStore, logger);
+    this.pollingBackoffRegistry = new PollingBackoffRegistry(() => this.getPollingInterval() * 1000);
     this.runPool = new RunWatchPool(
       watcherRegistry,
+      this.pollingBackoffRegistry,
       logger,
       () => this.disposed,
       () => this.ensurePollingActive(),
@@ -107,6 +111,7 @@ export class WatcherService implements vscode.Disposable {
     this.prPool = new PRWatchPool(
       prWatcherRegistry,
       this.runPool,
+      this.pollingBackoffRegistry,
       logger,
       () => this.disposed,
       () => this.ensurePollingActive(),

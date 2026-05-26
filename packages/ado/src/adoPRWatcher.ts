@@ -66,6 +66,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
       displayName: `PR #${prId}`,
       url,
       repo: `${org}/${project}/${repo}`,
+      backoffKey: `dev.azure.com/${org}`,
     };
   }
 
@@ -101,7 +102,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
       throw err;
     }
     if (!prResponse.ok) {
-      throwAdoApiError(prResponse, `PR ${identifier.prId}`);
+      await throwAdoApiError(prResponse, `PR ${identifier.prId}`, `dev.azure.com/${org}`);
     }
     const prData = await prResponse.json() as AdoPullRequest;
 
@@ -147,6 +148,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
           displayName,
           url: `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_build/results?buildId=${build.id}`,
           repo: `${org}/${project}`,
+          backoffKey: `dev.azure.com/${org}`,
         });
       }
     } else {

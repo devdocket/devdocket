@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authentication, env } from 'vscode';
-import { isRecoverableError } from '@devdocket/shared';
+import { isRecoverableError, PollingBackoffError } from '@devdocket/shared';
 import { GitHubSsoError, filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 import { makeErrorResponse } from './responseMocks';
@@ -278,6 +278,22 @@ describe('throwApiError', () => {
     });
     await expect(throwApiError(response, 'GitHub issue org/repo#1'))
       .rejects.toThrow(/secondary rate limit.*Retry after 30s/i);
+  });
+
+  it('throws a PollingBackoffError for HTTP 429 responses', async () => {
+    const response = makeErrorResponse({
+      status: 429,
+      statusText: 'Too Many Requests',
+      headers: { 'retry-after': '60' },
+      bodyJson: { message: 'Too many requests' },
+    });
+
+    await expect(throwApiError(response, 'GitHub issue org/repo#1')).rejects.toMatchObject({
+      name: 'PollingBackoffError',
+      backoffKey: 'api.github.com',
+      retryAfterMs: 60_000,
+    });
+    await expect(throwApiError(response, 'GitHub issue org/repo#1')).rejects.toBeInstanceOf(PollingBackoffError);
   });
 
   it('throws a secondary-rate-limit message with an HTTP-date Retry-After', async () => {

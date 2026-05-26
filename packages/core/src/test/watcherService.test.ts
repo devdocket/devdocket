@@ -5,7 +5,7 @@ import { WatcherService, WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WatchStore } from '../storage/watchStore';
-import type { DevDocketRunWatcher, RunIdentifier, RunStatus } from '@devdocket/shared';
+import { PollingBackoffError, type DevDocketRunWatcher, type RunIdentifier, type RunStatus } from '@devdocket/shared';
 
 function createMockLogger() {
   return {
@@ -318,6 +318,57 @@ describe('WatcherService', () => {
       await vi.advanceTimersByTimeAsync(60000);
       const callCountAfter = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfter).toBe(callCountBefore); // No new calls
+    });
+
+    it('backs off run polling until Retry-After expires', async () => {
+      const { workspace } = await import('../test/__mocks__/vscode');
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'pollingIntervalSeconds') { return 15; }
+          return defaultValue;
+        }),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
+
+      let callCount = 0;
+      const watcher = createMockWatcher('test');
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return { overallState: 'running' as const, conclusion: undefined, jobs: [] };
+        }
+        if (callCount === 2) {
+          throw new PollingBackoffError({
+            message: 'Rate limited',
+            backoffKey: 'api.github.com',
+            statusCode: 429,
+            retryAfterMs: 60_000,
+          });
+        }
+        return { overallState: 'running' as const, conclusion: undefined, jobs: [] };
+      });
+      registry.register(watcher);
+
+      await service.startWatch({ ...createIdentifier(), backoffKey: 'api.github.com' });
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+      expect(service.getActiveWatches()[0].hasWarning).not.toBe(true);
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(3);
+      expect(service.getActiveWatches()[0].hasWarning).not.toBe(true);
+
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((_: string, defaultValue?: any) => defaultValue),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
     });
 
     it('stops polling when no active watches remain', async () => {

@@ -1,3 +1,5 @@
+import { BackoffPolicy } from './backoffPolicy';
+import { isPollingBackoffError } from './pollingErrors';
 import type { ProviderRefreshOptions } from './apiTypes';
 import type { CancellationTokenLike } from './runWatcher';
 
@@ -233,6 +235,7 @@ export abstract class BaseProvider {
 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private periodicRefreshIntervalMs: number | undefined;
+  private periodicBackoffPolicy: BackoffPolicy | undefined;
   private _lastRefreshTime = 0;
   private _lastRefreshAttemptTime = 0;
   protected _isRefreshing = false;
@@ -288,9 +291,12 @@ export abstract class BaseProvider {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
-    const elapsedMs = Date.now() - this._lastRefreshAttemptTime;
+    const now = Date.now();
+    const elapsedMs = now - this._lastRefreshAttemptTime;
     const intervalsElapsed = Math.floor(elapsedMs / requiredIntervalMs) + 1;
-    const delayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
+    const intervalDelayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
+    const backoffDelayMs = this.periodicBackoffPolicy?.getRemainingMs(now) ?? 0;
+    const delayMs = Math.max(intervalDelayMs, backoffDelayMs);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       if (this._disposed) {
@@ -352,6 +358,11 @@ export abstract class BaseProvider {
     const clampedInterval = Math.max(interval, 60);
     const startTime = Date.now();
     this.periodicRefreshIntervalMs = clampedInterval * 1000;
+    this.periodicBackoffPolicy = new BackoffPolicy({
+      baseDelayMs: this.periodicRefreshIntervalMs,
+      maxDelayMs: 60 * 60 * 1000,
+      jitterRatio: 0,
+    });
     this._lastRefreshTime = startTime;
     this._lastRefreshAttemptTime = startTime;
     this.scheduleNextPeriodicRefresh();
@@ -363,6 +374,7 @@ export abstract class BaseProvider {
       this.refreshTimer = undefined;
     }
     this.periodicRefreshIntervalMs = undefined;
+    this.periodicBackoffPolicy = undefined;
   }
 
   /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
@@ -374,6 +386,12 @@ export abstract class BaseProvider {
     try {
       await this.doBackgroundRefresh();
       this.markRefreshSuccess();
+      this.periodicBackoffPolicy?.recordSuccess();
+    } catch (error) {
+      if (isPollingBackoffError(error)) {
+        this.periodicBackoffPolicy?.recordFailure({ retryAfterMs: error.retryAfterMs });
+      }
+      throw error;
     } finally {
       this._isRefreshing = false;
     }

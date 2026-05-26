@@ -42,6 +42,7 @@ describe('GitHubActionsWatcher', () => {
       expect(result.repo).toBe('myorg/myrepo');
       expect(result.url).toBe('https://github.com/myorg/myrepo/actions/runs/999');
       expect(result.displayName).toBe('CI Build');
+      expect(result.backoffKey).toBe('api.github.com');
     });
 
     it('throws for invalid URL format', () => {
@@ -172,7 +173,7 @@ describe('GitHubActionsWatcher', () => {
         repo: 'owner/repo',
       };
 
-      await expect(watcher.getRunStatus(identifier)).rejects.toThrow('Run not found');
+      await expect(watcher.getRunStatus(identifier)).rejects.toThrow('not found');
 
       fetchSpy.mockRestore();
     });

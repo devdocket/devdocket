@@ -701,7 +701,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     if (!response.ok) {
-      throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`);
+      await throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`, `dev.azure.com/${org}`);
     }
 
     const data = await response.json() as AdoWorkItem;

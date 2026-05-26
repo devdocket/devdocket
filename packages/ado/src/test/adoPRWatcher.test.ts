@@ -73,6 +73,7 @@ describe('AdoPRWatcher', () => {
     it('sets repo to org/project/repo', () => {
       const result = watcher.parsePRUrl(validUrl);
       expect(result.repo).toBe('myorg/myproject/myrepo');
+      expect(result.backoffKey).toBe('dev.azure.com/myorg');
     });
 
     it('throws for invalid URL format', () => {

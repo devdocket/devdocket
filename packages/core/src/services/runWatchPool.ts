@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { JobStatus, RunIdentifier, RunStatus } from '@devdocket/shared';
 import { WatcherRegistry } from './watcherRegistry';
 import type { WatchedRun } from './watcherService';
+import { PollingBackoffRegistry } from './pollingBackoffRegistry';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 
 type WatcherLogger = {
@@ -45,6 +46,7 @@ export class RunWatchPool implements vscode.Disposable {
 
   constructor(
     private readonly watcherRegistry: WatcherRegistry,
+    private readonly pollingBackoffRegistry: PollingBackoffRegistry,
     private readonly logger: WatcherLogger,
     private readonly isDisposed: () => boolean,
     private readonly onPollingNeeded: () => void,
@@ -81,9 +83,15 @@ export class RunWatchPool implements vscode.Disposable {
       throw new Error(`No watcher registered for provider: ${identifier.providerId}`);
     }
 
-    const status: RunStatus = options?.deferStatusFetch
-      ? { overallState: 'queued', jobs: [] }
-      : await watcher.getRunStatus(identifier);
+    let status: RunStatus;
+    try {
+      status = options?.deferStatusFetch
+        ? { overallState: 'queued', jobs: [] }
+        : await watcher.getRunStatus(identifier);
+    } catch (error) {
+      this.pollingBackoffRegistry.recordFailure(error);
+      throw error;
+    }
     if (status.displayName) {
       identifier.displayName = status.displayName;
     }
@@ -225,6 +233,10 @@ export class RunWatchPool implements vscode.Disposable {
     let anyChanged = false;
 
     for (const watch of pollableWatches) {
+      if (this.pollingBackoffRegistry.isCoolingDown(watch.identifier.backoffKey)) {
+        continue;
+      }
+
       try {
         const watcher = this.watcherRegistry.get(watch.identifier.providerId);
         if (!watcher) {
@@ -245,6 +257,7 @@ export class RunWatchPool implements vscode.Disposable {
           anyChanged = true;
         }
 
+        this.pollingBackoffRegistry.recordSuccess(watch.identifier.backoffKey);
         this.consecutiveFailures.delete(key);
         watch.hasWarning = false;
         watch.errorMessage = undefined;
@@ -285,6 +298,12 @@ export class RunWatchPool implements vscode.Disposable {
           this._onDidCompleteRun.fire(watch);
         }
       } catch (err) {
+        const backoff = this.pollingBackoffRegistry.recordFailure(err);
+        if (backoff) {
+          this.logger.warn(`Poll backoff active for ${watch.identifier.displayName} until ${new Date(backoff.cooldownUntilMs).toISOString()}`);
+          continue;
+        }
+
         const key = this.getWatchKey(watch.identifier);
         const failures = (this.consecutiveFailures.get(key) || 0) + 1;
         this.consecutiveFailures.set(key, failures);
