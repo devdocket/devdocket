@@ -1,8 +1,16 @@
 import * as vscode from 'vscode';
-import type { PRIdentifier, RunIdentifier } from '@devdocket/shared';
+import { runWorkerPool, type PRIdentifier, type PRRunsSnapshot, type RunIdentifier } from '@devdocket/shared';
 import { PRWatcherRegistry } from './prWatcherRegistry';
 import type { WatchedPR, WatchedRun } from './watcherService';
 import type { StartWatchOptions, WatchStartResult } from './runWatchPool';
+
+const POLL_CONCURRENCY_PER_PROVIDER = 4;
+
+type PRPollFetchResult = {
+  key: string;
+  snapshot?: PRRunsSnapshot;
+  error?: unknown;
+};
 
 type WatcherLogger = {
   info: (msg: string) => void;
@@ -237,84 +245,104 @@ export class PRWatchPool implements vscode.Disposable {
     );
     if (activePRs.length === 0) return { prChanged: false, childRunChanged: false };
 
+    const fetchResults = new Array<PRPollFetchResult>(activePRs.length);
+    await Promise.all(this.groupPRsByProvider(activePRs).map(group => runWorkerPool(
+      group,
+      async ({ prWatch, index }) => {
+        const key = this.getPRWatchKey(prWatch.identifier);
+        if (this.isDisposed()) {
+          fetchResults[index] = { key, error: new Error('Watcher service disposed') };
+          return;
+        }
+        try {
+          const prWatcher = this.prWatcherRegistry.get(prWatch.identifier.providerId);
+          if (!prWatcher) {
+            throw new Error(`PR watcher '${prWatch.identifier.providerId}' is no longer registered`);
+          }
+
+          fetchResults[index] = {
+            key,
+            snapshot: await prWatcher.getPRRunsSnapshot(prWatch.identifier),
+          };
+        } catch (error) {
+          fetchResults[index] = { key, error };
+        }
+      },
+      POLL_CONCURRENCY_PER_PROVIDER,
+    )));
+
     let prChanged = false;
     let childRunChanged = false;
 
-    for (const prWatch of activePRs) {
-      const key = this.getPRWatchKey(prWatch.identifier);
-      try {
-        const prWatcher = this.prWatcherRegistry.get(prWatch.identifier.providerId);
-        if (!prWatcher) {
-          throw new Error(`PR watcher '${prWatch.identifier.providerId}' is no longer registered`);
-        }
+    for (let index = 0; index < activePRs.length; index += 1) {
+      const prWatch = activePRs[index];
+      const result = fetchResults[index];
+      const key = result?.key ?? this.getPRWatchKey(prWatch.identifier);
 
-        const snapshot = await prWatcher.getPRRunsSnapshot(prWatch.identifier);
-        if (this.isDisposed()) return { prChanged, childRunChanged };
-        if (this.prWatches.get(key) !== prWatch || prWatch.dismissed) {
-          continue;
-        }
-        prWatch.lastPolledAt = new Date().toISOString();
+      if (this.isDisposed()) return { prChanged, childRunChanged };
+      if (this.prWatches.get(key) !== prWatch || prWatch.dismissed) {
+        continue;
+      }
 
-        if (snapshot.displayName && snapshot.displayName !== prWatch.identifier.displayName) {
-          prWatch.identifier.displayName = snapshot.displayName;
-          prChanged = true;
-        }
+      if (result?.error !== undefined) {
+        prChanged = this.handlePollFailure(prWatch, key, result.error) || prChanged;
+        continue;
+      }
 
-        this.consecutiveFailures.delete(key);
-        prWatch.hasWarning = false;
-        prWatch.errorMessage = undefined;
+      const snapshot = result?.snapshot;
+      if (!snapshot) {
+        continue;
+      }
 
-        const currentRunKeys = new Set(prWatch.childRunKeys);
-        const newRunKeys = new Set<string>();
-        for (const runId of snapshot.runs) {
-          const resolved = this.runControl.resolveRunIdentifier(runId);
-          const runKey = this.runControl.getWatchKey(resolved);
-          newRunKeys.add(runKey);
-          if (!currentRunKeys.has(runKey)) {
-            const added = await this.addChildRun(key, prWatch, resolved);
-            if (this.isDisposed()) return { prChanged, childRunChanged };
-            if (added) {
-              childRunChanged = true;
-            }
+      prWatch.lastPolledAt = new Date().toISOString();
+
+      if (snapshot.displayName && snapshot.displayName !== prWatch.identifier.displayName) {
+        prWatch.identifier.displayName = snapshot.displayName;
+        prChanged = true;
+      }
+
+      this.consecutiveFailures.delete(key);
+      prWatch.hasWarning = false;
+      prWatch.errorMessage = undefined;
+
+      const currentRunKeys = new Set(prWatch.childRunKeys);
+      const newRunKeys = new Set<string>();
+      for (const runIdentifier of snapshot.runs) {
+        const resolved = this.runControl.resolveRunIdentifier(runIdentifier);
+        const runKey = this.runControl.getWatchKey(resolved);
+        newRunKeys.add(runKey);
+        if (!currentRunKeys.has(runKey)) {
+          const added = await this.addChildRun(key, prWatch, resolved, { deferStatusFetch: true });
+          if (this.isDisposed()) return { prChanged, childRunChanged };
+          if (added) {
+            childRunChanged = true;
           }
         }
+      }
 
-        const hadObservedChildren = currentRunKeys.size > 0 || this.hasObservedChildRun(key, prWatch);
-        for (const childKey of currentRunKeys) {
-          if (!newRunKeys.has(childKey)) {
-            if (this.runControl.dismissOwnedChildRun(childKey, key, { clearAcknowledgement: false })) {
-              childRunChanged = true;
-            }
-            prWatch.childRunKeys = prWatch.childRunKeys.filter(k => k !== childKey);
+      const hadObservedChildren = currentRunKeys.size > 0 || this.hasObservedChildRun(key, prWatch);
+      for (const childKey of currentRunKeys) {
+        if (!newRunKeys.has(childKey)) {
+          if (this.runControl.dismissOwnedChildRun(childKey, key, { clearAcknowledgement: false })) {
+            childRunChanged = true;
           }
+          prWatch.childRunKeys = prWatch.childRunKeys.filter(k => k !== childKey);
         }
-        if (
-          hadObservedChildren
-          && this.getActiveChildRunKeys(key).length === 0
-          && this.dismissChildlessPRWatches([key], { assumeObserved: true }) > 0
-        ) {
-          prChanged = true;
-          continue;
-        }
+      }
+      if (
+        hadObservedChildren
+        && this.getActiveChildRunKeys(key).length === 0
+        && this.dismissChildlessPRWatches([key], { assumeObserved: true }) > 0
+      ) {
+        prChanged = true;
+        continue;
+      }
 
-        if (snapshot.prState !== prWatch.prState) {
-          prWatch.prState = snapshot.prState;
-          prChanged = true;
-          if (snapshot.prState === 'merged' || snapshot.prState === 'closed') {
-            this._onDidCompletePR.fire(prWatch);
-          }
-        }
-      } catch (err) {
-        const failures = (this.consecutiveFailures.get(key) || 0) + 1;
-        this.consecutiveFailures.set(key, failures);
-
-        if (failures >= 3) {
-          prWatch.hasWarning = true;
-          prWatch.errorMessage = err instanceof Error ? err.message : String(err);
-          prChanged = true;
-          this.logger.warn(`3 consecutive failures for PR ${prWatch.identifier.displayName}, marking with warning`);
-        } else {
-          this.logger.warn(`PR poll failed for ${prWatch.identifier.displayName} (attempt ${failures}/3): ${err}`);
+      if (snapshot.prState !== prWatch.prState) {
+        prWatch.prState = snapshot.prState;
+        prChanged = true;
+        if (snapshot.prState === 'merged' || snapshot.prState === 'closed') {
+          this._onDidCompletePR.fire(prWatch);
         }
       }
     }
@@ -474,6 +502,31 @@ export class PRWatchPool implements vscode.Disposable {
       }
     }
     return runToPRKeys;
+  }
+
+  private groupPRsByProvider(prWatches: WatchedPR[]): Array<Array<{ prWatch: WatchedPR; index: number }>> {
+    const grouped = new Map<string, Array<{ prWatch: WatchedPR; index: number }>>();
+    for (const [index, prWatch] of prWatches.entries()) {
+      const providerGroup = grouped.get(prWatch.identifier.providerId) ?? [];
+      providerGroup.push({ prWatch, index });
+      grouped.set(prWatch.identifier.providerId, providerGroup);
+    }
+    return Array.from(grouped.values());
+  }
+
+  private handlePollFailure(prWatch: WatchedPR, key: string, err: unknown): boolean {
+    const failures = (this.consecutiveFailures.get(key) || 0) + 1;
+    this.consecutiveFailures.set(key, failures);
+
+    if (failures >= 3) {
+      prWatch.hasWarning = true;
+      prWatch.errorMessage = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`3 consecutive failures for PR ${prWatch.identifier.displayName}, marking with warning`);
+      return true;
+    }
+
+    this.logger.warn(`PR poll failed for ${prWatch.identifier.displayName} (attempt ${failures}/3): ${err}`);
+    return false;
   }
 
   private hasObservedChildRun(prKey: string, prWatch: WatchedPR): boolean {
