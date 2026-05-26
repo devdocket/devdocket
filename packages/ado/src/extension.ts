@@ -42,6 +42,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   let orgWarningShown = false;
+  let isDisposed = false;
   let configurableProviders: ConfigurableAdoProvider[] = [];
   let configurableDisposables: vscode.Disposable[] = [];
   const takeCurrentConfigurables = () => {
@@ -151,6 +152,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   context.subscriptions.push({
     dispose: () => {
+      isDisposed = true;
       const { disposables } = takeCurrentConfigurables();
       for (const disposable of disposables) {
         disposable.dispose();
