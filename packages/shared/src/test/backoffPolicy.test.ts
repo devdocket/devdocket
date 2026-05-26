@@ -32,6 +32,16 @@ describe('BackoffPolicy', () => {
     expect(policy.recordFailure({ nowMs: 0 }).delayMs).toBe(25_000);
     expect(policy.recordFailure({ nowMs: 0 }).delayMs).toBe(25_000);
   });
+
+  it('preserves exponential progress when reconfigured outside an active cooldown', () => {
+    const policy = new BackoffPolicy({ baseDelayMs: 15_000, maxDelayMs: 120_000, jitterRatio: 0, random: () => 0 });
+
+    expect(policy.recordFailure({ nowMs: 0 }).delayMs).toBe(30_000);
+
+    policy.reconfigure({ baseDelayMs: 30_000, maxDelayMs: 120_000 }, 30_000);
+
+    expect(policy.recordFailure({ nowMs: 30_000 }).delayMs).toBe(60_000);
+  });
 });
 
 describe('parseRetryAfterHeader', () => {

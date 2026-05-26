@@ -62,10 +62,12 @@ export class PollingBackoffRegistry {
       return policy;
     }
 
-    policy.reconfigure({
-      baseDelayMs,
-      maxDelayMs: this.maxDelayMs,
-    }, nowMs);
+    if (policy.getBaseDelayMs() !== baseDelayMs) {
+      policy.reconfigure({
+        baseDelayMs,
+        maxDelayMs: this.maxDelayMs,
+      }, nowMs);
+    }
     return policy;
   }
 }

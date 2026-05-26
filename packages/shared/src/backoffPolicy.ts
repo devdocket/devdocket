@@ -81,6 +81,10 @@ export class BackoffPolicy {
     return this.cooldownUntilMs > 0 ? this.cooldownUntilMs : undefined;
   }
 
+  getBaseDelayMs(): number {
+    return this.baseDelayMs;
+  }
+
   private applyOptions(options: Pick<BackoffPolicyOptions, 'baseDelayMs' | 'maxDelayMs'>, nowMs = Date.now()): void {
     if (!Number.isFinite(options.baseDelayMs) || options.baseDelayMs <= 0) {
       throw new Error('BackoffPolicy requires a positive baseDelayMs');
@@ -92,9 +96,7 @@ export class BackoffPolicy {
     const remainingMs = this.getRemainingMs(nowMs);
     this.baseDelayMs = options.baseDelayMs;
     this.maxDelayMs = Math.max(options.maxDelayMs, options.baseDelayMs);
-    this.currentDelayMs = remainingMs > 0
-      ? Math.min(this.maxDelayMs, Math.max(this.baseDelayMs, this.currentDelayMs || this.baseDelayMs))
-      : this.baseDelayMs;
+    this.currentDelayMs = Math.min(this.maxDelayMs, Math.max(this.baseDelayMs, this.currentDelayMs || this.baseDelayMs));
     this.cooldownUntilMs = remainingMs > 0
       ? nowMs + Math.min(remainingMs, this.maxDelayMs)
       : 0;
