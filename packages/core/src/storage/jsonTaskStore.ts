@@ -115,7 +115,7 @@ export class JsonTaskStore implements ITaskStore {
 
   private schedulePersist(): void {
     this.persistQueued = true;
-    if (this.persistTimer || this.persistInFlight) {
+    if (this.persistTimer || this.persistInFlight || this.persistRunQueued) {
       return;
     }
 
