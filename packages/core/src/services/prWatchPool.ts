@@ -307,8 +307,8 @@ export class PRWatchPool implements vscode.Disposable {
 
       const currentRunKeys = new Set(prWatch.childRunKeys);
       const newRunKeys = new Set<string>();
-      for (const runId of snapshot.runs) {
-        const resolved = this.runControl.resolveRunIdentifier(runId);
+      for (const runIdentifier of snapshot.runs) {
+        const resolved = this.runControl.resolveRunIdentifier(runIdentifier);
         const runKey = this.runControl.getWatchKey(resolved);
         newRunKeys.add(runKey);
         if (!currentRunKeys.has(runKey)) {
