@@ -235,6 +235,10 @@ export class RunWatchPool implements vscode.Disposable {
       group,
       async ({ watch, index }) => {
         const key = this.getWatchKey(watch.identifier);
+        if (this.isDisposed()) {
+          fetchResults[index] = { key, error: new Error('Watcher service disposed') };
+          return;
+        }
         try {
           const watcher = this.watcherRegistry.get(watch.identifier.providerId);
           if (!watcher) {
