@@ -174,6 +174,7 @@ describe('extension activation', () => {
     const providerDisposeSpies = providers.map((provider: any) => vi.spyOn(provider, 'dispose'));
 
     disposeContextSubscriptions();
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     for (const registration of providerRegistrationDisposables) {
       expect(registration.dispose).toHaveBeenCalledTimes(1);
@@ -185,12 +186,18 @@ describe('extension activation', () => {
     expect(prWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('disposes and replaces configurable providers when ADO configuration changes', async () => {
+  it('waits for provider shutdown before replacing ADO providers on config changes', async () => {
     await activate(mockContext);
 
     const firstRegistrations = [...providerRegistrationDisposables];
     const firstProviders = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
     const firstProviderDisposeSpies = firstProviders.map((provider: any) => vi.spyOn(provider, 'dispose'));
+
+    let resolveShutdown!: () => void;
+    const shutdownGate = new Promise<void>(resolve => {
+      resolveShutdown = resolve;
+    });
+    const firstShutdownSpy = vi.spyOn(firstProviders[0], 'shutdown').mockReturnValue(shutdownGate);
 
     for (const [listener] of vi.mocked(workspace.onDidChangeConfiguration).mock.calls) {
       listener({
@@ -198,7 +205,13 @@ describe('extension activation', () => {
       });
     }
 
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(6);
+    await Promise.resolve();
+    expect(firstShutdownSpy).toHaveBeenCalledTimes(1);
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
+
+    resolveShutdown();
+    await vi.waitFor(() => expect(mockApi.registerProvider).toHaveBeenCalledTimes(6));
+
     for (const registration of firstRegistrations) {
       expect(registration.dispose).toHaveBeenCalledTimes(1);
     }
@@ -207,6 +220,30 @@ describe('extension activation', () => {
     }
     expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
     expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
+  });
+
+  it('replaces ADO providers even when shutdown rejects', async () => {
+    await activate(mockContext);
+
+    const firstRegistrations = [...providerRegistrationDisposables];
+    const firstProviders = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
+    const firstProviderDisposeSpies = firstProviders.map((provider: any) => vi.spyOn(provider, 'dispose'));
+    vi.spyOn(firstProviders[0], 'shutdown').mockRejectedValue(new Error('shutdown failed'));
+
+    for (const [listener] of vi.mocked(workspace.onDidChangeConfiguration).mock.calls) {
+      listener({
+        affectsConfiguration: (key: string) => key === 'devDocketAdo.refreshIntervalSeconds',
+      });
+    }
+
+    await vi.waitFor(() => expect(mockApi.registerProvider).toHaveBeenCalledTimes(6));
+
+    for (const registration of firstRegistrations) {
+      expect(registration.dispose).toHaveBeenCalledTimes(1);
+    }
+    for (const providerDisposeSpy of firstProviderDisposeSpies) {
+      expect(providerDisposeSpy).toHaveBeenCalledTimes(1);
+    }
   });
 
   it('does not register providers when no organization is configured', async () => {

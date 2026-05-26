@@ -1,5 +1,8 @@
 import type { ProviderRefreshOptions } from './apiTypes';
 import type { CancellationTokenLike } from './runWatcher';
+import { createAbortError } from './signalUtils';
+
+const expectedAbortErrors = new WeakSet<object>();
 
 // Minimal re-declarations to avoid depending on the vscode module
 
@@ -218,6 +221,10 @@ export interface EventEmitterLike<T> {
   dispose(): void;
 }
 
+type CancellationTokenWithEvents = CancellationTokenLike & {
+  readonly onCancellationRequested?: (listener: () => void) => Disposable;
+};
+
 /**
  * Base class for DevDocket providers that need periodic refresh.
  * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
@@ -237,6 +244,11 @@ export abstract class BaseProvider {
   private _lastRefreshAttemptTime = 0;
   protected _isRefreshing = false;
   private _disposed = false;
+  private _shuttingDown = false;
+  private _shutdownPromise: Promise<void> | undefined;
+  private _activeRefreshAbortController: AbortController | undefined;
+  private _activeRefreshPromise: Promise<unknown> | undefined;
+  private _abortRequested = false;
 
   private _windowState: WindowStateProvider | undefined;
   private _windowStateSub: Disposable | undefined;
@@ -278,7 +290,7 @@ export abstract class BaseProvider {
   }
 
   private scheduleNextPeriodicRefresh(): void {
-    if (this._disposed) {
+    if (this._disposed || this._shuttingDown) {
       return;
     }
     const requiredIntervalMs = this.getRequiredRefreshIntervalMs();
@@ -293,7 +305,7 @@ export abstract class BaseProvider {
     const delayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
-      if (this._disposed) {
+      if (this._disposed || this._shuttingDown) {
         return;
       }
       if (this._isRefreshing) {
@@ -306,7 +318,7 @@ export abstract class BaseProvider {
 
   private refreshOnFocusIfStale(): void {
     const focusedIntervalMs = this.periodicRefreshIntervalMs;
-    if (this._disposed || !focusedIntervalMs || this._isRefreshing || !this._windowState?.isFocused) {
+    if (this._disposed || this._shuttingDown || !focusedIntervalMs || this._isRefreshing || !this._windowState?.isFocused) {
       return;
     }
     if (Date.now() - this._lastRefreshTime <= focusedIntervalMs) {
@@ -326,7 +338,7 @@ export abstract class BaseProvider {
    * when the focused polling interval has already elapsed.
    */
   setWindowState(provider: WindowStateProvider): void {
-    if (this._disposed) {
+    if (this._disposed || this._shuttingDown) {
       return;
     }
     this._windowStateSub?.dispose();
@@ -340,8 +352,67 @@ export abstract class BaseProvider {
     this.scheduleNextPeriodicRefresh();
   }
 
+  protected async runAbortableRefresh<T>(
+    work: (signal: AbortSignal) => Promise<T>,
+    token?: CancellationTokenWithEvents,
+  ): Promise<T> {
+    const abortController = new AbortController();
+    const abort = () => {
+      if (!abortController.signal.aborted) {
+        abortController.abort(createAbortError());
+      }
+    };
+
+    if (this._disposed || this._shuttingDown || token?.isCancellationRequested) {
+      abort();
+    }
+
+    const tokenSubscription = token?.onCancellationRequested?.(abort);
+    const refreshPromise = Promise.resolve().then(() => work(abortController.signal));
+    this._activeRefreshAbortController = abortController;
+    this._activeRefreshPromise = refreshPromise;
+
+    try {
+      return await refreshPromise;
+    } catch (error) {
+      const isExpectedAbort = error instanceof Error && error.name === 'AbortError' && this.isAbortExpected;
+      if (isExpectedAbort) {
+        expectedAbortErrors.add(error);
+      }
+      throw error;
+    } finally {
+      tokenSubscription?.dispose();
+      if (this._activeRefreshAbortController === abortController) {
+        this._activeRefreshAbortController = undefined;
+      }
+      if (this._activeRefreshPromise === refreshPromise) {
+        this._activeRefreshPromise = undefined;
+        this._abortRequested = false;
+      }
+    }
+  }
+
+  protected publishDiscoveredItems(items: ProviderItem[]): void {
+    if (this._disposed || this._shuttingDown) {
+      return;
+    }
+    this._onDidDiscoverItems.fire(items);
+  }
+
+  protected get isDisposedOrShuttingDown(): boolean {
+    return this._disposed || this._shuttingDown;
+  }
+
+  protected get isAbortExpected(): boolean {
+    return this.isDisposedOrShuttingDown || this._abortRequested;
+  }
+
+  protected isExpectedAbortError(error: unknown): boolean {
+    return typeof error === 'object' && error !== null && expectedAbortErrors.has(error);
+  }
+
   startPeriodicRefresh(intervalSeconds: number): void {
-    if (this._disposed) {
+    if (this._disposed || this._shuttingDown) {
       return;
     }
     this.stopPeriodicRefresh();
@@ -365,22 +436,62 @@ export abstract class BaseProvider {
     this.periodicRefreshIntervalMs = undefined;
   }
 
+  /** Aborts the active refresh, if any, and waits for it to settle without entering shutdown. */
+  async abortInFlight(): Promise<void> {
+    const refreshPromise = this._activeRefreshPromise;
+    if (this._activeRefreshAbortController && !this._activeRefreshAbortController.signal.aborted) {
+      this._abortRequested = true;
+      this._activeRefreshAbortController.abort(createAbortError());
+    }
+    if (!refreshPromise) {
+      return;
+    }
+    try {
+      await refreshPromise;
+    } catch {
+      // Shutdown should not fail because an in-flight refresh was aborted or already failing.
+    }
+  }
+
+  /** Stops periodic refresh, aborts any in-flight work, and resolves once shutdown is complete. */
+  async shutdown(): Promise<void> {
+    if (this._shutdownPromise) {
+      return this._shutdownPromise;
+    }
+
+    this._shuttingDown = true;
+    this._shutdownPromise = (async () => {
+      this.stopPeriodicRefresh();
+      this._windowStateSub?.dispose();
+      this._windowStateSub = undefined;
+      await this.abortInFlight();
+    })();
+    return this._shutdownPromise;
+  }
+
   /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
   async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing || this._disposed) {
+    if (this._isRefreshing || this._disposed || this._shuttingDown) {
       return;
     }
     this._isRefreshing = true;
     try {
-      await this.doBackgroundRefresh();
-      this.markRefreshSuccess();
+      await this.runAbortableRefresh(signal => this.doBackgroundRefresh(signal));
+      if (!this.isAbortExpected) {
+        this.markRefreshSuccess();
+      }
+    } catch (error) {
+      const isExpectedAbort = error instanceof Error && error.name === 'AbortError' && this.isExpectedAbortError(error);
+      if (!isExpectedAbort) {
+        throw error;
+      }
     } finally {
       this._isRefreshing = false;
     }
   }
 
   /** Override to provide the background refresh implementation. */
-  protected abstract doBackgroundRefresh(): Promise<void>;
+  protected abstract doBackgroundRefresh(signal?: AbortSignal): Promise<void>;
 
   abstract refresh(token?: CancellationTokenLike, options?: ProviderRefreshOptions): Promise<void>;
 
@@ -389,8 +500,7 @@ export abstract class BaseProvider {
       return;
     }
     this._disposed = true;
-    this.stopPeriodicRefresh();
-    this._windowStateSub?.dispose();
     this._onDidDiscoverItems.dispose();
+    void this.shutdown().catch(() => {});
   }
 }

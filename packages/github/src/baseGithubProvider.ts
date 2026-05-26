@@ -44,51 +44,51 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   }
 
   async refresh(token?: vscode.CancellationToken, options?: ProviderRefreshOptions): Promise<void> {
-    if (this._isRefreshing) {
+    if (this._isRefreshing || this.isDisposedOrShuttingDown) {
       return;
     }
 
     this._isRefreshing = true;
-    const abortController = new AbortController();
-    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     const interactive = options?.interactive ?? true;
     try {
-      if (token?.isCancellationRequested) {
-        return;
-      }
-
-      let session: vscode.AuthenticationSession | undefined;
-      try {
-        session = await getGitHubSession(this.getAuthenticationScopes(), {
-          interactive,
-          signal: abortController.signal,
-        });
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          throw err;
+      await this.runAbortableRefresh(async (signal) => {
+        let session: vscode.AuthenticationSession | undefined;
+        try {
+          session = await getGitHubSession(this.getAuthenticationScopes(), {
+            interactive,
+            signal,
+          });
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw err;
+          }
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error('GitHub authentication failed', err);
+          this.showGitHubAuthenticationWarning(`DevDocket GitHub: Authentication failed — ${message}`);
+          return;
         }
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('GitHub authentication failed', err);
-        this.showGitHubAuthenticationWarning(`DevDocket GitHub: Authentication failed — ${message}`);
-        return;
-      }
 
-      if (!session || token?.isCancellationRequested) {
+        if (token?.isCancellationRequested || signal.aborted) {
+          return;
+        }
         if (!session) {
           if (interactive) {
             logger.info('User cancelled GitHub authentication');
           } else {
             logger.debug('No cached GitHub session available for non-interactive refresh');
           }
+          return;
         }
-        return;
-      }
 
-      await this.fetchAndPublish(session.accessToken, interactive, abortController.signal);
-      this.markRefreshSuccess();
+        await this.fetchAndPublish(session.accessToken, interactive, signal);
+        if (!this.isDisposedOrShuttingDown && !token?.isCancellationRequested && !signal.aborted) {
+          this.markRefreshSuccess();
+        }
+      }, token);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
-        logger.debug(`${this.label} fetch aborted due to cancellation`);
+      const isExpectedAbort = err instanceof Error && err.name === 'AbortError' && (this.isExpectedAbortError(err) || token?.isCancellationRequested);
+      if (isExpectedAbort) {
+        logger.debug(`${this.label} fetch aborted during refresh`);
       } else {
         if (err instanceof GitHubSsoError) {
           this.showGitHubSsoNotification(err, () => this.refresh(undefined, { interactive: true }), !interactive);
@@ -96,12 +96,11 @@ export abstract class BaseGitHubProvider extends BaseProvider {
         logger.error(`Failed to fetch ${this.label}`, err);
       }
     } finally {
-      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
 
-  protected async doBackgroundRefresh(): Promise<void> {
+  protected async doBackgroundRefresh(signal?: AbortSignal): Promise<void> {
     let session: vscode.AuthenticationSession | undefined;
     try {
       session = await vscode.authentication.getSession('github', this.getAuthenticationScopes(), {
@@ -118,8 +117,11 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     }
 
     try {
-      await this.fetchAndPublish(session.accessToken, false);
+      await this.fetchAndPublish(session.accessToken, false, signal);
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {
+        throw err;
+      }
       if (err instanceof GitHubSsoError) {
         this.showGitHubSsoNotification(err, () => this.refreshInBackground(), true);
       }
@@ -199,7 +201,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
    * Publish GitHub items after applying repository filters at the provider boundary.
    */
   protected publishProviderItems(items: ProviderItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
-    this._onDidDiscoverItems.fire(this.applyConfiguredRepoFilter(items, patterns));
+    this.publishDiscoveredItems(this.applyConfiguredRepoFilter(items, patterns));
   }
 
   /**

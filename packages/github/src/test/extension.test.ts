@@ -125,7 +125,7 @@ describe('GitHub extension activation', () => {
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
   });
 
-  it('pushes provider, registration, and watcher disposables onto subscriptions', async () => {
+  it('pushes watcher registrations and configurable lifecycle owner onto subscriptions', async () => {
     await activate(mockContext);
 
     const providerIds = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider.id);
@@ -140,39 +140,76 @@ describe('GitHub extension activation', () => {
     expect(runWatcherIds).toEqual(['github-actions', 'github-advanced-security']);
     expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
 
-    const subscribedProviderIds = disposables
-      .filter(disposable => providerIds.includes(disposable?.id))
-      .map(disposable => disposable.id);
-    expect(subscribedProviderIds).toEqual(providerIds);
-    for (const registration of providerRegistrationDisposables) {
-      expect(disposables).toContain(registration);
-    }
     for (const registration of runWatcherDisposables) {
       expect(disposables).toContain(registration);
     }
     expect(disposables).toContain(prWatcherDisposable);
     expect(disposables).toContain(configChangeDisposable);
-    expect(disposables).toHaveLength(13);
+    expect(disposables).toHaveLength(6);
+
+    const lifecycleOwner = disposables.find(disposable =>
+      disposable !== prWatcherDisposable &&
+      disposable !== configChangeDisposable &&
+      !runWatcherDisposables.includes(disposable) &&
+      disposable?.dispose &&
+      !('appendLine' in disposable),
+    );
+    expect(lifecycleOwner).toBeDefined();
   });
 
-  it('updates provider refresh intervals when GitHub refresh interval config changes', async () => {
+  it('waits for in-flight refresh aborts before updating GitHub refresh intervals', async () => {
     refreshIntervalSeconds = 120;
     await activate(mockContext);
 
     const providers = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
-    const startPeriodicRefreshSpies = providers.map((provider: any) =>
-      vi.spyOn(provider, 'startPeriodicRefresh'),
-    );
+    const startPeriodicRefreshSpies = providers.map((provider: any) => vi.spyOn(provider, 'startPeriodicRefresh'));
     expect(configChangeListener).toBeDefined();
+
+    let resolveAbort!: () => void;
+    const abortGate = new Promise<void>(resolve => {
+      resolveAbort = resolve;
+    });
+    const firstAbortSpy = vi.spyOn(providers[0], 'abortInFlight').mockReturnValue(abortGate);
 
     refreshIntervalSeconds = 240;
     configChangeListener?.({
       affectsConfiguration: (section: string) => section === 'devDocketGithub.refreshIntervalSeconds',
     });
 
+    await Promise.resolve();
+    expect(firstAbortSpy).toHaveBeenCalledTimes(1);
     for (const spy of startPeriodicRefreshSpies) {
-      expect(spy).toHaveBeenCalledWith(240);
+      expect(spy).not.toHaveBeenCalledWith(240);
     }
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
+
+    resolveAbort();
+    await vi.waitFor(() => {
+      for (const spy of startPeriodicRefreshSpies) {
+        expect(spy).toHaveBeenCalledWith(240);
+      }
+    });
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
+  });
+
+  it('updates GitHub refresh intervals even when aborting in-flight refreshes rejects', async () => {
+    refreshIntervalSeconds = 120;
+    await activate(mockContext);
+
+    const providers = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
+    const startPeriodicRefreshSpies = providers.map((provider: any) => vi.spyOn(provider, 'startPeriodicRefresh'));
+    vi.spyOn(providers[0], 'abortInFlight').mockRejectedValue(new Error('abort failed'));
+
+    refreshIntervalSeconds = 240;
+    configChangeListener?.({
+      affectsConfiguration: (section: string) => section === 'devDocketGithub.refreshIntervalSeconds',
+    });
+
+    await vi.waitFor(() => {
+      for (const spy of startPeriodicRefreshSpies) {
+        expect(spy).toHaveBeenCalledWith(240);
+      }
+    });
     expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
   });
 

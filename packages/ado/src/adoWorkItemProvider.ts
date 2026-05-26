@@ -81,57 +81,56 @@ export class AdoWorkItemProvider extends BaseProvider {
    * Prompts for authentication if no session exists.
    */
   async refresh(token?: vscode.CancellationToken, options?: ProviderRefreshOptions): Promise<void> {
-    if (this._isRefreshing) {
+    if (this._isRefreshing || this.isDisposedOrShuttingDown) {
       return;
     }
 
     this._isRefreshing = true;
-    const abortController = new AbortController();
-    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     const interactive = options?.interactive ?? true;
     try {
-      logger.info('Fetching assigned ADO work items...');
-      if (token?.isCancellationRequested) {
-        return;
-      }
+      await this.runAbortableRefresh(async (signal) => {
+        logger.info('Fetching assigned ADO work items...');
 
-      let session: vscode.AuthenticationSession | undefined;
-      try {
-        session = await getAdoSession({
-          interactive,
-          signal: abortController.signal,
-        });
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          throw err;
+        let session: vscode.AuthenticationSession | undefined;
+        try {
+          session = await getAdoSession({
+            interactive,
+            signal,
+          });
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw err;
+          }
+          session = undefined;
         }
-        session = undefined;
-      }
 
-      if (token?.isCancellationRequested) {
-        return;
-      }
-      if (!session) {
-        this._onDidDiscoverItems.fire([]);
-        return;
-      }
+        if (token?.isCancellationRequested || signal.aborted) {
+          return;
+        }
+        if (!session) {
+          this.publishDiscoveredItems([]);
+          return;
+        }
 
-      await this.fetchAndPublishWorkItems(session.accessToken, interactive, abortController.signal);
-      this.markRefreshSuccess();
+        await this.fetchAndPublishWorkItems(session.accessToken, interactive, signal);
+        if (!this.isDisposedOrShuttingDown && !token?.isCancellationRequested && !signal.aborted) {
+          this.markRefreshSuccess();
+        }
+      }, token);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        logger.debug('ADO work items fetch aborted due to cancellation');
+      const isExpectedAbort = err instanceof Error && err.name === 'AbortError' && (this.isExpectedAbortError(err) || token?.isCancellationRequested);
+      if (isExpectedAbort) {
+        logger.debug('ADO work items fetch aborted during refresh');
       } else {
-        this._onDidDiscoverItems.fire([]);
+        this.publishDiscoveredItems([]);
         logger.error('Failed to fetch work items:', err);
       }
     } finally {
-      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
 
-  protected async doBackgroundRefresh(): Promise<void> {
+  protected async doBackgroundRefresh(signal?: AbortSignal): Promise<void> {
     try {
       logger.info('Fetching assigned ADO work items...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
@@ -139,13 +138,16 @@ export class AdoWorkItemProvider extends BaseProvider {
       }).catch(() => null);
 
       if (!session) {
-        this._onDidDiscoverItems.fire([]);
+        this.publishDiscoveredItems([]);
         return;
       }
 
-      await this.fetchAndPublishWorkItems(session.accessToken, false);
+      await this.fetchAndPublishWorkItems(session.accessToken, false, signal);
     } catch (err) {
-      this._onDidDiscoverItems.fire([]);
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {
+        throw err;
+      }
+      this.publishDiscoveredItems([]);
       logger.error('Failed to fetch work items:', err);
     }
   }
@@ -202,7 +204,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       }
     }
 
-    this._onDidDiscoverItems.fire(allItems);
+    this.publishDiscoveredItems(allItems);
     logger.info(`Discovered ${allItems.length} ADO work items`);
 
     if (failures.length > 0) {

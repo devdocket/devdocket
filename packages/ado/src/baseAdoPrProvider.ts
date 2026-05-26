@@ -77,58 +77,57 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
   }
 
   async refresh(token?: vscode.CancellationToken, options?: ProviderRefreshOptions): Promise<void> {
-    if (this._isRefreshing) {
+    if (this._isRefreshing || this.isDisposedOrShuttingDown) {
       return;
     }
 
     this._isRefreshing = true;
-    const abortController = new AbortController();
-    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     const interactive = options?.interactive ?? true;
     try {
-      logger.info(`Fetching ADO ${this.logLabel}...`);
-      if (token?.isCancellationRequested) {
-        return;
-      }
+      await this.runAbortableRefresh(async (signal) => {
+        logger.info(`Fetching ADO ${this.logLabel}...`);
 
-      let session: vscode.AuthenticationSession | undefined;
-      try {
-        session = await getAdoSession({
-          interactive,
-          signal: abortController.signal,
-        });
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-          throw err;
+        let session: vscode.AuthenticationSession | undefined;
+        try {
+          session = await getAdoSession({
+            interactive,
+            signal,
+          });
+        } catch (err) {
+          if (err instanceof Error && err.name === 'AbortError') {
+            throw err;
+          }
+          session = undefined;
         }
-        session = undefined;
-      }
 
-      if (token?.isCancellationRequested) {
-        return;
-      }
-      if (!session) {
-        this._onDidDiscoverItems.fire([]);
-        return;
-      }
+        if (token?.isCancellationRequested || signal.aborted) {
+          return;
+        }
+        if (!session) {
+          this.publishDiscoveredItems([]);
+          return;
+        }
 
-      await this.fetchAndPublishPrs(session.accessToken, interactive, session.account.id, abortController.signal);
-      this.markRefreshSuccess();
+        await this.fetchAndPublishPrs(session.accessToken, interactive, session.account.id, signal);
+        if (!this.isDisposedOrShuttingDown && !token?.isCancellationRequested && !signal.aborted) {
+          this.markRefreshSuccess();
+        }
+      }, token);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
-        logger.debug(`ADO ${this.logLabel} fetch aborted due to cancellation`);
+      const isExpectedAbort = err instanceof Error && err.name === 'AbortError' && (this.isExpectedAbortError(err) || token?.isCancellationRequested);
+      if (isExpectedAbort) {
+        logger.debug(`ADO ${this.logLabel} fetch aborted during refresh`);
       } else {
         logger.error(`Failed to fetch ${this.logLabel}:`, err);
-        this._onDidDiscoverItems.fire([]);
+        this.publishDiscoveredItems([]);
         throw err;
       }
     } finally {
-      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
 
-  protected async doBackgroundRefresh(): Promise<void> {
+  protected async doBackgroundRefresh(signal?: AbortSignal): Promise<void> {
     try {
       logger.info(`Fetching ADO ${this.logLabel}...`);
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
@@ -136,14 +135,17 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       }).catch(() => null);
 
       if (!session) {
-        this._onDidDiscoverItems.fire([]);
+        this.publishDiscoveredItems([]);
         return;
       }
 
-      await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
+      await this.fetchAndPublishPrs(session.accessToken, false, session.account.id, signal);
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {
+        throw err;
+      }
       logger.error(`Failed to fetch ${this.logLabel}:`, err);
-      this._onDidDiscoverItems.fire([]);
+      this.publishDiscoveredItems([]);
       throw err;
     }
   }
@@ -218,7 +220,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     const dedupedItems = this.dedupeItems(allItems);
     await this.postProcessItems(dedupedItems, accessToken, signal);
 
-    this._onDidDiscoverItems.fire(dedupedItems);
+    this.publishDiscoveredItems(dedupedItems);
     logger.info(`Discovered ${dedupedItems.length} ADO ${this.logLabel}`);
 
     const messages: string[] = [];

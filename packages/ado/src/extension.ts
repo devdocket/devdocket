@@ -8,6 +8,8 @@ import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
 import { logger, setLogger } from './logger';
 
+type ConfigurableAdoProvider = AdoWorkItemProvider | AdoPrReviewProvider | AdoMyPrsProvider;
+
 const OPEN_SETTINGS = 'Open Settings';
 const ADO_PROJECTS_SETTING = 'devDocketAdo.projects';
 
@@ -40,10 +42,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   let orgWarningShown = false;
+  let configurableProviders: ConfigurableAdoProvider[] = [];
   let configurableDisposables: vscode.Disposable[] = [];
-  const disposeConfigurableDisposables = () => {
-    const disposablesToDispose = configurableDisposables;
+  const takeCurrentConfigurables = () => {
+    const providers = configurableProviders;
+    const disposables = configurableDisposables;
+    configurableProviders = [];
     configurableDisposables = [];
+    return { providers, disposables };
+  };
+  const disposeConfigurableDisposables = async () => {
+    const { providers: providersToShutdown, disposables: disposablesToDispose } = takeCurrentConfigurables();
+
+    const shutdownResults = await Promise.allSettled(providersToShutdown.map(provider => provider.shutdown()));
+    shutdownResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logger.error(`Failed to shut down ADO provider ${providersToShutdown[index]?.id ?? index}`, result.reason);
+      }
+    });
+
     for (const disposable of disposablesToDispose) {
       disposable.dispose();
     }
@@ -61,8 +78,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     prWatcherRegistered = true;
   }
 
-  const configureProviders = () => {
-    disposeConfigurableDisposables();
+  const configureProviders = async () => {
+    await disposeConfigurableDisposables();
 
     const config = vscode.workspace.getConfiguration('devDocketAdo');
     const projects = config.get<string[]>('projects', []);
@@ -102,20 +119,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     const workItemProvider = new AdoWorkItemProvider(orgConfigs);
     const prProvider = new AdoPrReviewProvider(orgConfigs);
     const myPrsProvider = new AdoMyPrsProvider(orgConfigs);
+    const nextProviders: ConfigurableAdoProvider[] = [workItemProvider, prProvider, myPrsProvider];
 
-    workItemProvider.startPeriodicRefresh(intervalSeconds);
-    prProvider.startPeriodicRefresh(intervalSeconds);
-    myPrsProvider.startPeriodicRefresh(intervalSeconds);
+    for (const provider of nextProviders) {
+      provider.startPeriodicRefresh(intervalSeconds);
+    }
 
-    const nextDisposables: vscode.Disposable[] = [
+    configurableProviders = nextProviders;
+    configurableDisposables = [
       api.registerProvider(workItemProvider),
       api.registerProvider(prProvider),
       api.registerProvider(myPrsProvider),
-      workItemProvider,
-      prProvider,
-      myPrsProvider,
+      ...nextProviders,
     ];
-    configurableDisposables = nextDisposables;
 
     const parts = ['3 ADO providers'];
     if (watcherRegistered) { parts.push('1 watcher'); }
@@ -123,9 +139,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     logger.info(`Registered ${parts.join(' + ')}`);
   };
 
-  context.subscriptions.push({ dispose: disposeConfigurableDisposables });
+  let configureProvidersPromise = Promise.resolve();
+  const queueConfigureProviders = () => {
+    configureProvidersPromise = configureProvidersPromise
+      .then(() => configureProviders())
+      .catch(error => {
+        logger.error('Failed to configure ADO providers', error);
+      });
+    return configureProvidersPromise;
+  };
 
-  configureProviders();
+  context.subscriptions.push({
+    dispose: () => {
+      const { disposables } = takeCurrentConfigurables();
+      for (const disposable of disposables) {
+        disposable.dispose();
+      }
+    },
+  });
+
+  await queueConfigureProviders();
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
@@ -133,7 +166,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         e.affectsConfiguration('devDocketAdo.projects') ||
         e.affectsConfiguration('devDocketAdo.refreshIntervalSeconds')
       ) {
-        configureProviders();
+        void queueConfigureProviders();
       }
     }),
   );

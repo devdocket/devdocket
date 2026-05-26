@@ -9,6 +9,8 @@ import { GitHubMentionsProvider } from './githubMentionsProvider';
 import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
 import { logger, setLogger } from './logger';
 
+type ConfigurableGitHubProvider = GitHubIssueProvider | GitHubPrReviewProvider | GitHubMyPrsProvider | GitHubMentionsProvider;
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const log = vscode.window.createOutputChannel('DevDocket GitHub', { log: true });
   context.subscriptions.push(log);
@@ -30,37 +32,55 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  // Register the GitHub issue provider
   const issueProvider = new GitHubIssueProvider();
-
-  // Register the GitHub PR review provider
   const prReviewProvider = new GitHubPrReviewProvider();
-
-  // Register the My PRs provider (authored PRs with status tracking)
   const myPrsProvider = new GitHubMyPrsProvider();
-
-  // Register the GitHub Mentions provider (@mentioned issues and PRs)
   const mentionsProvider = new GitHubMentionsProvider(context);
-
-  const providers = [issueProvider, prReviewProvider, myPrsProvider, mentionsProvider];
-  const configureProviders = () => {
-    const config = vscode.workspace.getConfiguration('devDocketGithub');
-    const intervalSeconds = validateRefreshInterval(
-      config.get<number>('refreshIntervalSeconds', 300), logger,
-    );
-    for (const provider of providers) {
-      provider.startPeriodicRefresh(intervalSeconds);
-    }
-  };
-
-  configureProviders();
-
-  context.subscriptions.push(
+  const configurableProviders: ConfigurableGitHubProvider[] = [issueProvider, prReviewProvider, myPrsProvider, mentionsProvider];
+  const configurableDisposables: vscode.Disposable[] = [
     api.registerProvider(issueProvider), issueProvider,
     api.registerProvider(prReviewProvider), prReviewProvider,
     api.registerProvider(myPrsProvider), myPrsProvider,
     api.registerProvider(mentionsProvider), mentionsProvider,
-  );
+  ];
+
+  const disposeConfigurableDisposables = () => {
+    for (const disposable of configurableDisposables) {
+      disposable.dispose();
+    }
+  };
+
+  const applyRefreshInterval = async () => {
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
+    const intervalSeconds = validateRefreshInterval(
+      config.get<number>('refreshIntervalSeconds', 300), logger,
+    );
+
+    const abortResults = await Promise.allSettled(configurableProviders.map(provider => provider.abortInFlight()));
+    abortResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        logger.error(`Failed to abort in-flight refresh for GitHub provider ${configurableProviders[index]?.id ?? index}`, result.reason);
+      }
+    });
+
+    for (const provider of configurableProviders) {
+      provider.startPeriodicRefresh(intervalSeconds);
+    }
+  };
+
+  let configureProvidersPromise = Promise.resolve();
+  const queueRefreshIntervalUpdate = () => {
+    configureProvidersPromise = configureProvidersPromise
+      .then(() => applyRefreshInterval())
+      .catch(error => {
+        logger.error('Failed to update GitHub provider refresh interval', error);
+      });
+    return configureProvidersPromise;
+  };
+
+  context.subscriptions.push({ dispose: disposeConfigurableDisposables });
+
+  await queueRefreshIntervalUpdate();
 
   let watcherCount = 0;
   if (typeof api.registerRunWatcher === 'function') {
@@ -80,7 +100,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('devDocketGithub.refreshIntervalSeconds')) {
-        configureProviders();
+        void queueRefreshIntervalUpdate();
       }
     }),
   );
