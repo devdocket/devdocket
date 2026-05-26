@@ -108,6 +108,7 @@ export class PRWatchPool implements vscode.Disposable {
       this.pollingBackoffRegistry.recordFailure(error);
       throw error;
     }
+    this.pollingBackoffRegistry.recordSuccess(identifier.backoffKey);
     if (snapshot.displayName) {
       identifier.displayName = snapshot.displayName;
     }
