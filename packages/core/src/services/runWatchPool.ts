@@ -364,10 +364,16 @@ export class RunWatchPool implements vscode.Disposable {
 
     try {
       const parsed = watcher.parseRunUrl(identifier.url);
+      if (!identifier.providerId) {
+        return {
+          ...parsed,
+          displayName: identifier.displayName || parsed.displayName,
+        };
+      }
+
       return {
         ...identifier,
-        ...parsed,
-        displayName: identifier.displayName || parsed.displayName,
+        backoffKey: parsed.backoffKey ?? identifier.backoffKey,
       };
     } catch (err) {
       this.logger.warn(`URL matched watcher '${watcher.id}' but parseRunUrl failed for ${identifier.url}: ${err}`);

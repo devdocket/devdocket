@@ -68,6 +68,7 @@ export class PRWatchPool implements vscode.Disposable {
   restore(prs: WatchedPR[]): number {
     let restored = 0;
     for (const pr of prs.filter(pr => !pr.dismissed)) {
+      pr.identifier = this.rehydrateRestoredPRIdentifier(pr.identifier);
       const key = this.getPRWatchKey(pr.identifier);
       if (this.prWatches.has(key)) {
         continue;
@@ -480,6 +481,28 @@ export class PRWatchPool implements vscode.Disposable {
 
   getPRWatchKey(identifier: PRIdentifier): string {
     return `pr:${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
+  }
+
+  private rehydrateRestoredPRIdentifier(identifier: PRIdentifier): PRIdentifier {
+    if (identifier.backoffKey) {
+      return identifier;
+    }
+
+    const watcher = this.prWatcherRegistry.get(identifier.providerId) ?? this.prWatcherRegistry.findWatcherForUrl(identifier.url);
+    if (!watcher) {
+      return identifier;
+    }
+
+    try {
+      const parsed = watcher.parsePRUrl(identifier.url);
+      return {
+        ...identifier,
+        backoffKey: parsed.backoffKey ?? identifier.backoffKey,
+      };
+    } catch (err) {
+      this.logger.warn(`PR URL matched watcher '${watcher.id}' but parsePRUrl failed for ${identifier.url}: ${err}`);
+      return identifier;
+    }
   }
 
   buildActiveChildRunIndex(): Map<string, Set<string>> {

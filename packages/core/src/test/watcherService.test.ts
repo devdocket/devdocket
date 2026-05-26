@@ -596,6 +596,34 @@ describe('WatcherService', () => {
       expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
     });
 
+    it('backfills backoff keys for persisted PR watches', async () => {
+      const prWatcher = createMockPRWatcher();
+      (prWatcher.parsePRUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'test-pr',
+        prId: '42',
+        displayName: 'PR #42',
+        url: 'https://example.com/pr/42',
+        repo: 'owner/repo',
+        backoffKey: 'api.example.com',
+      });
+      prRegistry.register(prWatcher);
+
+      const persistedPR = {
+        identifier: createPRIdentifier(),
+        prState: 'open' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      delete persistedPR.identifier.backoffKey;
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [], prs: [persistedPR] });
+
+      await service.loadPersistedWatches();
+
+      expect(service.getAllPRWatches()[0].identifier.backoffKey).toBe('api.example.com');
+    });
+
     it('caches persisted PR watch lookups across repeated checks', async () => {
       const identifier = createPRIdentifier();
       (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({
