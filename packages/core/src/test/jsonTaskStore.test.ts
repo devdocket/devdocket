@@ -337,6 +337,9 @@ describe('JsonTaskStore', () => {
       await store.save(makeItem({ id: 'failing-write', updatedAt: 1000 }));
 
       await expect(store.flush()).rejects.toThrow('disk full');
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'DevDocket could not save work items. Recent work item edits may be lost when the window reloads.',
+      );
       expect(fileSystem.readJson<WorkItem[]>(fileUri)).toBeUndefined();
 
       await store.flush();

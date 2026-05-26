@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
@@ -84,6 +85,7 @@ export class JsonTaskStore implements ITaskStore {
   private persistRunQueued = false;
   private persistChain: Promise<void> = Promise.resolve();
   private lastPersistError: unknown;
+  private persistFailureNotified = false;
 
   constructor(
     private readonly fileStore: FileStore<unknown[]>,
@@ -141,11 +143,21 @@ export class JsonTaskStore implements ITaskStore {
         if (this.persistChain === run) {
           this.lastPersistError = undefined;
         }
+        if (this.persistFailureNotified) {
+          this.persistFailureNotified = false;
+          logger.info('Work item persistence recovered.');
+        }
       },
       (err) => {
         this.persistRunQueued = false;
         this.lastPersistError = err;
         logger.error('Failed to persist work items', err);
+        if (!this.persistFailureNotified) {
+          this.persistFailureNotified = true;
+          void vscode.window.showWarningMessage(
+            'DevDocket could not save work items. Recent work item edits may be lost when the window reloads.',
+          );
+        }
       },
     );
 
