@@ -246,6 +246,30 @@ describe('extension activation', () => {
     }
   });
 
+  it('does not register replacement ADO providers after disposal starts', async () => {
+    await activate(mockContext);
+
+    const firstProviders = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
+    let resolveShutdown!: () => void;
+    const shutdownGate = new Promise<void>(resolve => {
+      resolveShutdown = resolve;
+    });
+    vi.spyOn(firstProviders[0], 'shutdown').mockReturnValue(shutdownGate);
+
+    for (const [listener] of vi.mocked(workspace.onDidChangeConfiguration).mock.calls) {
+      listener({
+        affectsConfiguration: (key: string) => key === 'devDocketAdo.projects',
+      });
+    }
+
+    await Promise.resolve();
+    disposeContextSubscriptions();
+    resolveShutdown();
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
+  });
+
   it('does not register providers when no organization is configured', async () => {
     vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
       if (section === 'devDocketAdo') {
