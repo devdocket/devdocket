@@ -22,33 +22,28 @@ export interface BackoffStateSnapshot {
 }
 
 export class BackoffPolicy {
-  private readonly baseDelayMs: number;
-  private readonly maxDelayMs: number;
+  private baseDelayMs!: number;
+  private maxDelayMs!: number;
   private readonly multiplier: number;
   private readonly jitterRatio: number;
   private readonly random: () => number;
-  private currentDelayMs: number;
+  private currentDelayMs = 0;
   private cooldownUntilMs = 0;
 
   constructor(options: BackoffPolicyOptions) {
-    if (!Number.isFinite(options.baseDelayMs) || options.baseDelayMs <= 0) {
-      throw new Error('BackoffPolicy requires a positive baseDelayMs');
-    }
-    if (!Number.isFinite(options.maxDelayMs) || options.maxDelayMs <= 0) {
-      throw new Error('BackoffPolicy requires a positive maxDelayMs');
-    }
-
-    this.baseDelayMs = options.baseDelayMs;
-    this.maxDelayMs = Math.max(options.maxDelayMs, options.baseDelayMs);
     this.multiplier = options.multiplier ?? 2;
     this.jitterRatio = Math.max(0, options.jitterRatio ?? 0);
     this.random = options.random ?? Math.random;
-    this.currentDelayMs = this.baseDelayMs;
+    this.applyOptions(options);
   }
 
   reset(): void {
     this.currentDelayMs = this.baseDelayMs;
     this.cooldownUntilMs = 0;
+  }
+
+  reconfigure(options: Pick<BackoffPolicyOptions, 'baseDelayMs' | 'maxDelayMs'>, nowMs = Date.now()): void {
+    this.applyOptions(options, nowMs);
   }
 
   recordSuccess(): void {
@@ -84,6 +79,25 @@ export class BackoffPolicy {
 
   getCooldownUntilMs(): number | undefined {
     return this.cooldownUntilMs > 0 ? this.cooldownUntilMs : undefined;
+  }
+
+  private applyOptions(options: Pick<BackoffPolicyOptions, 'baseDelayMs' | 'maxDelayMs'>, nowMs = Date.now()): void {
+    if (!Number.isFinite(options.baseDelayMs) || options.baseDelayMs <= 0) {
+      throw new Error('BackoffPolicy requires a positive baseDelayMs');
+    }
+    if (!Number.isFinite(options.maxDelayMs) || options.maxDelayMs <= 0) {
+      throw new Error('BackoffPolicy requires a positive maxDelayMs');
+    }
+
+    const remainingMs = this.getRemainingMs(nowMs);
+    this.baseDelayMs = options.baseDelayMs;
+    this.maxDelayMs = Math.max(options.maxDelayMs, options.baseDelayMs);
+    this.currentDelayMs = remainingMs > 0
+      ? Math.min(this.maxDelayMs, Math.max(this.baseDelayMs, this.currentDelayMs || this.baseDelayMs))
+      : this.baseDelayMs;
+    this.cooldownUntilMs = remainingMs > 0
+      ? nowMs + Math.min(remainingMs, this.maxDelayMs)
+      : 0;
   }
 }
 

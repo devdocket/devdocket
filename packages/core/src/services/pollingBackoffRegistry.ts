@@ -18,30 +18,30 @@ export class PollingBackoffRegistry {
     if (!backoffKey) {
       return false;
     }
-    return (this.policies.get(backoffKey)?.isCoolingDown(nowMs)) ?? false;
+    return this.getPolicy(backoffKey, nowMs).isCoolingDown(nowMs);
   }
 
   getRemainingMs(backoffKey: string | undefined, nowMs = Date.now()): number {
     if (!backoffKey) {
       return 0;
     }
-    return this.policies.get(backoffKey)?.getRemainingMs(nowMs) ?? 0;
+    return this.getPolicy(backoffKey, nowMs).getRemainingMs(nowMs);
   }
 
-  recordSuccess(backoffKey: string | undefined): void {
+  recordSuccess(backoffKey: string | undefined, nowMs = Date.now()): void {
     if (!backoffKey) {
       return;
     }
-    this.policies.get(backoffKey)?.recordSuccess();
+    this.getPolicy(backoffKey, nowMs).recordSuccess();
   }
 
-  recordFailure(error: unknown): PollingBackoffSnapshot | undefined {
+  recordFailure(error: unknown, nowMs = Date.now()): PollingBackoffSnapshot | undefined {
     if (!isPollingBackoffError(error)) {
       return undefined;
     }
 
-    const policy = this.getPolicy(error.backoffKey);
-    const state = policy.recordFailure({ retryAfterMs: error.retryAfterMs });
+    const policy = this.getPolicy(error.backoffKey, nowMs);
+    const state = policy.recordFailure({ nowMs, retryAfterMs: error.retryAfterMs });
     return {
       key: error.backoffKey,
       delayMs: state.delayMs,
@@ -49,16 +49,23 @@ export class PollingBackoffRegistry {
     };
   }
 
-  private getPolicy(backoffKey: string): BackoffPolicy {
+  private getPolicy(backoffKey: string, nowMs = Date.now()): BackoffPolicy {
+    const baseDelayMs = this.getBaseDelayMs();
     let policy = this.policies.get(backoffKey);
     if (!policy) {
       policy = new BackoffPolicy({
-        baseDelayMs: this.getBaseDelayMs(),
+        baseDelayMs,
         maxDelayMs: this.maxDelayMs,
         jitterRatio: 0,
       });
       this.policies.set(backoffKey, policy);
+      return policy;
     }
+
+    policy.reconfigure({
+      baseDelayMs,
+      maxDelayMs: this.maxDelayMs,
+    }, nowMs);
     return policy;
   }
 }
