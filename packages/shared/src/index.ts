@@ -16,4 +16,4 @@ export { abortFromToken, combineSignals, createAbortError, raceWithAbort, getSes
 export { runWorkerPool, runWorkerPoolSettled } from './concurrency';
 export { WorkItemState } from './workItem';
 export type { WorkItem, WorkItemInput, ActivityLogEntry, ActivityType } from './workItem';
-export type { DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent, ProviderRefreshOptions, ResolveUrlOptions, ActivityDetailRender, ActivityDetailRenderer } from './apiTypes';
+export type { DevDocketProvider, DevDocketAction, DevDocketActionPresentation, DevDocketApi, StateTransitionEvent, ProviderRefreshOptions, ResolveUrlOptions, ActivityDetailRender, ActivityDetailRenderer } from './apiTypes';

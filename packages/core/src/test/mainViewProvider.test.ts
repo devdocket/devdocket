@@ -176,7 +176,7 @@ function createProvider(
     stateStore as any,
     { has: () => false, add: vi.fn().mockResolvedValue(true), keys: () => [][Symbol.iterator]() } as any,
     watcherService as any,
-    {} as any,
+    { getSurfaceActionsFor: vi.fn(() => []) } as any,
   );
 }
 

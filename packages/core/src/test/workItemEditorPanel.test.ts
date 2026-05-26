@@ -127,6 +127,7 @@ function createMockActionRegistry() {
   const changeEmitter = new EventEmitter<void>();
   return {
     hasActionsFor: vi.fn(() => false),
+    getSurfaceActionsFor: vi.fn(() => []),
     onDidChangeRegistrations: vi.fn((listener: () => void) => changeEmitter.event(listener)),
     _fireChange: () => changeEmitter.fire(),
   };

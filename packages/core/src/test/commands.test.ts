@@ -979,6 +979,31 @@ describe('registerCommands', () => {
     });
   });
 
+  describe('devdocket.runActionById', () => {
+    it('runs the requested action when it is still available', async () => {
+      const item = createWorkItem();
+      const action = { id: 'startGitWork', label: 'Start Git Work', canRun: vi.fn(() => true), run: vi.fn() };
+      workGraph.getItem.mockReturnValue(item);
+      actionRegistry.getAction.mockReturnValue(action);
+
+      await invoke('devdocket.runActionById', { id: item.id, actionId: action.id });
+
+      expect(action.run).toHaveBeenCalledWith(item);
+    });
+
+    it('shows info when the requested action is no longer available', async () => {
+      const item = createWorkItem();
+      const action = { id: 'startGitWork', label: 'Start Git Work', canRun: vi.fn(() => false), run: vi.fn() };
+      workGraph.getItem.mockReturnValue(item);
+      actionRegistry.getAction.mockReturnValue(action);
+
+      await invoke('devdocket.runActionById', { id: item.id, actionId: action.id });
+
+      expect(action.run).not.toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('That action is no longer available for this item.');
+    });
+  });
+
   // ── moveUp / moveDown ────────────────────────────────────────────
 
   describe('devdocket.moveUp', () => {

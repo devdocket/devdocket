@@ -221,6 +221,29 @@ describe('ActionRegistry', () => {
     expect(registry.getActionsFor(pausedItem)).toEqual([pausedOnly]);
   });
 
+  it('returns only presentation-opted actions for a surface', () => {
+    const item = createWorkItem();
+    const hoverAction: DevDocketAction = {
+      id: 'hover',
+      label: 'Hover Action',
+      presentation: { cardHover: true, compactLabel: 'Hover' },
+      canRun: vi.fn(() => true),
+      run: vi.fn(async () => {}),
+    };
+    const previewAction: DevDocketAction = {
+      id: 'preview',
+      label: 'Preview Action',
+      presentation: { incomingPreview: true },
+      canRun: vi.fn(() => true),
+      run: vi.fn(async () => {}),
+    };
+    registry.register(hoverAction);
+    registry.register(previewAction);
+
+    expect(registry.getSurfaceActionsFor(item, 'cardHover')).toEqual([{ id: 'hover', label: 'Hover' }]);
+    expect(registry.getSurfaceActionsFor(item, 'incomingPreview')).toEqual([{ id: 'preview', label: 'Preview Action' }]);
+  });
+
   it('dispose makes getActionsFor return empty for previously matching actions', () => {
     registry.register(createMockAction('will-clear'));
     registry.dispose();

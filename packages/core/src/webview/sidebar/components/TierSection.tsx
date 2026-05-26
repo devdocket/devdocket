@@ -7,8 +7,10 @@ interface TierSectionProps {
   tier: TierData;
   onItemClick: (itemId: string) => void;
   onAcceptItem?: (providerId: string, externalId: string) => void;
+  onAcceptAndRunAction?: (providerId: string, externalId: string, actionId: string) => void;
   onAcceptToFocus?: (providerId: string, externalId: string) => void;
   onDismissItem?: (providerId: string, externalId: string) => void;
+  onRunActionById?: (itemId: string, actionId: string) => void;
   onTransitionState?: (itemId: string, targetState: string) => void;
   onReorderItems?: (itemIds: string[]) => void;
   /**
@@ -31,8 +33,10 @@ export function TierSection({
   tier,
   onItemClick,
   onAcceptItem,
+  onAcceptAndRunAction,
   onAcceptToFocus,
   onDismissItem,
+  onRunActionById,
   onTransitionState,
   onReorderItems,
   onCrossTierDrop,
@@ -366,8 +370,10 @@ export function TierSection({
                 onMoveTierFocus={focusTierHeader}
                 onClick={() => onItemClick(item.id)}
                 onAccept={onAcceptItem}
+                onAcceptAndRunAction={onAcceptAndRunAction}
                 onAcceptToFocus={onAcceptToFocus}
                 onDismiss={onDismissItem}
+                onRunActionById={onRunActionById}
                 onTransition={onTransitionState}
                 onDragStart={isReorderableTier ? handleDragStart : undefined}
                 onDragEnd={isReorderableTier ? handleDragEnd : undefined}

@@ -210,13 +210,13 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(false);
     });
 
-    it('returns false for non-InProgress items', () => {
+    it('returns true for Ready to Start items with gitWork capability', () => {
       const item = createWorkItem({ state: 'New' });
       const { action } = createAction(discovered('provider', 'item-1', {
         kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
       }));
 
-      expect(action.canRun(item)).toBe(false);
+      expect(action.canRun(item)).toBe(true);
     });
   });
 
@@ -1309,8 +1309,8 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['branch', '-D', '--', 'issue123']);
     });
 
-    it('accepts and routes a third-party provider without host or provider-id knowledge', async () => {
-      const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'work-42' });
+    it('transitions Ready to Start items to In Progress after successfully starting git work', async () => {
+      const item = createWorkItem({ state: 'New', providerId: 'fake-vendor', externalId: 'work-42' });
       const { action } = createAction(discovered('fake-vendor', 'work-42', {
         kind: 'issue', cloneUrl: 'git@git.fake-vendor.example:team/repo.git', ref: 'fake/work-42', repoLabel: 'Fake Vendor Repo',
       }));
@@ -1318,6 +1318,7 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
       await action.run(item);
 
+      expect(commands.executeCommand).toHaveBeenCalledWith('devdocket.acceptToFocus', { id: item.id });
       expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'fake/work-42', 'origin/dev']);
     });
 

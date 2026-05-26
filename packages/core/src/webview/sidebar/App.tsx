@@ -318,8 +318,10 @@ export function App() {
                       });
                     }}
                     onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
+                    onAcceptAndRunAction={(providerId, externalId, actionId) => postMessage({ type: 'acceptAndRunAction', providerId, externalId, actionId })}
                     onAcceptToFocus={(providerId, externalId) => postMessage({ type: 'acceptToFocus', providerId, externalId })}
                     onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
+                    onRunActionById={(itemId, actionId) => postMessage({ type: 'runActionById', itemId, actionId })}
                     onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
                     onReorderItems={tier.id === 'ready-to-start' || tier.id === 'in-progress' ? (itemIds) => postMessage({ type: 'reorderItems', itemIds }) : undefined}
                     onCrossTierDrop={tier.id === 'ready-to-start' || tier.id === 'in-progress'

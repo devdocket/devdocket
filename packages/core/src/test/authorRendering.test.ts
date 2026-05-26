@@ -62,7 +62,7 @@ function createMainViewProvider(): MainViewProvider {
     {} as any,
     { has: () => false } as any,
     { getActiveWatches: () => [], getActivePRWatches: () => [] } as any,
-    {} as any,
+    { getSurfaceActionsFor: () => [] } as any,
   );
 }
 
@@ -146,6 +146,28 @@ describe('ItemCard author annotation', () => {
     const container = renderCard(makeCardItem({ author: { displayName: 'Octocat', handle: 'octocat' }, authored: true }));
 
     expect(container.querySelector('.item-repo-annotation')?.textContent).toBe('owner/repo');
+  });
+
+  it('renders inline hover actions with text labels', async () => {
+    const onAcceptAndRunAction = vi.fn();
+    const container = document.createElement('div');
+    document.body.appendChild(container);
+    render(h(ItemCard, {
+      item: makeCardItem({
+        providerId: 'github',
+        externalId: 'owner/repo#1',
+        inlineActions: [{ id: 'startGitWork', label: 'Start Git Work' }],
+      }),
+      tabIndex: 0,
+      onClick: vi.fn(),
+      onAcceptAndRunAction,
+    }), container);
+
+    const button = Array.from(container.querySelectorAll<HTMLButtonElement>('.item-action-btn')).find(candidate => candidate.textContent === 'Start Git Work');
+    expect(button).not.toBeUndefined();
+    await act(async () => button?.click());
+
+    expect(onAcceptAndRunAction).toHaveBeenCalledWith('github', 'owner/repo#1', 'startGitWork');
   });
 });
 
@@ -236,5 +258,25 @@ describe('EditorApp author annotation', () => {
     });
 
     expect(postMessage).toHaveBeenLastCalledWith({ type: 'autosave', data: { notes: 'Draft note' } });
+  });
+
+  it('posts acceptAndRunAction for incoming preview inline actions', async () => {
+    const { container, postMessage } = await renderEditorWithPostMessage(makeEditorItem({
+      isIncoming: true,
+      providerId: 'github',
+      externalId: 'owner/repo#1',
+      inlineActions: [{ id: 'startGitWork', label: 'Start Git Work' }],
+    }));
+
+    const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(candidate => candidate.textContent === 'Start Git Work');
+    expect(button).not.toBeUndefined();
+    await act(async () => button?.click());
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'acceptAndRunAction',
+      providerId: 'github',
+      externalId: 'owner/repo#1',
+      actionId: 'startGitWork',
+    });
   });
 });

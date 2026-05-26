@@ -139,17 +139,18 @@ function handleCommandError(context: string, err: unknown): void {
 }
 
 /** Wrap a command handler so unhandled errors are logged and shown to the user. */
-function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Promise<void> | void): (...args: T) => Promise<void> {
-  const wrapped = async (...args: T): Promise<void> => {
+function wrapCommand<T extends unknown[], R>(label: string, fn: (...args: T) => Promise<R> | R): (...args: T) => Promise<R | undefined> {
+  const wrapped = async (...args: T): Promise<R | undefined> => {
     try {
-      await fn(...args);
+      return await fn(...args);
     } catch (err: unknown) {
       if (isRecoverableError(err)) {
         logger.error(label, err);
         await handleRecoverableError(err, () => wrapped(...args));
-        return;
+        return undefined;
       }
       handleCommandError(label, err);
+      return undefined;
     }
   };
 
@@ -568,6 +569,42 @@ async function handleCopyUrl(workGraph: WorkGraph, item?: { id?: string; url?: s
   vscode.window.setStatusBarMessage('DevDocket: URL copied to clipboard', 3000);
 }
 
+async function runActionById(
+  workGraph: WorkGraph,
+  actionRegistry: ActionRegistry,
+  itemId: string,
+  actionId: string,
+): Promise<boolean> {
+  const workItem = workGraph.getItem(itemId);
+  if (!workItem) {
+    return false;
+  }
+
+  const action = actionRegistry.getAction(actionId);
+  let canRun = false;
+  try {
+    canRun = !!action?.canRun(workItem);
+  } catch {
+    canRun = false;
+  }
+  if (!action || !canRun) {
+    logger.warn(`Action ${actionId} is not available for item ${workItem.id}`);
+    void vscode.window.showInformationMessage('That action is no longer available for this item.');
+    return false;
+  }
+
+  try {
+    logger.info(`Running action: ${actionId} on item ${workItem.id}`);
+    await action.run(workItem);
+    return true;
+  } catch (err: unknown) {
+    logger.error('Action failed: ' + action.label, err);
+    const detail = err instanceof Error ? err.message : String(err);
+    void vscode.window.showErrorMessage(`DevDocket: Action "${action.label}" failed — ${detail}`);
+    return false;
+  }
+}
+
 async function handleRunAction(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
@@ -589,18 +626,19 @@ async function handleRunAction(
     placeHolder: 'Select an action',
   });
   if (selected) {
-    const action = actionRegistry.getAction(selected.actionId);
-    if (action) {
-      try {
-        logger.info(`Running action: ${selected.actionId} on item ${workItem.id}`);
-        await action.run(workItem);
-      } catch (err: unknown) {
-        logger.error('Action failed: ' + selected.label, err);
-        const detail = err instanceof Error ? err.message : String(err);
-        void vscode.window.showErrorMessage(`DevDocket: Action "${selected.label}" failed — ${detail}`);
-      }
-    }
+    await runActionById(workGraph, actionRegistry, workItem.id, selected.actionId);
   }
+}
+
+async function handleRunActionById(
+  workGraph: WorkGraph,
+  actionRegistry: ActionRegistry,
+  item?: { id?: string; actionId?: string },
+): Promise<boolean> {
+  if (!item?.id || !item.actionId) {
+    return false;
+  }
+  return runActionById(workGraph, actionRegistry, item.id, item.actionId);
 }
 
 async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
@@ -934,7 +972,7 @@ export function registerCommands(
         if (typeof providerId !== 'string' || typeof externalId !== 'string') {
           throw new Error('previewIncomingItem requires string providerId and externalId');
         }
-        IncomingPreviewPanel.open(context, incomingPreviewPanelManager, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
+        IncomingPreviewPanel.open(context, incomingPreviewPanelManager, providerRegistry, stateStore, readStateStore, workGraph, actionRegistry, providerId, externalId);
       })),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
       wrapCommand('Failed to move item to In Progress', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
@@ -958,6 +996,8 @@ export function registerCommands(
       wrapCommand('Failed to copy URL', (item) => handleCopyUrl(workGraph, item))),
     vscode.commands.registerCommand('devdocket.runAction',
       wrapCommand('Failed to run action', (item) => handleRunAction(workGraph, actionRegistry, item))),
+    vscode.commands.registerCommand('devdocket.runActionById',
+      wrapCommand('Failed to run action', (item) => handleRunActionById(workGraph, actionRegistry, item))),
     vscode.commands.registerCommand('devdocket.moveUp',
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveDown',

@@ -13,8 +13,10 @@ interface ItemCardProps {
   onMoveTierFocus?: (direction: -1 | 1) => boolean;
   onClick: () => void;
   onAccept?: (providerId: string, externalId: string) => void;
+  onAcceptAndRunAction?: (providerId: string, externalId: string, actionId: string) => void;
   onAcceptToFocus?: (providerId: string, externalId: string) => void;
   onDismiss?: (providerId: string, externalId: string) => void;
+  onRunActionById?: (itemId: string, actionId: string) => void;
   onTransition?: (itemId: string, targetState: string) => void;
   onDragStart?: (itemId: string) => void;
   onDragEnd?: () => void;
@@ -30,7 +32,8 @@ interface ItemCardProps {
 
 interface ItemAction {
   id: string;
-  icon: string;
+  icon?: string;
+  label?: string;
   title: string;
   onClick: () => void;
 }
@@ -44,8 +47,10 @@ export function ItemCard({
   onMoveTierFocus,
   onClick,
   onAccept,
+  onAcceptAndRunAction,
   onAcceptToFocus,
   onDismiss,
+  onRunActionById,
   onTransition,
   onDragStart,
   onDragEnd,
@@ -53,7 +58,7 @@ export function ItemCard({
   disableDragReorder = false,
   query,
 }: ItemCardProps) {
-  const actions = getItemActions(item, onAccept, onAcceptToFocus, onDismiss, onTransition);
+  const actions = getItemActions(item, onAccept, onAcceptAndRunAction, onAcceptToFocus, onDismiss, onRunActionById, onTransition);
   const isDraggable = !disableDragReorder && (item.tierType === 'readyToStart' || item.tierType === 'inProgress');
   const [actionsOpen, setActionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -206,7 +211,7 @@ export function ItemCard({
             <button
               key={action.id}
               type="button"
-              class="item-action-btn"
+              class={`item-action-btn ${action.label ? 'item-action-btn--text' : 'item-action-btn--icon'}`}
               title={action.title}
               aria-label={action.title}
               tabIndex={actionsOpen ? 0 : -1}
@@ -221,7 +226,7 @@ export function ItemCard({
                 action.onClick();
               }}
             >
-              {action.icon}
+              {action.label ?? action.icon}
             </button>
           ))}
         </div>
@@ -254,8 +259,10 @@ function buildItemAriaLabel(item: ItemCardData): string {
 function getItemActions(
   item: ItemCardData,
   onAccept?: (providerId: string, externalId: string) => void,
+  onAcceptAndRunAction?: (providerId: string, externalId: string, actionId: string) => void,
   onAcceptToFocus?: (providerId: string, externalId: string) => void,
   onDismiss?: (providerId: string, externalId: string) => void,
+  onRunActionById?: (itemId: string, actionId: string) => void,
   onTransition?: (itemId: string, targetState: string) => void,
 ): ItemAction[] {
   const actions: ItemAction[] = [];
@@ -279,6 +286,16 @@ function getItemActions(
           onClick: () => onAcceptToFocus(providerId, externalId),
         });
       }
+      for (const action of item.inlineActions ?? []) {
+        if (providerId && externalId && onAcceptAndRunAction) {
+          actions.push({
+            id: action.id,
+            label: action.label,
+            title: action.label,
+            onClick: () => onAcceptAndRunAction(providerId, externalId, action.id),
+          });
+        }
+      }
       if (providerId && externalId && onDismiss) {
         actions.push({
           id: 'dismiss',
@@ -300,6 +317,16 @@ function getItemActions(
     case 'readyToStart':
       if (onTransition) {
         actions.push({ id: 'start', icon: '▶', title: 'Start', onClick: () => onTransition(item.id, 'InProgress') });
+      }
+      for (const action of item.inlineActions ?? []) {
+        if (onRunActionById) {
+          actions.push({
+            id: action.id,
+            label: action.label,
+            title: action.label,
+            onClick: () => onRunActionById(item.id, action.id),
+          });
+        }
       }
       break;
     case 'paused':

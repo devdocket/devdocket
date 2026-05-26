@@ -622,7 +622,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ),
     vscode.window.registerWebviewPanelSerializer(
       IncomingPreviewPanel.viewType,
-      IncomingPreviewPanel.createSerializer(context, incomingPreviewPanelManager, pr, ss, readStateStore, wg),
+      IncomingPreviewPanel.createSerializer(context, incomingPreviewPanelManager, pr, ss, readStateStore, wg, ar),
     ),
     vscode.window.registerWebviewPanelSerializer(
       WatchPanelProvider.viewType,
