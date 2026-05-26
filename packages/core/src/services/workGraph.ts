@@ -39,6 +39,7 @@ export class WorkGraph {
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private currentMutation: Promise<void> = Promise.resolve();
+  private shutdownRequested = false;
   private readonly _onDidChange = new vscode.EventEmitter<WorkGraphChangeEvent>();
   private readonly _onDidTransitionState = new vscode.EventEmitter<{ itemId: string; item: WorkItem; oldState: string; newState: string }>();
   /**
@@ -57,12 +58,15 @@ export class WorkGraph {
     this._onDidChange.fire({ source });
   }
 
-  private async withLock<T>(work: () => Promise<T>): Promise<T> {
+  private async withLock<T>(work: () => Promise<T>, options?: { allowDuringShutdown?: boolean }): Promise<T> {
     const prev = this.currentMutation;
     let release!: () => void;
     this.currentMutation = new Promise<void>(resolve => { release = resolve; });
     try {
       await prev;
+      if (this.shutdownRequested && !options?.allowDuringShutdown) {
+        throw new Error('WorkGraph is shutting down');
+      }
       return await work();
     } finally {
       release();
@@ -678,6 +682,16 @@ export class WorkGraph {
       : entries;
   }
 
+  beginShutdown(): void {
+    this.shutdownRequested = true;
+  }
+
+  async flushPersistence(): Promise<void> {
+    await this.withLock(async () => {
+      await this.store.flush?.();
+    }, { allowDuringShutdown: true });
+  }
+
   dispose(): void {
     this._onDidChange.dispose();
     this._onDidTransitionState.dispose();
@@ -690,7 +704,7 @@ export class WorkGraph {
    */
   async invalidateAndReload(): Promise<void> {
     return this.withLock(async () => {
-      this.store.invalidateCache?.();
+      await this.store.invalidateCache?.();
       try {
         await this.load();
         this.emitDidChange('externalReload');

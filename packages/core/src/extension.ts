@@ -37,6 +37,7 @@ export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, Di
 export { logger } from './services/logger';
 
 let watcherServiceForDeactivation: WatcherService | undefined;
+let workGraphForDeactivation: WorkGraph | undefined;
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
 function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void | Promise<void>): (...args: T) => void {
@@ -650,6 +651,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider, editorPanelDependencies, incomingPreviewPanelManager, () => mainProvider.toggleSearch());
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
+  workGraphForDeactivation = wg;
   watcherServiceForDeactivation = ws;
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
@@ -662,8 +664,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
  * dismissals survive window reloads.
  */
 export async function deactivate(): Promise<void> {
+  const workGraph = workGraphForDeactivation;
   const watcherService = watcherServiceForDeactivation;
+  workGraphForDeactivation = undefined;
   watcherServiceForDeactivation = undefined;
+  workGraph?.beginShutdown();
   watcherService?.beginShutdown();
-  await watcherService?.flushPersistence();
+
+  const results = await Promise.allSettled([
+    workGraph?.flushPersistence(),
+    watcherService?.flushPersistence(),
+  ]);
+
+  for (const result of results) {
+    if (result.status === 'rejected') {
+      logger.error('Failed to flush persisted state during deactivate', result.reason);
+    }
+  }
 }

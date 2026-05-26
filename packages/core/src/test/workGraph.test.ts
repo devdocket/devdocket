@@ -126,6 +126,8 @@ describe('WorkGraph', () => {
     expect(updated?.title).toBe('B');
     expect(updated?.activityLog?.map(entry => entry.type)).toEqual(['created', 'state-changed', 'updated']);
 
+    await realGraph.flushPersistence();
+
     const freshGraph = new WorkGraph(new JsonTaskStore(new JsonFileStore(fileUri, 'workgraph-items.json')));
     await freshGraph.load();
     const persisted = freshGraph.getItem(item.id);
