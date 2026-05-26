@@ -255,6 +255,10 @@ export class WorkGraph {
     return this.withLock(() => this.doUpdateItem(id, patch, options));
   }
 
+  async updateItemDuringShutdown(id: string, patch: Partial<WorkItemInput>, options?: UpdateItemOptions): Promise<void> {
+    return this.withLock(() => this.doUpdateItem(id, patch, options), { allowDuringShutdown: true });
+  }
+
   private async doUpdateItem(id: string, patch: Partial<WorkItemInput>, options?: UpdateItemOptions): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
