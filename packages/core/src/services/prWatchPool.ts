@@ -250,6 +250,10 @@ export class PRWatchPool implements vscode.Disposable {
       group,
       async ({ prWatch, index }) => {
         const key = this.getPRWatchKey(prWatch.identifier);
+        if (this.isDisposed()) {
+          fetchResults[index] = { key, error: new Error('Watcher service disposed') };
+          return;
+        }
         try {
           const prWatcher = this.prWatcherRegistry.get(prWatch.identifier.providerId);
           if (!prWatcher) {
