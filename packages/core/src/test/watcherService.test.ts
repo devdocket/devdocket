@@ -479,6 +479,32 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()[0].identifier.runId).toBe('run-1');
     });
 
+    it('backfills backoff keys for persisted run watches', async () => {
+      const watcher = createMockWatcher('test');
+      (watcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'test',
+        runId: 'run-1',
+        displayName: 'Test Run',
+        url: 'https://example.com/run/1',
+        backoffKey: 'api.example.com',
+      });
+      registry.register(watcher);
+
+      const persistedWatch: WatchedRun = {
+        identifier: createIdentifier(),
+        status: { overallState: 'running', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      delete persistedWatch.identifier.backoffKey;
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [persistedWatch], prs: [] });
+
+      await service.loadPersistedWatches();
+
+      expect(service.getActiveWatches()[0].identifier.backoffKey).toBe('api.example.com');
+    });
+
     it('does not clobber a run watch started while persisted watches load', async () => {
       const identifier = { ...createIdentifier(), displayName: 'Live Run' };
       const persistedWatch: WatchedRun = {

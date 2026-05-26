@@ -56,6 +56,7 @@ export class RunWatchPool implements vscode.Disposable {
   restore(watches: WatchedRun[]): number {
     let restored = 0;
     for (const watch of watches.filter(w => !w.dismissed)) {
+      watch.identifier = this.rehydrateRestoredRunIdentifier(watch.identifier);
       const key = this.getWatchKey(watch.identifier);
       if (this.watches.has(key)) {
         continue;
@@ -347,6 +348,31 @@ export class RunWatchPool implements vscode.Disposable {
     }
 
     return identifier;
+  }
+
+  private rehydrateRestoredRunIdentifier(identifier: RunIdentifier): RunIdentifier {
+    if (identifier.backoffKey) {
+      return identifier;
+    }
+
+    const watcher = identifier.providerId
+      ? this.watcherRegistry.get(identifier.providerId) ?? this.watcherRegistry.findWatcherForUrl(identifier.url)
+      : this.watcherRegistry.findWatcherForUrl(identifier.url);
+    if (!watcher) {
+      return identifier;
+    }
+
+    try {
+      const parsed = watcher.parseRunUrl(identifier.url);
+      return {
+        ...identifier,
+        ...parsed,
+        displayName: identifier.displayName || parsed.displayName,
+      };
+    } catch (err) {
+      this.logger.warn(`URL matched watcher '${watcher.id}' but parseRunUrl failed for ${identifier.url}: ${err}`);
+      return identifier;
+    }
   }
 
   private static isFailedRun(watch: WatchedRun): boolean {
