@@ -330,7 +330,7 @@ describe('JsonTaskStore', () => {
       expect(items[0].title).toBe('Queued update');
     });
 
-    it('surfaces persist failures from flush', async () => {
+    it('retries staged work on a later flush after a transient persist failure', async () => {
       const diskFull = new Error('disk full');
       (vscode.workspace.fs.writeFile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(diskFull);
 
@@ -339,12 +339,11 @@ describe('JsonTaskStore', () => {
       await expect(store.flush()).rejects.toThrow('disk full');
       expect(fileSystem.readJson<WorkItem[]>(fileUri)).toBeUndefined();
 
-      await store.save(makeItem({ id: 'failing-write', title: 'Recovered', updatedAt: 2000 }));
       await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
-      expect(persisted[0].title).toBe('Recovered');
+      expect(persisted[0].id).toBe('failing-write');
     });
   });
 

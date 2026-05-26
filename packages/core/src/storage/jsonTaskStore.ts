@@ -161,7 +161,12 @@ export class JsonTaskStore implements ITaskStore {
     try {
       while (this.persistQueued) {
         this.persistQueued = false;
-        await this.persistOnce();
+        try {
+          await this.persistOnce();
+        } catch (err) {
+          this.persistQueued = true;
+          throw err;
+        }
       }
     } finally {
       this.persistInFlight = false;
