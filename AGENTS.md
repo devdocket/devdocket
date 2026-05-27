@@ -346,7 +346,28 @@ eval "$(node scripts/start-bot-session.mjs --shell=bash)"
 node scripts/start-bot-session.mjs --shell=powershell | Invoke-Expression
 ```
 
-The script assumes the App's private key lives at `keys/devdocket-bot.pem` and that either the `DEVDOCKET_BOT_APP_ID` environment variable is set or the numeric App ID is written to `keys/devdocket-bot.app-id`. The `keys/` directory is git-ignored — never commit the PEM or App ID. After running the helper, the working tree's `user.name` / `user.email` and `GH_TOKEN` / `GITHUB_TOKEN` point at the bot for the lifetime of that shell; opening a new shell reverts to the developer's normal identity.
+The script requires two environment variables, which must be exported before running it:
+
+- `DEVDOCKET_BOT_APP_ID` — the numeric GitHub App ID.
+- `DEVDOCKET_BOT_APP_PRIVATE_KEY` — the GitHub App private key (PEM contents, including the `-----BEGIN/END PRIVATE KEY-----` markers).
+
+These match the names of the GitHub Actions repository secrets used by the bot's GitHub Actions workflows, so the same values can be reused locally. The script does not read or write any on-disk key material. After running the helper, the working tree's `user.name` / `user.email` and `GH_TOKEN` / `GITHUB_TOKEN` point at the bot for the lifetime of that shell; opening a new shell reverts to the developer's normal identity.
+
+Recommended export idioms for the (multi-line) PEM:
+
+```bash
+# bash / zsh
+export DEVDOCKET_BOT_APP_ID=123456
+export DEVDOCKET_BOT_APP_PRIVATE_KEY="$(cat path/to/devdocket-bot.pem)"
+```
+
+```powershell
+# PowerShell
+$env:DEVDOCKET_BOT_APP_ID = '123456'
+$env:DEVDOCKET_BOT_APP_PRIVATE_KEY = Get-Content -Raw path\to\devdocket-bot.pem
+```
+
+If your secret store delivers the PEM as a single line with literal `\n` escapes (common with 1Password / Vault / CI UI copy-paste), the helper auto-normalizes them to real newlines.
 
 **Verify the session is active** before proceeding:
 
@@ -360,7 +381,7 @@ If either check fails (e.g., still shows the developer's identity), the bot sess
 
 > **Note:** an installation token returns 403 on `GET /user` ("Resource not accessible by integration"), so do NOT use `gh api user` to verify. Use a repo-scoped call like the one above instead. A 403 from `gh api user` after starting a bot session is expected, not a failure.
 
-**If the bot session cannot be started** (helper prints "App ID not found", missing PEM, expired key, etc.): STOP. Do not fall back to the developer's identity. Report the failure to the user and ask how to proceed — typically the user needs to populate `keys/devdocket-bot.app-id` and `keys/devdocket-bot.pem` (or set `DEVDOCKET_BOT_APP_ID`) for their environment.
+**If the bot session cannot be started** (helper prints "App ID not found", "Private key not found", expired key, etc.): STOP. Do not fall back to the developer's identity. Report the failure to the user and ask how to proceed — typically the user needs to export `DEVDOCKET_BOT_APP_ID` and `DEVDOCKET_BOT_APP_PRIVATE_KEY` in their environment.
 
 **⚠️ Bot session env vars do NOT persist across sync shell invocations.** Many Copilot CLI shell tools (e.g., `powershell` in sync mode) create a fresh shell per call and discard `$env:GH_TOKEN` / `$env:GITHUB_TOKEN` set by a previous call. The `git config` changes made by the helper are persistent in the worktree (they live in `.git/config`), so commits stay bot-authored — but `gh` calls in a fresh shell will use the developer's cached `gh auth` credential and create PRs/comments/issues under the developer's account.
 

@@ -14,17 +14,16 @@
 //
 // If --shell is omitted, the script picks bash on POSIX and powershell on Windows.
 //
-// Required inputs (none of which are committed):
-//   keys/devdocket-bot.pem        GitHub App private key (PEM, RS256).
-//   keys/devdocket-bot.app-id     Numeric GitHub App ID — OR set the
-//                                 DEVDOCKET_BOT_APP_ID env var instead.
+// Required environment variables (none of which are committed):
+//   DEVDOCKET_BOT_APP_ID           Numeric GitHub App ID.
+//   DEVDOCKET_BOT_APP_PRIVATE_KEY  GitHub App private key contents (PEM, RS256).
 //
-// The `keys/` directory is git-ignored. Developers place their copy of the
-// App's private key there. The script never reads or writes the key outside
-// that directory.
+// These match the names of the GitHub Actions repository secrets used by the
+// changesets / weekly-review workflows, so the same values can be reused.
+// Developers must export both env vars before running the helper; the script
+// no longer reads or writes any on-disk key material.
 
 import { createSign } from "node:crypto";
-import { readFileSync, existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -33,9 +32,6 @@ const REPO_NAME = "devdocket";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
-const keysDir = resolve(repoRoot, "keys");
-const pemPath = resolve(keysDir, "devdocket-bot.pem");
-const appIdPath = resolve(keysDir, "devdocket-bot.app-id");
 
 function fail(msg) {
   process.stderr.write(`start-bot-session: ${msg}\n`);
@@ -103,15 +99,10 @@ async function ghApi(path, { method = "GET", token, accept, body } = {}) {
 }
 
 function loadAppId() {
-  const fromEnv = process.env.DEVDOCKET_BOT_APP_ID;
-  const raw = fromEnv && fromEnv.trim()
-    ? fromEnv.trim()
-    : existsSync(appIdPath)
-      ? readFileSync(appIdPath, "utf8").trim()
-      : "";
+  const raw = (process.env.DEVDOCKET_BOT_APP_ID ?? "").trim();
   if (!raw) {
     fail(
-      `App ID not found. Set DEVDOCKET_BOT_APP_ID or write the numeric App ID to ${appIdPath}.`,
+      "App ID not found. Export DEVDOCKET_BOT_APP_ID with the numeric GitHub App ID.",
     );
   }
   if (!/^[0-9]+$/.test(raw)) {
@@ -123,12 +114,25 @@ function loadAppId() {
 }
 
 function loadPrivateKey() {
-  if (!existsSync(pemPath)) {
+  let raw = process.env.DEVDOCKET_BOT_APP_PRIVATE_KEY ?? "";
+  if (!raw.trim()) {
     fail(
-      `Private key not found at ${pemPath}. Download the DevDocket bot App's PEM and place it there.`,
+      "Private key not found. Export DEVDOCKET_BOT_APP_PRIVATE_KEY with the GitHub App private key (PEM contents).",
     );
   }
-  return readFileSync(pemPath, "utf8");
+  // Some secret stores (1Password, Vault, CI UIs) deliver multi-line PEMs as a
+  // single line with literal two-character `\n` escapes. createSign().sign()
+  // would then throw an opaque DECODER error. Normalize to real newlines so the
+  // common copy/paste path "just works".
+  if (raw.includes("\\n") && !raw.includes("\n")) {
+    raw = raw.replace(/\\n/g, "\n");
+  }
+  if (!raw.includes("-----BEGIN") || !raw.includes("PRIVATE KEY-----")) {
+    fail(
+      "DEVDOCKET_BOT_APP_PRIVATE_KEY does not look like a PEM-encoded private key (missing BEGIN/END markers).",
+    );
+  }
+  return raw;
 }
 
 function emitEnv(shell, vars) {
