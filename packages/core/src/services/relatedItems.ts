@@ -165,6 +165,11 @@ function getRelatedItemsIndexSignature(providerItems: Map<string, ProviderItem[]
   let hasAnyRelatedItems = false;
   let hasPrRelatedItems = false;
 
+  // The index resolves by provider/externalId provenance, item type/title, version tokens,
+  // and related-item refs. Hash every field that can change matching or labels; unrelated
+  // ProviderItem fields would only add cache churn, while omitting one of these fields could
+  // reuse stale relationships. The providerItems Map and item arrays keep stable order for an
+  // unchanged snapshot; if they are reordered, the order-sensitive signature safely misses.
   for (const [providerId, items] of providerItems) {
     hash = appendHashPart(hash, providerId);
     hash = appendHashPart(hash, items.length);
@@ -207,6 +212,9 @@ function getWorkGraphSignature(workGraph: WorkGraph): string {
     return `v:${relatedItemsVersion}`;
   }
 
+  // Older test doubles may not expose the version token. The fallback is a coarser
+  // proxy over work-item identity and title so tests still invalidate on provenance
+  // or label changes; production WorkGraph instances take the token path above.
   let hash = 2166136261;
   let provenanceCount = 0;
   for (const item of workGraph.getAll()) {
@@ -225,6 +233,9 @@ function getWorkGraphSignature(workGraph: WorkGraph): string {
 
 function appendHashPart(hash: number, value: unknown): number {
   const text = value === undefined ? '<undefined>' : String(value);
+  // Length-prefix each segment so embedded separators cannot create boundary-shift
+  // collisions (for example ['a;b', 'c'] versus ['a', 'b;c']). The outer item/ref counts
+  // also make empty inputs distinct from hashes that happen to match.
   hash = appendHashText(hash, String(text.length));
   hash = appendHashText(hash, ':');
   hash = appendHashText(hash, text);

@@ -150,7 +150,10 @@ export class WorkGraph {
     return Array.from(this.items.values());
   }
 
-  /** Cache-invalidation token for derived related-item lookups. */
+  /**
+   * Cache-invalidation token for related-item indexes. It only changes when work-item
+   * membership or titles change because related-item matching and labels ignore other fields.
+   */
   getRelatedItemsVersion(): number {
     return this.relatedItemsVersion;
   }
