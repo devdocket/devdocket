@@ -538,7 +538,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     mainProvider?.scheduleRefresh('discovered');
   }));
 
-  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
+  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg);
 
   const eventWiringStart = performance.now();
   const eventDisposables = wireEvents(pr, wg, ws, pwr);

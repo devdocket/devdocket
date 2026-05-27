@@ -47,15 +47,6 @@ function createMockWorkGraph(items: any[] = []) {
   };
 }
 
-function createMockProviderRegistry(providerItems = new Map<string, any[]>()) {
-  const providerItemsEmitter = new vscode.EventEmitter<void>();
-  return {
-    getAllProviderItems: vi.fn(() => providerItems),
-    onDidChangeProviderItems: providerItemsEmitter.event,
-    fireDidChangeProviderItems: () => providerItemsEmitter.fire(),
-  };
-}
-
 function createPRWatch(prId = '42', repo = 'owner/repo', providerId = 'github-pr') {
   return {
     identifier: {
@@ -123,7 +114,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       createWatcherService() as any,
       createMockWorkGraph(),
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -197,7 +187,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       createMockWorkGraph(),
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -265,7 +254,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       createMockWorkGraph(),
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -292,7 +280,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       workGraph as any,
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -306,19 +293,15 @@ describe('WatchPanelProvider', () => {
     expect(workGraph.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it('does not derive PR watch link targets from discovered provider items', () => {
+  it('only derives PR watch link targets from work items', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
     const watcherService = createWatcherService([createPRWatch()]);
-    const providerRegistry = createMockProviderRegistry(new Map([
-      ['github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]],
-    ]));
 
     const provider = new WatchPanelProvider(
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       createMockWorkGraph(),
-      providerRegistry as any,
     );
     provider.open();
 
@@ -329,7 +312,6 @@ describe('WatchPanelProvider', () => {
     expect(message.prWatches[0]).not.toHaveProperty('linkedItemId');
     expect(message.prWatches[0]).not.toHaveProperty('linkedSourceProviderId');
     expect(message.prWatches[0]).not.toHaveProperty('linkedSourceExternalId');
-    expect(providerRegistry.getAllProviderItems).not.toHaveBeenCalled();
   });
 
   it('omits DevDocket link data when no matching PR item exists', () => {
@@ -341,9 +323,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       createMockWorkGraph([{ id: 'issue-42', providerId: 'github', externalId: 'owner/repo#42', itemType: 'issue' }]),
-      createMockProviderRegistry(new Map([
-        ['github', [{ externalId: 'owner/repo#42', title: 'Issue #42', itemType: 'issue' }]],
-      ])),
     );
     provider.open();
 
@@ -353,29 +332,22 @@ describe('WatchPanelProvider', () => {
     expect(prWatch).not.toHaveProperty('linkedSourceExternalId');
   });
 
-  it('does not refresh when provider items change, but still refreshes when work items change', () => {
+  it('refreshes linked PR targets when work items change', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
     const watcherService = createWatcherService([createPRWatch()]);
     const workItems: any[] = [];
-    const providerItems = new Map<string, any[]>();
     const workGraph = createMockWorkGraph(workItems);
-    const providerRegistry = createMockProviderRegistry(providerItems);
 
     const provider = new WatchPanelProvider(
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       workGraph as any,
-      providerRegistry as any,
     );
     provider.open();
 
     expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).not.toHaveProperty('linkedItemId');
     const initialPostCount = vi.mocked(mockPanel.panel.webview.postMessage).mock.calls.length;
-
-    providerItems.set('github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]);
-    providerRegistry.fireDidChangeProviderItems();
-    expect(mockPanel.panel.webview.postMessage).toHaveBeenCalledTimes(initialPostCount);
 
     workItems.push({ id: 'work-42', providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
     workGraph.fireDidChange();
@@ -399,7 +371,6 @@ describe('WatchPanelProvider', () => {
         externalId: 'owner/repo#42',
         itemType: 'pr',
       }]),
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -423,7 +394,6 @@ describe('WatchPanelProvider', () => {
         externalId: 'org/project/repo/42',
         itemType: 'pr',
       }]),
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -441,7 +411,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       createWatcherService() as any,
       createMockWorkGraph(),
-      createMockProviderRegistry(),
     );
     provider.open();
 
@@ -505,7 +474,6 @@ describe('WatchPanelProvider', () => {
       vscode.Uri.file('C:\\repo') as any,
       watcherService as any,
       workGraph as any,
-      createMockProviderRegistry(),
     );
     provider.open();
 

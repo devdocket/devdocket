@@ -3,7 +3,6 @@ import * as crypto from 'node:crypto';
 import type { PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import type { WorkItem } from '../models/workItem';
-import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
@@ -22,7 +21,6 @@ export class WatchPanelProvider implements vscode.Disposable {
     private readonly extensionUri: vscode.Uri,
     private readonly watcherService: WatcherService,
     private readonly workGraph: WorkGraph,
-    _providerRegistry: ProviderRegistry,
   ) {
     this.refreshDisposables = [
       this.workGraph.onDidChange(() => this.refresh()),
