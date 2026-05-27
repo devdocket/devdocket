@@ -231,7 +231,7 @@ export class ReadStateStore {
     return { records: Array.from(deduped.values()), available };
   }
 
-  /** Returns true only when the key is newly added. Persists automatically. */
+  /** Returns true only when the key is newly added and queues persistence. Call `flush()` when durability is required before continuing. */
   async add(key: string): Promise<boolean> {
     if (!this.loaded) { await this.load(); }
     if (this.items.has(key)) { return false; }
@@ -243,7 +243,7 @@ export class ReadStateStore {
     return true;
   }
 
-  /** Adds multiple keys in a single write. Returns newly added keys that remain persisted after capacity trimming. */
+  /** Adds multiple keys, queues one coalesced write, and returns newly added keys that remain in memory after capacity trimming. Call `flush()` when durability is required before continuing. */
   async addMany(keys: string[]): Promise<string[]> {
     if (keys.length === 0) { return []; }
     if (!this.loaded) { await this.load(); }
