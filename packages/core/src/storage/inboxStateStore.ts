@@ -452,6 +452,8 @@ export class InboxStateStore {
   async dispose(): Promise<void> {
     try {
       await this.flush();
+    } catch (err) {
+      logger.error('Failed to flush inbox state during dispose', err);
     } finally {
       this.disposed = true;
       this._onDidChange.dispose();
