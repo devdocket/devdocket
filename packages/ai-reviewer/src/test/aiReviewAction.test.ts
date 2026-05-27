@@ -472,6 +472,25 @@ describe('AiReviewAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith('AI Code Review: Analysis failed');
     });
 
+    it('returns undefined and warns when the diff-only model response has no text', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{
+        sendRequest: vi.fn().mockResolvedValue({
+          text: (async function* () {})(),
+        }),
+      }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const result = await action.analyzeWithAi('some diff', 'https://github.com/owner/repo/pull/42', token as never);
+
+      expect(result).toBeUndefined();
+      expect(consoleError).toHaveBeenCalledWith('AI Code Review: model returned no content');
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+      );
+      consoleError.mockRestore();
+    });
+
     it('uses custom prompt when configured', async () => {
       const customPrompt = 'Focus only on security issues.';
       const customPromptBytes = new TextEncoder().encode(customPrompt);

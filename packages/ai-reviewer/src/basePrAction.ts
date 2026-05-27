@@ -250,9 +250,22 @@ export abstract class BasePrAction implements DevDocketAction {
       const response = await model.sendRequest(messages, {}, token);
 
       let result = this.outputHeader;
+      let hasText = false;
       for await (const chunk of response.text) {
+        if (chunk.length > 0) {
+          hasText = true;
+        }
         result += chunk;
       }
+
+      if (!hasText) {
+        console.error(`${this.progressTitle}: model returned no content`);
+        vscode.window.showWarningMessage(
+          `${this.progressTitle}: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.`,
+        );
+        return undefined;
+      }
+
       return result + truncationNote;
     } catch (err) {
       console.error(`${this.progressTitle}: analysis failed:`, err);
