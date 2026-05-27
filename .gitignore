@@ -9,6 +9,13 @@ node_modules/
 dist/
 webview-dist/
 
+# Generated before packaging VS Code extensions
+packages/core/LICENSE
+packages/github/LICENSE
+packages/ado/LICENSE
+packages/start-git-work/LICENSE
+packages/ai-reviewer/LICENSE
+
 # OS files
 .DS_Store
 Thumbs.db

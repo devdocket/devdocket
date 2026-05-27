@@ -68,6 +68,9 @@ jobs:
             exit 1
           fi
 
+      - name: Prepare extension LICENSE
+        run: node scripts/prepare-extension-license.mjs "$PACKAGE_DIR"
+
       - name: Authenticate to Azure (Entra ID via OIDC)
         uses: azure/login@v2
         with:

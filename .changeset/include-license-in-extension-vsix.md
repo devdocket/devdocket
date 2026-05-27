@@ -6,4 +6,4 @@
 "devdocket-ai-reviewer": patch
 ---
 
-Include a LICENSE file in each published extension VSIX so the shipped artifacts carry the repository license.
+Generate each extension VSIX's LICENSE from the repository root license at package time so shipped artifacts carry the license without committing duplicate copies.
