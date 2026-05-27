@@ -330,7 +330,7 @@ describe('resolveRelatedItemsFor', () => {
     expect(workGraph.findItemByProvenance.mock.calls.length).toBe(callCountAfterFirstBuild);
   });
 
-  it('invalidates the cached index when provider inputs change', () => {
+  it('invalidates the cached index when provider versions or related refs change', () => {
     const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
     const prDiscovered: ProviderItem = {
@@ -348,12 +348,16 @@ describe('resolveRelatedItemsFor', () => {
 
     const firstIndex = buildRelatedItemsIndex(registry, workGraph);
     prDiscovered.version = '2';
-    const secondIndex = buildRelatedItemsIndex(registry, workGraph);
+    const versionChangedIndex = buildRelatedItemsIndex(registry, workGraph);
+    prDiscovered.relatedItems = [];
+    const refsChangedIndex = buildRelatedItemsIndex(registry, workGraph);
 
-    expect(secondIndex).not.toBe(firstIndex);
-    expect(resolveRelatedItemsFor(pr, registry, workGraph, secondIndex)).toEqual([
+    expect(versionChangedIndex).not.toBe(firstIndex);
+    expect(resolveRelatedItemsFor(pr, registry, workGraph, versionChangedIndex)).toEqual([
       { targetItemId: 'issue-1', targetTitle: 'Item', targetExternalId: 'owner/repo#2', targetKind: 'workItem', label: 'Closes Item', relation: 'closes', itemType: 'issue' },
     ]);
+    expect(refsChangedIndex).not.toBe(versionChangedIndex);
+    expect(resolveRelatedItemsFor(pr, registry, workGraph, refsChangedIndex)).toEqual([]);
   });
 
   it('returns an empty index without scanning work graph items when no provider item has related refs', () => {
