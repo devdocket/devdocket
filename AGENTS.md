@@ -318,6 +318,24 @@ The core extension must not rely on anything from the other extensions (github, 
 - All PRs should reference in their description the issue they're fixing (e.g., `Closes #N`).
 - When reading a GitHub issue to implement a fix, always read the issue description AND all posted comments — not just the issue body. Comments often contain design decisions, clarifications, and updated requirements.
 
+### DevDocket bot identity for local Copilot CLI work
+
+When a Copilot CLI agent does work on a developer's behalf, the resulting commits, PRs, and issues should be attributed to the DevDocket bot (the same GitHub App identity used by the Changesets workflow), not to the developer.
+
+A helper script mints a short-lived (≤ 1 hour) installation access token from the bot's GitHub App and configures the current shell to use that identity for subsequent `gh` and `git` calls:
+
+```bash
+# bash / zsh
+eval "$(node scripts/start-bot-session.mjs --shell=bash)"
+
+# PowerShell
+node scripts/start-bot-session.mjs --shell=powershell | Invoke-Expression
+```
+
+The script assumes the App's private key lives at `keys/devdocket-bot.pem` and that either the `DEVDOCKET_BOT_APP_ID` environment variable is set or the numeric App ID is written to `keys/devdocket-bot.app-id`. The `keys/` directory is git-ignored — never commit the PEM or App ID. After running the helper, the working tree's `user.name` / `user.email` and `GH_TOKEN` / `GITHUB_TOKEN` point at the bot for the lifetime of that shell; opening a new shell reverts to the developer's normal identity.
+
+Note: commits made in the working tree will be **authored** by the bot, but `git push` over HTTPS still uses the developer's stored credential helper — so the *pusher* recorded on GitHub is the developer. Use `gh pr create` / `gh issue create` / other `gh` subcommands for remote actions that need bot attribution; those consume `GH_TOKEN` directly.
+
 ### Delegate exploration and implementation to sub-agents
 
 When working on multiple independent tasks (e.g., fixing several unrelated bugs), **do not** manually explore the codebase yourself before dispatching agents. Instead, delegate the work immediately — each sub-agent is responsible for its own exploration, understanding, implementation, and testing. The orchestrating agent's job is to:
