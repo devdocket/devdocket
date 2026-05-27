@@ -132,7 +132,12 @@ export class InboxStateStore {
     }
     this.persistTimer = setTimeout(() => {
       this.persistTimer = undefined;
-      void this.flush().catch(err => logger.error('Failed to flush debounced inbox state persistence', err));
+      void this.flush().catch(err => {
+        logger.error('Failed to flush debounced inbox state persistence', err);
+        if (this.hasPendingPersist() && !this.disposed) {
+          void this.schedulePersist();
+        }
+      });
     }, this.persistDebounceMs);
     return Promise.resolve();
   }
