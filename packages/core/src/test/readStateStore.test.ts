@@ -17,7 +17,7 @@ describe('ReadStateStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fileSystem = useMockFileSystem();
-    store = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    store = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
   });
 
   afterEach(() => {
@@ -86,7 +86,7 @@ describe('ReadStateStore', () => {
     await store.add('gh::1');
     await store.add('jira::2');
 
-    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await store2.load();
     expect(store2.has('gh::1')).toBe(true);
     expect(store2.has('jira::2')).toBe(true);
@@ -109,7 +109,7 @@ describe('ReadStateStore', () => {
   it('preserves createdAt timestamps across reload and rewrite', async () => {
     fileSystem.writeJson(fileUri, [{ key: 'gh::legacy', createdAt: 123 }]);
 
-    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await store2.load();
     await store2.add('gh::new');
 
@@ -123,7 +123,7 @@ describe('ReadStateStore', () => {
   it('loads legacy string entries without createdAt timestamps', async () => {
     fileSystem.writeJson(fileUri, ['gh::legacy']);
 
-    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await store2.load();
 
     expect(store2.has('gh::legacy')).toBe(true);
@@ -137,7 +137,7 @@ describe('ReadStateStore', () => {
       { key: 'gh::other', createdAt: 3 },
     ]);
 
-    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await store2.load();
     await store2.add('gh::fresh');
 
@@ -153,7 +153,7 @@ describe('ReadStateStore', () => {
   it('should skip non-string elements in the array', async () => {
     fileSystem.writeJson(fileUri, ['valid::1', 42, null, true, 'valid::2', { obj: true }]);
 
-    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await store2.load();
     const keys = [...store2.keys()].sort();
     expect(keys).toEqual(['valid::1', 'valid::2']);
@@ -171,7 +171,7 @@ describe('ReadStateStore', () => {
   it('should auto-load when deleteMany() is called before load()', async () => {
     fileSystem.writeJson(fileUri, ['gh::existing', 'gh::remove']);
 
-    const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await freshStore.deleteMany(['gh::remove']);
 
     expect(freshStore.has('gh::existing')).toBe(true);
@@ -181,7 +181,7 @@ describe('ReadStateStore', () => {
   it('should auto-load when add() is called before load()', async () => {
     fileSystem.writeJson(fileUri, ['gh::existing']);
 
-    const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+    const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
     await freshStore.add('gh::new');
 
     expect(freshStore.has('gh::existing')).toBe(true);
@@ -223,8 +223,8 @@ describe('ReadStateStore', () => {
 
   describe('merge-on-write', () => {
     it('preserves remote additions while persisting local changes', async () => {
-      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
-      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await windowA.load();
 
       await windowB.add('gh::remote');
@@ -239,8 +239,8 @@ describe('ReadStateStore', () => {
     it('keeps locally removed keys deleted while preserving remote additions', async () => {
       fileSystem.writeJson(fileUri, ['gh::keep', 'gh::remove']);
 
-      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
-      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await windowA.load();
       await windowB.load();
 
@@ -257,12 +257,12 @@ describe('ReadStateStore', () => {
     it('allows remote re-additions after a successful persist', async () => {
       fileSystem.writeJson(fileUri, ['gh::shared']);
 
-      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await windowA.load();
 
       await windowA.deleteMany(['gh::shared']);
 
-      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await windowB.load();
       await windowB.add('gh::shared');
 
@@ -279,7 +279,7 @@ describe('ReadStateStore', () => {
 
       fileSystem.writeJson(fileUri, ['gh::issue-2']);
 
-      store.invalidateCache();
+      await store.invalidateCache();
       await store.load();
 
       expect([...store.keys()]).toEqual(['gh::issue-2']);
@@ -315,7 +315,7 @@ describe('ReadStateStore', () => {
         createdAt: i,
       })));
 
-      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await store2.load();
 
       expect([...store2.keys()]).toHaveLength(5_000);
@@ -344,8 +344,8 @@ describe('ReadStateStore', () => {
     });
 
     it('does not resurrect keys evicted by another window', async () => {
-      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
-      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const windowA = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
+      const windowB = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
 
       fileSystem.writeJson(fileUri, Array.from({ length: 6_000 }, (_, i) => ({
         key: `gh::issue-${i}`,
@@ -368,7 +368,7 @@ describe('ReadStateStore', () => {
 
     it('keeps cached keys when the remote snapshot is temporarily unavailable', async () => {
       fileSystem.writeJson(fileUri, ['gh::keep']);
-      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await store2.load();
       await vscode.workspace.fs.delete(fileUri);
 
@@ -381,7 +381,7 @@ describe('ReadStateStore', () => {
     it('keeps cached keys when the remote snapshot is malformed', async () => {
       fileSystem.writeJson(fileUri, ['gh::keep']);
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await store2.load();
       fileSystem.writeJson(fileUri, { invalid: true });
 
@@ -396,7 +396,7 @@ describe('ReadStateStore', () => {
     it('keeps cached keys when the remote snapshot is an invalid array', async () => {
       fileSystem.writeJson(fileUri, ['gh::keep']);
       const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
-      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const store2 = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       await store2.load();
       fileSystem.writeJson(fileUri, [42]);
 
@@ -492,7 +492,7 @@ describe('ReadStateStore', () => {
     it('lazy-loads on first call', async () => {
       fileSystem.writeJson(fileUri, ['gh::keep', 'gh::stale']);
 
-      const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
@@ -509,7 +509,7 @@ describe('ReadStateStore', () => {
     it('ignores legacy stored keys without the provider delimiter', async () => {
       fileSystem.writeJson(fileUri, ['legacy-key', 'gh::stale']);
 
-      const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'));
+      const freshStore = new ReadStateStore(new JsonFileStore(fileUri, 'read-state.json'), 0);
       const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
@@ -536,6 +536,134 @@ describe('ReadStateStore', () => {
       expect(store.has('provider-a::keep')).toBe(true);
       expect(store.has('provider-a::stale')).toBe(false);
       expect(store.has('provider-b::stale')).toBe(true);
+    });
+  });
+
+
+  describe('debounced persistence', () => {
+    it('coalesces multiple rapid mutations into one persisted write', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new ReadStateStore(fileStore);
+      const persistListener = vi.fn();
+      debouncedStore.onDidPersist(persistListener);
+
+      try {
+        await debouncedStore.add('gh::issue-1');
+        await debouncedStore.addMany(['gh::issue-2', 'gh::issue-3']);
+        await debouncedStore.deleteMany(['gh::issue-2']);
+
+        expect(fileStore.write).not.toHaveBeenCalled();
+        expect(persistListener).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(250);
+
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+        expect(persistListener).toHaveBeenCalledTimes(1);
+        expect((persisted as Array<{ key: string }>).map(record => record.key).sort()).toEqual(['gh::issue-1', 'gh::issue-3']);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('exposes latest in-memory keys before the debounce flush', async () => {
+      vi.useFakeTimers();
+      const fileStore = {
+        read: vi.fn(async () => undefined as unknown[] | undefined),
+        write: vi.fn(async (_value: unknown[]) => undefined),
+      };
+      const debouncedStore = new ReadStateStore(fileStore);
+
+      try {
+        await debouncedStore.add('gh::issue-1');
+        await debouncedStore.add('gh::issue-2');
+        await debouncedStore.deleteMany(['gh::issue-1']);
+
+        expect(debouncedStore.has('gh::issue-1')).toBe(false);
+        expect(debouncedStore.has('gh::issue-2')).toBe(true);
+        expect([...debouncedStore.keys()]).toEqual(['gh::issue-2']);
+        expect(fileStore.write).not.toHaveBeenCalled();
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes pending writes when disposed', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new ReadStateStore(fileStore);
+
+      try {
+        await debouncedStore.add('gh::issue-1');
+        expect(fileStore.write).not.toHaveBeenCalled();
+
+        await debouncedStore.dispose();
+
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+        expect(persisted).toEqual([expect.objectContaining({ key: 'gh::issue-1' })]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes pending writes before invalidating the cache', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new ReadStateStore(fileStore);
+
+      try {
+        await debouncedStore.add('gh::local');
+        persisted = [{ key: 'gh::remote', createdAt: 1 }];
+
+        await debouncedStore.invalidateCache();
+        await debouncedStore.load();
+
+        expect(debouncedStore.has('gh::local')).toBe(true);
+        expect(debouncedStore.has('gh::remote')).toBe(true);
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes synchronously when prune returns', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new ReadStateStore(fileStore);
+
+      try {
+        await debouncedStore.addMany(['gh::keep', 'gh::stale']);
+        expect(fileStore.write).not.toHaveBeenCalled();
+
+        const pruned = await debouncedStore.prune(new Map<string, ProviderItem[]>([
+          ['gh', [{ externalId: 'keep', title: 'Keep' }]],
+        ]));
+
+        expect(pruned).toBe(1);
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+        expect(persisted).toEqual([expect.objectContaining({ key: 'gh::keep' })]);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
     });
   });
 });
