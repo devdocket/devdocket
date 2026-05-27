@@ -576,7 +576,7 @@ describe('WatcherService', () => {
       await service.flushPersistence();
 
       expect(watchStore.saveAll).toHaveBeenCalledTimes(1);
-      const [runs] = (watchStore.saveAll as ReturnType<typeof vi.fn>).mock.calls[0] as [WatchedRun[]];
+      const [runs] = (watchStore.saveAll as ReturnType<typeof vi.fn>).mock.calls[0] as [WatchedRun[], unknown[]];
       expect(runs[0].status.jobs[0].state).toBe('completed');
     });
 
