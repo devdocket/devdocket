@@ -522,6 +522,58 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
     });
 
+    it('resets file progress when a fresh chat starts for the same PR', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        })),
+      };
+      const lastFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/second.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      await handler(
+        createMockRequest('Continue', lastFileModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      const freshResult = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      expect((freshResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((freshResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
     it('does not downgrade a model-reported lastFile phase when files appear to remain', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({

@@ -113,7 +113,7 @@ export class WalkthroughParticipant {
       this.log.debug(`Using cached worktree at ${info.worktreePath}`);
     }
     this.sessions.set(prUrl, info);
-    const progress = await this.getOrCreateProgress(prUrl, info);
+    const progress = await this.getOrCreateProgress(prUrl, info, context.history.length === 0);
 
     if (token.isCancellationRequested) {
       this.log.info('Request cancelled before model invocation');
@@ -350,9 +350,13 @@ export class WalkthroughParticipant {
     };
   }
 
-  private async getOrCreateProgress(prUrl: string, info: WorktreeInfo): Promise<WalkthroughProgress> {
+  private async getOrCreateProgress(
+    prUrl: string,
+    info: WorktreeInfo,
+    resetExisting: boolean,
+  ): Promise<WalkthroughProgress> {
     const existing = this.progressByPrUrl.get(prUrl);
-    if (existing) {
+    if (existing && !resetExisting) {
       return existing;
     }
 
