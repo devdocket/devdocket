@@ -106,7 +106,7 @@ import {
 } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the name for items emitted by providers. Provider code should import and emit `ProviderItem`. Providers that poll rate-limited APIs can also import `PollingBackoffError` and the header-parsing helpers so periodic background refreshes automatically slow down when the upstream service asks them to.
+`ProviderItem` is the name for items emitted by providers. Provider code should import and emit `ProviderItem`. Providers that extend `BaseProvider` can also import `PollingBackoffError` and the header-parsing helpers so the periodic schedule started by `startPeriodicRefresh()` automatically slows down when the upstream service asks them to.
 
 If you would rather avoid the GitHub Packages dependency, you can re-declare the small subset of interfaces your extension needs. Copy the following declarations into your provider code:
 
