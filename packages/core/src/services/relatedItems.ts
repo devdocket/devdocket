@@ -201,10 +201,10 @@ function getRelatedItemsIndexSignature(providerItems: Map<string, ProviderItem[]
 }
 
 function getWorkGraphSignature(workGraph: WorkGraph): string {
-  const getChangeVersion = (workGraph as Partial<Pick<WorkGraph, 'getChangeVersion'>>).getChangeVersion;
-  const changeVersion = getChangeVersion?.call(workGraph);
-  if (changeVersion !== undefined) {
-    return `v:${changeVersion}`;
+  const getRelatedItemsVersion = (workGraph as Partial<Pick<WorkGraph, 'getRelatedItemsVersion'>>).getRelatedItemsVersion;
+  const relatedItemsVersion = getRelatedItemsVersion?.call(workGraph);
+  if (relatedItemsVersion !== undefined) {
+    return `v:${relatedItemsVersion}`;
   }
 
   let hash = 2166136261;

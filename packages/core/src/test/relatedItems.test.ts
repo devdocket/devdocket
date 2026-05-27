@@ -314,7 +314,7 @@ describe('resolveRelatedItemsFor', () => {
       ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
     ]));
     const workGraph = {
-      getChangeVersion: vi.fn(() => 1),
+      getRelatedItemsVersion: vi.fn(() => 1),
       getAll: vi.fn(() => [issue, pr]),
       findItemByProvenance: vi.fn((providerId: string, externalId: string) => [issue, pr].find(
         item => item.providerId === providerId && item.externalId === externalId,
@@ -362,7 +362,7 @@ describe('resolveRelatedItemsFor', () => {
       ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr' }]],
     ]));
     const workGraph = {
-      getChangeVersion: vi.fn(() => 1),
+      getRelatedItemsVersion: vi.fn(() => 1),
       getAll: vi.fn(() => { throw new Error('workGraph.getAll should not be called'); }),
       findItemByProvenance: vi.fn(() => { throw new Error('workGraph.findItemByProvenance should not be called'); }),
     } as any;
@@ -384,7 +384,7 @@ describe('resolveRelatedItemsFor', () => {
       ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
     ]));
     const workGraph = {
-      getChangeVersion: vi.fn(() => 1),
+      getRelatedItemsVersion: vi.fn(() => 1),
       getAll: vi.fn(() => items),
       findItemByProvenance: vi.fn((providerId: string, externalId: string) => items.find(
         item => item.providerId === providerId && item.externalId === externalId,

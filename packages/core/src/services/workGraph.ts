@@ -38,7 +38,7 @@ export class WorkGraph {
   private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
-  private changeVersion = 0;
+  private relatedItemsVersion = 0;
   private currentMutation: Promise<void> = Promise.resolve();
   private shutdownRequested = false;
   private readonly _onDidChange = new vscode.EventEmitter<WorkGraphChangeEvent>();
@@ -100,6 +100,7 @@ export class WorkGraph {
       }
     }
     this.invalidateStateCache();
+    this.invalidateRelatedItemsCache();
     logger.debug(`Loaded ${items.length} work items from store`);
     await this.backfillSortOrder();
   }
@@ -149,14 +150,17 @@ export class WorkGraph {
     return Array.from(this.items.values());
   }
 
-  /** Cache-invalidation token that may increase more often than user-visible mutations. */
-  getChangeVersion(): number {
-    return this.changeVersion;
+  /** Cache-invalidation token for derived related-item lookups. */
+  getRelatedItemsVersion(): number {
+    return this.relatedItemsVersion;
+  }
+
+  private invalidateRelatedItemsCache(): void {
+    this.relatedItemsVersion++;
   }
 
   private invalidateStateCache(): void {
     this.stateCache = null;
-    this.changeVersion++;
   }
 
   private getOrBuildStateCache(): Map<WorkItemState, WorkItem[]> {
@@ -252,6 +256,7 @@ export class WorkGraph {
       }
     }
     this.invalidateStateCache();
+    this.invalidateRelatedItemsCache();
     this.emitDidChange();
     logger.info(`Created work item: ${item.id}`);
     return item;
@@ -321,6 +326,9 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
+    if (updated.title !== item.title) {
+      this.invalidateRelatedItemsCache();
+    }
     this.emitDidChange();
     logger.info(`Updated work item: ${id}`);
   }
@@ -646,6 +654,7 @@ export class WorkGraph {
     }
     this.items.delete(id);
     this.invalidateStateCache();
+    this.invalidateRelatedItemsCache();
     if (!options?.silent) {
       this.emitDidChange();
     }
