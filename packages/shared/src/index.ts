@@ -6,6 +6,10 @@ export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './
 export type { Logger, LogOutput, LoggerService } from './logger';
 export { BaseProvider } from './baseProvider';
 export type { ProviderItem, ProviderItemAuthor, ProviderItemCapabilities, Disposable, Event, EventEmitterLike, GitWorkInfo, ProviderBadge, RelatedItemRef, ResolvedUrlResult, WindowStateProvider } from './baseProvider';
+export { BackoffPolicy, parseRateLimitResetHeader, parseRetryAfterHeader } from './backoffPolicy';
+export type { BackoffApplyOptions, BackoffPolicyOptions, BackoffStateSnapshot } from './backoffPolicy';
+export { PollingBackoffError, isPollingBackoffError } from './pollingErrors';
+export type { PollingBackoffErrorOptions } from './pollingErrors';
 export { isSafeUrl, isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment, safeDecodeComponent } from './urlValidation';
 export type { RecoverableError, RecoverableErrorAction } from './recoverableError';
 export { isRecoverableError } from './recoverableError';

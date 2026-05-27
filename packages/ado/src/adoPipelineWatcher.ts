@@ -70,6 +70,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       displayName: `Build ${buildId}`,
       url,
       repo: `${org}/${project}`,
+      backoffKey: `dev.azure.com/${org}`,
     };
   }
 
@@ -101,7 +102,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       throw err;
     }
     if (!buildResponse.ok) {
-      throwAdoApiError(buildResponse, `Build ${identifier.runId}`);
+      await throwAdoApiError(buildResponse, `Build ${identifier.runId}`, `dev.azure.com/${org}`);
     }
     const buildData = await buildResponse.json() as AdoBuild;
 

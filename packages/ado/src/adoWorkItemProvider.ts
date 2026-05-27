@@ -703,7 +703,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     if (!response.ok) {
-      throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`);
+      await throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`, `dev.azure.com/${org}`);
     }
 
     const data = await response.json() as AdoWorkItem;
@@ -765,12 +765,12 @@ export class AdoWorkItemProvider extends BaseProvider {
       .replace(/<br\s*\/?>/gi, '\n')
       .replace(/<\/p>/gi, '\n')
       .replace(/<[^>]+>/g, '')
-      .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
       .replace(/&#39;/g, "'")
       .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }

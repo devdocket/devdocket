@@ -5,7 +5,7 @@ import { WatcherService, WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WatchStore } from '../storage/watchStore';
-import type { DevDocketRunWatcher, RunIdentifier, RunStatus } from '@devdocket/shared';
+import { PollingBackoffError, type DevDocketRunWatcher, type RunIdentifier, type RunStatus } from '@devdocket/shared';
 
 function createMockLogger() {
   return {
@@ -51,6 +51,16 @@ function createMockWatchStore(): WatchStore {
   } as unknown as WatchStore;
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 describe('WatcherService', () => {
   it('keeps host-specific run URL routing out of watcher services', () => {
     const serviceFiles = [
@@ -76,9 +86,11 @@ describe('WatcherService', () => {
   let prRegistry: PRWatcherRegistry;
   let logger: ReturnType<typeof createMockLogger>;
   let watchStore: WatchStore;
+  let mathRandomSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    mathRandomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
     logger = createMockLogger();
     registry = new WatcherRegistry(logger);
     prRegistry = new PRWatcherRegistry(logger);
@@ -88,6 +100,7 @@ describe('WatcherService', () => {
 
   afterEach(() => {
     service.dispose();
+    mathRandomSpy.mockRestore();
     vi.useRealTimers();
   });
 
@@ -291,6 +304,60 @@ describe('WatcherService', () => {
       expect(completeSpy).toHaveBeenCalledTimes(1);
     });
 
+    it('polls many run watches in parallel across providers', async () => {
+      const pollDelayMs = 1000;
+      const createParallelWatcher = (providerId: string) => createMockWatcher(
+        providerId,
+        async () => ({ overallState: 'running', conclusion: undefined, jobs: [] }),
+      );
+
+      const providerA = createParallelWatcher('provider-a');
+      const providerB = createParallelWatcher('provider-b');
+      for (const watcher of [providerA, providerB]) {
+        (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation((identifier: RunIdentifier) => {
+          const key = `${watcher.id}:${identifier.runId}`;
+          const callCount = (((watcher as unknown as { _counts?: Map<string, number> })._counts ??= new Map<string, number>()).get(key) ?? 0) + 1;
+          (watcher as unknown as { _counts: Map<string, number> })._counts.set(key, callCount);
+          if (callCount === 1) {
+            return Promise.resolve({ overallState: 'running', conclusion: undefined, jobs: [] });
+          }
+          return new Promise(resolve => {
+            setTimeout(() => resolve({
+              overallState: 'running',
+              conclusion: undefined,
+              displayName: `Polled ${identifier.runId}`,
+              jobs: [],
+            }), pollDelayMs);
+          });
+        });
+        registry.register(watcher);
+      }
+
+      for (let index = 0; index < 4; index += 1) {
+        await service.startWatch({ ...createIdentifier('provider-a'), runId: `a-${index}`, displayName: `A ${index}` });
+        await service.startWatch({ ...createIdentifier('provider-b'), runId: `b-${index}`, displayName: `B ${index}` });
+      }
+      await service.flushPersistence();
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+
+      let completed = false;
+      const pollPromise = (service as any).pollAllWatches().then(() => {
+        completed = true;
+      });
+
+      await vi.advanceTimersByTimeAsync(pollDelayMs - 1);
+      expect(completed).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1);
+      await pollPromise;
+
+      expect(completed).toBe(true);
+      expect(service.getActiveWatches()).toHaveLength(8);
+      expect(service.getActiveWatches().every(watch => watch.identifier.displayName?.startsWith('Polled '))).toBe(true);
+      expect(providerA.getRunStatus).toHaveBeenCalledTimes(8);
+      expect(providerB.getRunStatus).toHaveBeenCalledTimes(8);
+    });
+
     it('sets hasWarning after 3 consecutive failures and skips run', async () => {
       let initialCall = true;
       const watcher = createMockWatcher('test');
@@ -318,6 +385,57 @@ describe('WatcherService', () => {
       await vi.advanceTimersByTimeAsync(60000);
       const callCountAfter = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfter).toBe(callCountBefore); // No new calls
+    });
+
+    it('backs off run polling until Retry-After expires', async () => {
+      const { workspace } = await import('../test/__mocks__/vscode');
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'pollingIntervalSeconds') { return 15; }
+          return defaultValue;
+        }),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
+
+      let callCount = 0;
+      const watcher = createMockWatcher('test');
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return { overallState: 'running' as const, conclusion: undefined, jobs: [] };
+        }
+        if (callCount === 2) {
+          throw new PollingBackoffError({
+            message: 'Rate limited',
+            backoffKey: 'api.github.com',
+            statusCode: 429,
+            retryAfterMs: 60_000,
+          });
+        }
+        return { overallState: 'running' as const, conclusion: undefined, jobs: [] };
+      });
+      registry.register(watcher);
+
+      await service.startWatch({ ...createIdentifier(), backoffKey: 'api.github.com' });
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+      expect(service.getActiveWatches()[0].hasWarning).not.toBe(true);
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(3);
+      expect(service.getActiveWatches()[0].hasWarning).not.toBe(true);
+
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((_: string, defaultValue?: any) => defaultValue),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
     });
 
     it('stops polling when no active watches remain', async () => {
@@ -374,6 +492,31 @@ describe('WatcherService', () => {
       await Promise.resolve();
       expect(watchStore.saveAll).not.toHaveBeenCalled();
     });
+
+    it('skips overlapping polls while one is already in flight', async () => {
+      let callCount = 0;
+      const deferredPoll = createDeferred<RunStatus>();
+      const watcher = createMockWatcher('test');
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        callCount += 1;
+        if (callCount === 1) {
+          return Promise.resolve({ overallState: 'running', conclusion: undefined, jobs: [] });
+        }
+        return deferredPoll.promise;
+      });
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+
+      const firstPollPromise = (service as any).pollAllWatches();
+      await vi.waitFor(() => expect(watcher.getRunStatus).toHaveBeenCalledTimes(2));
+
+      await (service as any).pollAllWatches();
+      expect(logger.warn).toHaveBeenCalledWith('Poll already in flight, skipping tick');
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+
+      deferredPoll.resolve({ overallState: 'completed', conclusion: 'success', jobs: [] });
+      await firstPollPromise;
+    });
   });
 
   describe('persistence', () => {
@@ -426,6 +569,32 @@ describe('WatcherService', () => {
       
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getActiveWatches()[0].identifier.runId).toBe('run-1');
+    });
+
+    it('backfills backoff keys for persisted run watches', async () => {
+      const watcher = createMockWatcher('test');
+      (watcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'test',
+        runId: 'run-1',
+        displayName: 'Test Run',
+        url: 'https://example.com/run/1',
+        backoffKey: 'api.example.com',
+      });
+      registry.register(watcher);
+
+      const persistedWatch: WatchedRun = {
+        identifier: createIdentifier(),
+        status: { overallState: 'running', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      delete persistedWatch.identifier.backoffKey;
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [persistedWatch], prs: [] });
+
+      await service.loadPersistedWatches();
+
+      expect(service.getActiveWatches()[0].identifier.backoffKey).toBe('api.example.com');
     });
 
     it('does not clobber a run watch started while persisted watches load', async () => {
@@ -517,6 +686,34 @@ describe('WatcherService', () => {
 
       await expect(service.isPRWatched(identifier)).resolves.toBe(true);
       expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('backfills backoff keys for persisted PR watches', async () => {
+      const prWatcher = createMockPRWatcher();
+      (prWatcher.parsePRUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'test-pr',
+        prId: '42',
+        displayName: 'PR #42',
+        url: 'https://example.com/pr/42',
+        repo: 'owner/repo',
+        backoffKey: 'api.example.com',
+      });
+      prRegistry.register(prWatcher);
+
+      const persistedPR = {
+        identifier: createPRIdentifier(),
+        prState: 'open' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      delete persistedPR.identifier.backoffKey;
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [], prs: [persistedPR] });
+
+      await service.loadPersistedWatches();
+
+      expect(service.getAllPRWatches()[0].identifier.backoffKey).toBe('api.example.com');
     });
 
     it('caches persisted PR watch lookups across repeated checks', async () => {
@@ -1029,6 +1226,98 @@ describe('WatcherService', () => {
 
       expect(completeSpy).toHaveBeenCalledTimes(1);
       expect(service.getActivePRWatches()[0].prState).toBe('merged');
+    });
+
+    it('keeps per-PR child run mutations correct after parallel polling', async () => {
+      const runWatcher = createMockWatcher('github-actions');
+      const runCallCounts = new Map<string, number>();
+      (runWatcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation((identifier: RunIdentifier) => {
+        const callCount = (runCallCounts.get(identifier.runId) ?? 0) + 1;
+        runCallCounts.set(identifier.runId, callCount);
+        if (callCount === 1) {
+          return Promise.resolve({ overallState: 'running', conclusion: undefined, jobs: [] });
+        }
+        return Promise.resolve({
+          overallState: identifier.runId === 'run-3' ? 'queued' : 'running',
+          conclusion: undefined,
+          displayName: `Updated ${identifier.runId}`,
+          jobs: [],
+        });
+      });
+      registry.register(runWatcher);
+
+      const prPollCounts = new Map<string, number>();
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({ prState: 'open', runs: [] }));
+      (prWatcher.getPRRunsSnapshot as ReturnType<typeof vi.fn>).mockImplementation((identifier: import('@devdocket/shared').PRIdentifier) => {
+        const callCount = (prPollCounts.get(identifier.prId) ?? 0) + 1;
+        prPollCounts.set(identifier.prId, callCount);
+        if (callCount === 1) {
+          return Promise.resolve({
+            prState: 'open',
+            runs: [{
+              providerId: 'github-actions',
+              runId: identifier.prId === '42' ? 'run-1' : 'run-2',
+              displayName: `Initial ${identifier.prId}`,
+              url: `https://example.com/run/${identifier.prId}`,
+              repo: 'owner/repo',
+            }],
+          });
+        }
+
+        return new Promise(resolve => {
+          const delay = identifier.prId === '42' ? 300 : 100;
+          setTimeout(() => resolve(identifier.prId === '42'
+            ? {
+                prState: 'open',
+                displayName: 'PR #42 renamed',
+                runs: [
+                  {
+                    providerId: 'github-actions',
+                    runId: 'run-1',
+                    displayName: 'Run 1',
+                    url: 'https://example.com/run/1',
+                    repo: 'owner/repo',
+                  },
+                  {
+                    providerId: 'github-actions',
+                    runId: 'run-3',
+                    displayName: 'Run 3',
+                    url: 'https://example.com/run/3',
+                    repo: 'owner/repo',
+                  },
+                ],
+              }
+            : {
+                prState: 'open',
+                runs: [],
+              }), delay);
+        });
+      });
+      prRegistry.register(prWatcher);
+
+      const firstPR = await service.startPRWatch(createPRIdentifier('test-pr'));
+      const secondPR = await service.startPRWatch({ ...createPRIdentifier('test-pr'), prId: '99', displayName: 'PR #99' });
+
+      expect(service.getChildRuns(service.getPRWatchKey(firstPR.identifier)).map(run => run.identifier.runId)).toEqual(['run-1']);
+      expect(service.getChildRuns(service.getPRWatchKey(secondPR.identifier)).map(run => run.identifier.runId)).toEqual(['run-2']);
+
+      const pollPromise = (service as any).pollAllWatches();
+      await vi.advanceTimersByTimeAsync(300);
+      await pollPromise;
+
+      expect(service.isPRActive(secondPR.identifier)).toBe(false);
+      expect(service.getActivePRWatches()).toHaveLength(1);
+      expect(service.getActivePRWatches()[0].identifier.displayName).toBe('PR #42 renamed');
+      expect(service.getChildRuns(service.getPRWatchKey(firstPR.identifier)).map(run => run.identifier.runId).sort()).toEqual(['run-1', 'run-3']);
+      expect(service.getActiveWatches().map(run => run.identifier.runId).sort()).toEqual(['run-1', 'run-3']);
+      expect(service.getActiveWatches().map(run => ({
+        runId: run.identifier.runId,
+        displayName: run.identifier.displayName,
+        overallState: run.status.overallState,
+      })).sort((left, right) => left.runId.localeCompare(right.runId))).toEqual([
+        { runId: 'run-1', displayName: 'Updated run-1', overallState: 'running' },
+        { runId: 'run-3', displayName: 'Run 3', overallState: 'running' },
+      ]);
     });
 
     it('loads persisted PR watches', async () => {

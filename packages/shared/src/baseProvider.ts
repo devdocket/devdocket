@@ -1,3 +1,5 @@
+import { BackoffPolicy } from './backoffPolicy';
+import { isPollingBackoffError } from './pollingErrors';
 import type { ProviderRefreshOptions } from './apiTypes';
 import type { CancellationTokenLike } from './runWatcher';
 import { createAbortError } from './signalUtils';
@@ -240,6 +242,9 @@ export abstract class BaseProvider {
 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   private periodicRefreshIntervalMs: number | undefined;
+  private periodicBackoffPolicy: BackoffPolicy | undefined;
+  protected periodicBackoffJitterRatio = 0.1;
+  protected periodicBackoffRandom: () => number = Math.random;
   private _lastRefreshTime = 0;
   private _lastRefreshAttemptTime = 0;
   protected _isRefreshing = false;
@@ -300,9 +305,12 @@ export abstract class BaseProvider {
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
-    const elapsedMs = Date.now() - this._lastRefreshAttemptTime;
+    const now = Date.now();
+    const elapsedMs = now - this._lastRefreshAttemptTime;
     const intervalsElapsed = Math.floor(elapsedMs / requiredIntervalMs) + 1;
-    const delayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
+    const intervalDelayMs = (intervalsElapsed * requiredIntervalMs) - elapsedMs;
+    const backoffDelayMs = this.periodicBackoffPolicy?.getRemainingMs(now) ?? 0;
+    const delayMs = Math.max(intervalDelayMs, backoffDelayMs);
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       if (this._disposed || this._shuttingDown) {
@@ -423,6 +431,12 @@ export abstract class BaseProvider {
     const clampedInterval = Math.max(interval, 60);
     const startTime = Date.now();
     this.periodicRefreshIntervalMs = clampedInterval * 1000;
+    this.periodicBackoffPolicy = new BackoffPolicy({
+      baseDelayMs: this.periodicRefreshIntervalMs,
+      maxDelayMs: 60 * 60 * 1000,
+      jitterRatio: this.periodicBackoffJitterRatio,
+      random: this.periodicBackoffRandom,
+    });
     this._lastRefreshTime = startTime;
     this._lastRefreshAttemptTime = startTime;
     this.scheduleNextPeriodicRefresh();
@@ -434,6 +448,7 @@ export abstract class BaseProvider {
       this.refreshTimer = undefined;
     }
     this.periodicRefreshIntervalMs = undefined;
+    this.periodicBackoffPolicy = undefined;
   }
 
   /** Aborts the active refresh, if any, and waits for it to settle without entering shutdown. */
@@ -479,12 +494,17 @@ export abstract class BaseProvider {
       await this.runAbortableRefresh(signal => this.doBackgroundRefresh(signal));
       if (!this.isAbortExpected) {
         this.markRefreshSuccess();
+        this.periodicBackoffPolicy?.recordSuccess();
       }
     } catch (error) {
       const isExpectedAbort = error instanceof Error && error.name === 'AbortError' && this.isExpectedAbortError(error);
-      if (!isExpectedAbort) {
-        throw error;
+      if (isExpectedAbort) {
+        return;
       }
+      if (isPollingBackoffError(error)) {
+        this.periodicBackoffPolicy?.recordFailure({ retryAfterMs: error.retryAfterMs });
+      }
+      throw error;
     } finally {
       this._isRefreshing = false;
     }

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseProvider, ProviderItem, EventEmitterLike, WindowStateProvider, Disposable } from '../baseProvider';
+import { PollingBackoffError } from '../pollingErrors';
 import { createAbortError } from '../signalUtils';
 
 
@@ -87,9 +88,11 @@ class TestProvider extends BaseProvider {
 describe('BaseProvider', () => {
   beforeEach(() => {
     vi.useFakeTimers();
+    vi.spyOn(Math, 'random').mockReturnValue(0);
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.useRealTimers();
   });
 
@@ -480,6 +483,31 @@ describe('BaseProvider', () => {
 
       // Second tick — should fire normally
       await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
+    it('backs off periodic refreshes after a throttled failure', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      provider.refreshError = new PollingBackoffError({
+        message: 'Rate limited',
+        backoffKey: 'api.github.com',
+        statusCode: 429,
+        retryAfterMs: 120_000,
+      });
+
+      provider.startPeriodicRefresh(60);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.refreshError = undefined;
+
+      await vi.advanceTimersByTimeAsync(119_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      await vi.advanceTimersByTimeAsync(1_000);
       expect(provider.backgroundRefreshCalls).toBe(2);
 
       provider.dispose();

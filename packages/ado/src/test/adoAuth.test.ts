@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authentication } from 'vscode';
-import { retryAdoWithAuth } from '../adoAuth';
+import { PollingBackoffError } from '@devdocket/shared';
+import { retryAdoWithAuth, throwAdoApiError } from '../adoAuth';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -77,5 +78,24 @@ describe('retryAdoWithAuth', () => {
       { createIfNone: true },
     );
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('throwAdoApiError', () => {
+  it('uses an availability message for 503 responses', async () => {
+    const response = {
+      status: 503,
+      statusText: 'Service Unavailable',
+      headers: { get: (name: string) => name === 'retry-after' ? '30' : null },
+    } as unknown as Response;
+
+    await expect(throwAdoApiError(response, 'Build 123', 'dev.azure.com/org')).rejects.toMatchObject({
+      name: 'PollingBackoffError',
+      message: 'Azure DevOps is temporarily unavailable for Build 123. Retry after 30s.',
+      backoffKey: 'dev.azure.com/org',
+      statusCode: 503,
+      retryAfterMs: 30_000,
+    });
+    await expect(throwAdoApiError(response, 'Build 123', 'dev.azure.com/org')).rejects.toBeInstanceOf(PollingBackoffError);
   });
 });

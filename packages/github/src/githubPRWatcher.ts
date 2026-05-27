@@ -7,6 +7,7 @@ import type {
   RunIdentifier,
   CancellationTokenLike,
 } from '@devdocket/shared';
+import { throwApiError } from './githubApiHelpers';
 
 interface GitHubPR {
   number: number;
@@ -62,6 +63,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
       displayName: `PR #${prNumber}`,
       url,
       repo: `${owner}/${repo}`,
+      backoffKey: 'api.github.com',
     };
   }
 
@@ -82,6 +84,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
     const prData = await this.fetchApi<GitHubPR>(
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/pulls/${encodedPrNumber}`,
       token,
+      `GitHub PR ${identifier.prId}`,
     );
 
     const prState: PRState = prData.merged
@@ -98,6 +101,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
     const checkRunsData = await this.fetchApi<{ check_runs: GitHubCheckRun[] }>(
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/commits/${prData.head.sha}/check-runs?per_page=100`,
       token,
+      `GitHub check runs for PR ${identifier.prId}`,
     );
 
     const runs: RunIdentifier[] = [];
@@ -121,6 +125,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
           displayName: cr.name,
           url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`,
           repo: `${owner}/${repo}`,
+          backoffKey: 'api.github.com',
         });
         continue;
       }
@@ -133,13 +138,14 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
         displayName: cr.name,
         url: checkUrl,
         repo: `${owner}/${repo}`,
+        backoffKey: 'api.github.com',
       });
     }
 
     return { prState, runs, displayName: updatedDisplayName };
   }
 
-  private async fetchApi<T>(url: string, token?: CancellationTokenLike): Promise<T> {
+  private async fetchApi<T>(url: string, token: CancellationTokenLike | undefined, label: string): Promise<T> {
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
     if (!session) {
       throw new Error('No GitHub authentication session available. Sign in to GitHub to watch PR pipelines.');
@@ -167,20 +173,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
     }
 
     if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('PR not found or access denied');
-      }
-      if (response.status === 401) {
-        throw new Error('GitHub authentication failed. Please re-authenticate.');
-      }
-      if (response.status === 403) {
-        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
-        if (rateLimitRemaining === '0') {
-          throw new Error('GitHub API rate limit exceeded. Please wait and try again.');
-        }
-        throw new Error('GitHub access denied. Check repository permissions.');
-      }
-      throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+      await throwApiError(response, label);
     }
 
     return await response.json() as T;
