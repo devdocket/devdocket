@@ -17,7 +17,7 @@ Your extension must declare a dependency on DevDocket so that VS Code activates 
 
 ### Installing `@devdocket/shared`
 
-The `@devdocket/shared` package provides the TypeScript types and base classes (`ProviderItem`, `BaseProvider`, `Event`, `Disposable`, etc.) needed to build providers and actions with full type safety.
+The `@devdocket/shared` package provides the TypeScript types, base classes, and polling helpers (`ProviderItem`, `BaseProvider`, `Event`, `Disposable`, `BackoffPolicy`, `parseRetryAfterHeader`, `parseRateLimitResetHeader`, `PollingBackoffError`, `isPollingBackoffError`, etc.) needed to build providers and actions with full type safety.
 
 The package is published to the GitHub Packages npm registry. Add a `.npmrc` file to your project to configure the `@devdocket` scope:
 
@@ -36,10 +36,15 @@ npm install @devdocket/shared
 You can then import types directly instead of redefining them:
 
 ```ts
-import { BaseProvider, type ProviderItem } from '@devdocket/shared';
+import {
+  BaseProvider,
+  PollingBackoffError,
+  parseRetryAfterHeader,
+  type ProviderItem,
+} from '@devdocket/shared';
 ```
 
-`ProviderItem` is the provider item type emitted by providers.
+`ProviderItem` is the provider item type emitted by providers. The same package also exports the polling backoff primitives providers can use to react to `Retry-After` and rate-limit headers without reimplementing their own cooldown logic. `parseRetryAfterHeader()` returns a delay in milliseconds; `parseRateLimitResetHeader()` returns an absolute reset timestamp in milliseconds that providers should convert to a delay before passing it as `retryAfterMs`.
 
 ### Acquiring the API
 
@@ -148,7 +153,10 @@ interface DevDocketProvider {
   /**
    * Called by DevDocket during initial registration/activation (for initial
    * discovery) and whenever the user requests a manual refresh. Must be safe
-   * to call multiple times and during extension activation.
+   * to call multiple times and during extension activation. Providers that
+   * extend `BaseProvider` can throw `PollingBackoffError` from their
+   * non-interactive/background refresh path to tell DevDocket's periodic
+   * polling schedule to wait longer before the next automatic refresh.
    */
   refresh(token?: vscode.CancellationToken): Promise<void>;
 

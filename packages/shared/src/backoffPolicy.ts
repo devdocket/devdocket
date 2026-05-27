@@ -1,3 +1,4 @@
+/** Configuration for a {@link BackoffPolicy}. */
 export interface BackoffPolicyOptions {
   /** Base delay to reset to after a successful request. */
   baseDelayMs: number;
@@ -11,16 +12,25 @@ export interface BackoffPolicyOptions {
   random?: () => number;
 }
 
+/** Optional inputs when applying a throttling event to a {@link BackoffPolicy}. */
 export interface BackoffApplyOptions {
+  /** Reference time for calculating the new cooldown window. */
   nowMs?: number;
+  /** Cooldown duration in milliseconds requested by the upstream service. */
   retryAfterMs?: number;
 }
 
+/** Snapshot of the current cooldown after a throttled failure is recorded. */
 export interface BackoffStateSnapshot {
   delayMs: number;
   cooldownUntilMs: number;
 }
 
+/**
+ * Tracks exponential polling backoff for one upstream quota bucket.
+ * Call {@link recordFailure} when the service throttles a request and {@link recordSuccess}
+ * after a successful retry to return to the base interval.
+ */
 export class BackoffPolicy {
   private baseDelayMs!: number;
   private maxDelayMs!: number;
@@ -103,6 +113,12 @@ export class BackoffPolicy {
   }
 }
 
+/**
+ * Parses an HTTP `Retry-After` header into a cooldown duration in milliseconds.
+ * @param value Header value as either delta-seconds or an HTTP-date.
+ * @param nowMs Reference time used when `value` is an HTTP-date.
+ * @returns The requested delay in milliseconds, or `undefined` when the header is absent or invalid.
+ */
 export function parseRetryAfterHeader(value: string | null | undefined, nowMs = Date.now()): number | undefined {
   if (!value) {
     return undefined;
@@ -126,6 +142,12 @@ export function parseRetryAfterHeader(value: string | null | undefined, nowMs = 
   return Math.max(0, parsedDate - nowMs);
 }
 
+/**
+ * Parses a rate-limit reset header that reports a Unix timestamp in seconds.
+ * @param value Header value containing the reset time in Unix seconds.
+ * @returns The reset time as a Unix timestamp in milliseconds, or `undefined` when the header is absent or invalid.
+ * Convert the result to a delay (for example, `Math.max(0, resetAtMs - Date.now())`) before passing it as `retryAfterMs`.
+ */
 export function parseRateLimitResetHeader(value: string | null | undefined): number | undefined {
   if (!value) {
     return undefined;
