@@ -165,7 +165,7 @@ export class WatcherService implements vscode.Disposable {
     }
 
     if (hadLiveWatches && (restored > 0 || restoredPRs > 0)) {
-      this.persistWatches();
+      await this.persistWatches({ immediate: true });
     }
   }
 
@@ -192,7 +192,7 @@ export class WatcherService implements vscode.Disposable {
     }
 
     if (!options?.suppressPersist) {
-      this.persistWatches();
+      void this.persistWatches({ immediate: true });
     }
     return result.watch;
   }
@@ -229,7 +229,7 @@ export class WatcherService implements vscode.Disposable {
 
     this._onDidChangePRWatches.fire();
     this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-    this.persistWatches();
+    void this.persistWatches({ immediate: true });
     return result.watch;
   }
 
@@ -243,7 +243,7 @@ export class WatcherService implements vscode.Disposable {
         this._onDidChangePRWatches.fire();
       }
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-      this.persistWatches();
+      void this.persistWatches({ immediate: true });
     }
   }
 
@@ -257,7 +257,7 @@ export class WatcherService implements vscode.Disposable {
     if (result.dismissed) {
       this._onDidChangePRWatches.fire();
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-      this.persistWatches();
+      void this.persistWatches({ immediate: true });
     }
   }
 
@@ -279,7 +279,7 @@ export class WatcherService implements vscode.Disposable {
       this.logger.info(`Dismissed ${dismissedCount} completed watch(es)`);
       this._onDidChangePRWatches.fire();
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-      this.persistWatches();
+      void this.persistWatches({ immediate: true });
     }
     return dismissedCount;
   }
@@ -497,7 +497,7 @@ export class WatcherService implements vscode.Disposable {
 
       const anyChanged = prResult.prChanged || prResult.childRunChanged || runChanged;
       if (anyChanged) {
-        this.persistWatches();
+        void this.persistWatches();
       }
 
       if (!this.runPool.hasPollableWatches() && !this.prPool.hasPollablePRWatches()) {
@@ -508,8 +508,8 @@ export class WatcherService implements vscode.Disposable {
     }
   }
 
-  private persistWatches(): void {
-    this.persistence.saveAll(this.getAllWatches(), this.getAllPRWatches());
+  private async persistWatches(options?: { immediate?: boolean }): Promise<void> {
+    await this.persistence.saveAll(this.getAllWatches(), this.getAllPRWatches(), options);
   }
 
   beginShutdown(): void {
