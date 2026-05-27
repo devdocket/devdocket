@@ -552,6 +552,105 @@ describe('WatcherService', () => {
       expect(flushed).toBe(true);
     });
 
+    it('coalesces a burst of poll changes into one debounced save', async () => {
+      const statuses: RunStatus[] = [
+        { overallState: 'running', conclusion: undefined, jobs: [] },
+        { overallState: 'running', conclusion: undefined, jobs: [{ name: 'build', state: 'running' }] },
+        { overallState: 'running', conclusion: undefined, jobs: [{ name: 'build', state: 'completed', conclusion: 'success' }] },
+      ];
+      let statusIndex = 0;
+      const watcher = createMockWatcher('test', async () => statuses[Math.min(statusIndex++, statuses.length - 1)]);
+      registry.register(watcher);
+
+      await service.startWatch(createIdentifier());
+      await service.flushPersistence();
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+
+      await (service as any).pollAllWatches();
+      await (service as any).pollAllWatches();
+
+      expect(watchStore.saveAll).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(749);
+      expect(watchStore.saveAll).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      await service.flushPersistence();
+
+      expect(watchStore.saveAll).toHaveBeenCalledTimes(1);
+      const [runs] = (watchStore.saveAll as ReturnType<typeof vi.fn>).mock.calls[0] as [WatchedRun[]];
+      expect(runs[0].status.jobs[0].state).toBe('completed');
+    });
+
+    it('does not persist when only lastPolledAt changed since the loaded snapshot', async () => {
+      const persistedWatch: WatchedRun = {
+        identifier: createIdentifier(),
+        status: { overallState: 'running', jobs: [] },
+        watchedAt: '2026-01-01T00:00:00.000Z',
+        lastPolledAt: '2026-01-01T00:00:00.000Z',
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [persistedWatch], prs: [] });
+      registry.register(createMockWatcher('test'));
+
+      await service.loadPersistedWatches();
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+
+      service.getAllWatches()[0].lastPolledAt = '2026-01-01T00:01:00.000Z';
+      await (service as any).persistWatches({ immediate: true });
+
+      expect(watchStore.saveAll).not.toHaveBeenCalled();
+    });
+
+    it('persists status and job changes even when lastPolledAt also changed', async () => {
+      const persistedWatch: WatchedRun = {
+        identifier: createIdentifier(),
+        status: { overallState: 'running', jobs: [] },
+        watchedAt: '2026-01-01T00:00:00.000Z',
+        lastPolledAt: '2026-01-01T00:00:00.000Z',
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [persistedWatch], prs: [] });
+      registry.register(createMockWatcher('test'));
+
+      await service.loadPersistedWatches();
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+
+      const watch = service.getAllWatches()[0];
+      watch.lastPolledAt = '2026-01-01T00:01:00.000Z';
+      watch.status = { overallState: 'running', jobs: [{ name: 'build', state: 'completed', conclusion: 'success' }] };
+      await (service as any).persistWatches({ immediate: true });
+
+      expect(watchStore.saveAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('flushPersistence drains pending debounced saves without waiting for the timer', async () => {
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+      await service.flushPersistence();
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+
+      service.getAllWatches()[0].status = { overallState: 'completed', conclusion: 'success', jobs: [] };
+      void (service as any).persistWatches();
+
+      await service.flushPersistence();
+
+      expect(watchStore.saveAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('dispose flushes pending debounced saves', async () => {
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+      await service.flushPersistence();
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+
+      service.getAllWatches()[0].status = { overallState: 'completed', conclusion: 'success', jobs: [] };
+      void (service as any).persistWatches();
+      service.dispose();
+
+      await vi.waitFor(() => expect(watchStore.saveAll).toHaveBeenCalledTimes(1));
+    });
+
     it('loads persisted watches on loadPersistedWatches', async () => {
       const watcher = createMockWatcher('test');
       registry.register(watcher);

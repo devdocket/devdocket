@@ -2,10 +2,47 @@ import * as vscode from 'vscode';
 import { WatchStore } from '../storage/watchStore';
 import type { WatchedPR, WatchedRun } from './watcherService';
 
-function clonePersistedSnapshot(runs: WatchedRun[], prs: WatchedPR[]): { runs: WatchedRun[]; prs: WatchedPR[] } {
+interface WatchSnapshot {
+  runs: WatchedRun[];
+  prs: WatchedPR[];
+}
+
+interface SaveOptions {
+  immediate?: boolean;
+}
+
+const DEFAULT_DEBOUNCE_MS = 750;
+
+function clonePersistedSnapshot(runs: WatchedRun[], prs: WatchedPR[]): WatchSnapshot {
   // Watch persistence is JSON-backed, so cloning through JSON preserves the queued
   // snapshot without keeping references to later in-memory mutations.
-  return JSON.parse(JSON.stringify({ runs, prs })) as { runs: WatchedRun[]; prs: WatchedPR[] };
+  return JSON.parse(JSON.stringify({ runs, prs })) as WatchSnapshot;
+}
+
+function omitLastPolledAt(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(omitLastPolledAt);
+  }
+
+  if (typeof value !== 'object' || value === null) {
+    return value;
+  }
+
+  const result: Record<string, unknown> = {};
+  for (const [key, childValue] of Object.entries(value)) {
+    if (key !== 'lastPolledAt') {
+      result[key] = omitLastPolledAt(childValue);
+    }
+  }
+  return result;
+}
+
+function snapshotsEqualIgnoringLastPolledAt(left: WatchSnapshot | undefined, right: WatchSnapshot): boolean {
+  if (!left) {
+    return false;
+  }
+
+  return JSON.stringify(omitLastPolledAt(left)) === JSON.stringify(omitLastPolledAt(right));
 }
 
 type WatcherLogger = {
@@ -22,10 +59,14 @@ export class WatchPersistence {
   private readonly pendingPRWatchKeys = new Set<string>();
   private persistFailureNotified = false;
   private pendingSave: Promise<void> = Promise.resolve();
+  private pendingSnapshot: WatchSnapshot | undefined;
+  private lastPersistedSnapshot: WatchSnapshot | undefined;
+  private debounceTimer: NodeJS.Timeout | undefined;
 
   constructor(
     private readonly watchStore: WatchStore,
     private readonly logger: WatcherLogger,
+    private readonly debounceMs = DEFAULT_DEBOUNCE_MS,
   ) {}
 
   async loadAll(getPRWatchKey: (pr: WatchedPR) => string): Promise<{ runs: WatchedRun[]; prs: WatchedPR[] }> {
@@ -36,6 +77,7 @@ export class WatchPersistence {
       ...data.prs.map(getPRWatchKey),
     ]);
     this.pendingPRWatchKeys.clear();
+    this.lastPersistedSnapshot = clonePersistedSnapshot(data.runs, data.prs);
     return data;
   }
 
@@ -61,31 +103,59 @@ export class WatchPersistence {
     this.pendingPRWatchKeys.add(key);
   }
 
-  saveAll(runs: WatchedRun[], prs: WatchedPR[]): void {
-    const snapshot = clonePersistedSnapshot(runs, prs);
-    this.pendingSave = this.pendingSave
-      .catch(() => undefined)
-      .then(() => this.persistSnapshot(snapshot))
-      .catch(() => undefined);
+  saveAll(runs: WatchedRun[], prs: WatchedPR[], options: SaveOptions = {}): Promise<void> | void {
+    this.pendingSnapshot = clonePersistedSnapshot(runs, prs);
+
+    if (options.immediate) {
+      return this.flush();
+    }
+
+    if (!this.debounceTimer) {
+      this.debounceTimer = setTimeout(() => {
+        this.debounceTimer = undefined;
+        void this.flush();
+      }, this.debounceMs);
+    }
   }
 
   async flush(): Promise<void> {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = undefined;
+    }
+
     while (true) {
+      const snapshot = this.pendingSnapshot;
+      this.pendingSnapshot = undefined;
+
+      if (snapshot) {
+        this.pendingSave = this.pendingSave
+          .catch(() => undefined)
+          .then(() => this.persistSnapshot(snapshot))
+          .catch(() => undefined);
+      }
+
       const pendingSave = this.pendingSave;
       try {
         await pendingSave;
       } catch {
         // saveAll already surfaced the failure; flushing is best-effort.
       }
-      if (pendingSave === this.pendingSave) {
+
+      if (!this.pendingSnapshot && pendingSave === this.pendingSave) {
         return;
       }
     }
   }
 
-  private async persistSnapshot(snapshot: { runs: WatchedRun[]; prs: WatchedPR[] }): Promise<void> {
+  private async persistSnapshot(snapshot: WatchSnapshot): Promise<void> {
+    if (snapshotsEqualIgnoringLastPolledAt(this.lastPersistedSnapshot, snapshot)) {
+      return;
+    }
+
     try {
       await this.watchStore.saveAll(snapshot.runs, snapshot.prs);
+      this.lastPersistedSnapshot = snapshot;
       if (this.persistFailureNotified) {
         this.persistFailureNotified = false;
         this.logger.info('Watch persistence recovered.');
@@ -103,6 +173,7 @@ export class WatchPersistence {
   }
 
   dispose(): void {
+    void this.flush();
     this.persistedPRWatchKeys = undefined;
     this.pendingPRWatchKeys.clear();
   }
