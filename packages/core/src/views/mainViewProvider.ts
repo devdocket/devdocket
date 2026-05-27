@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
 import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
-import { ActionRegistry } from '../services/actionRegistry';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
@@ -56,7 +55,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     private readonly stateStore: InboxStateStore,
     private readonly readStateStore: ReadStateStore,
     private readonly watcherService: WatcherService,
-    private readonly actionRegistry: ActionRegistry,
   ) {}
 
   /**
@@ -386,6 +384,20 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return (relatedItemsIndex.get(getRelatedItemsIndexKey(providerId, externalId))?.length ?? 0) > 0;
   }
 
+  private buildAcceptPayload(providerId: string, providerItem: ProviderItem): Record<string, unknown> {
+    return {
+      kind: 'item',
+      providerId,
+      externalId: providerItem.externalId,
+      title: providerItem.title,
+      description: providerItem.description,
+      url: providerItem.url,
+      ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
+      ...(providerItem.group ? { group: providerItem.group } : {}),
+      ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
+    };
+  }
+
   private buildBadges(providerId?: string, providerItem?: ProviderItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
     // Pass through the provider's human-readable label so third-party
@@ -619,17 +631,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      await vscode.commands.executeCommand('devdocket.acceptFromInbox', {
-        kind: 'item',
-        providerId,
-        externalId,
-        title: providerItem.title,
-        description: providerItem.description,
-        url: providerItem.url,
-        ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
-        ...(providerItem.group ? { group: providerItem.group } : {}),
-        ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
-      });
+      await vscode.commands.executeCommand('devdocket.acceptFromInbox', this.buildAcceptPayload(providerId, providerItem));
     } catch (err) {
       logger.error('DevDocket: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
@@ -685,17 +687,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', {
-        kind: 'item',
-        providerId,
-        externalId,
-        title: providerItem.title,
-        description: providerItem.description,
-        url: providerItem.url,
-        ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
-        ...(providerItem.group ? { group: providerItem.group } : {}),
-        ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
-      });
+      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', this.buildAcceptPayload(providerId, providerItem));
     } catch (err) {
       logger.error('DevDocket: acceptToFocus failed', err);
       void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);

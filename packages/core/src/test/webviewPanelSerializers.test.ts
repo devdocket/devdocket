@@ -115,6 +115,7 @@ function createMockActionRegistry() {
   const changeEmitter = new EventEmitter<void>();
   return {
     hasActionsFor: vi.fn(() => false),
+    getSurfaceActionsFor: vi.fn(() => []),
     onDidChangeRegistrations: changeEmitter.event,
   };
 }
@@ -141,6 +142,7 @@ function createIncomingSerializer(
     stateStore as any,
     readStateStore as any,
     workGraph as any,
+    createMockActionRegistry() as any,
   );
 }
 
