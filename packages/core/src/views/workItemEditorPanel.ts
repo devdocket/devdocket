@@ -848,8 +848,8 @@ function setsEqual(left: Set<string>, right: Set<string>): boolean {
   return true;
 }
 
-function stableStringify(value: unknown): string {
-  return JSON.stringify(toStableJson(value));
+function stableStringify(value: object): string {
+  return JSON.stringify(toStableJson(value)) ?? '';
 }
 
 function providerItemSnapshotKey(itemType: ProviderItem['itemType'], externalId: string): string {
