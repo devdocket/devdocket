@@ -154,10 +154,9 @@ interface DevDocketProvider {
    * Called by DevDocket during initial registration/activation (for initial
    * discovery) and whenever the user requests a manual refresh. Must be safe
    * to call multiple times and during extension activation. Providers that
-   * extend `BaseProvider` can throw `PollingBackoffError` from their
-   * non-interactive/background refresh path so the provider-owned periodic
-   * schedule created by `startPeriodicRefresh()` waits longer before the next
-   * automatic refresh.
+   * also extend `BaseProvider` can separately throw `PollingBackoffError`
+   * from `doBackgroundRefresh()` to delay the periodic schedule started by
+   * `startPeriodicRefresh()`.
    */
   refresh(token?: vscode.CancellationToken): Promise<void>;
 
