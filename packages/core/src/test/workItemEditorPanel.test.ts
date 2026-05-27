@@ -435,6 +435,29 @@ describe('WorkItemEditorPanel', () => {
     }));
   });
 
+  it('updates when provider item function-valued capabilities change', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42' });
+    const providerRegistry = createMockProviderRegistry({
+      'github-my-prs': [{
+        externalId: 'owner/repo#42',
+        title: 'Primary',
+        state: 'open',
+        capabilities: { gitWork: () => Promise.resolve({ kind: 'pr' }) },
+      }],
+    });
+    const { mock } = openPanel(item, createMockWorkGraph(item), providerRegistry);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+    providerRegistry.getProviderItems.mockReturnValue([
+      { externalId: 'owner/repo#42', title: 'Primary', state: 'open', capabilities: {} },
+    ]);
+
+    providerRegistry._fireProviderItemsChange('github-my-prs');
+
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'updateEditorItem',
+    }));
+  });
+
   it('does not update when its provider item is unchanged', () => {
     const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42' });
     const providerRegistry = createMockProviderRegistry({

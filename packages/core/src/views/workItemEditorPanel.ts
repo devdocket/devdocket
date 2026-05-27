@@ -865,6 +865,15 @@ function providerItemMatchesRelatedKeys(item: ProviderItem, relatedKeys: Set<str
 }
 
 function toStableJson(value: unknown): unknown {
+  if (typeof value === 'function') {
+    return '[Function]';
+  }
+  if (typeof value === 'undefined') {
+    return '[Undefined]';
+  }
+  if (typeof value === 'symbol') {
+    return value.toString();
+  }
   if (value === null || typeof value !== 'object') {
     return value;
   }
