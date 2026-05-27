@@ -100,6 +100,8 @@ export function WatchApp() {
                     url={prWatch.url}
                     watchId={prWatch.id}
                     linkedItemId={prWatch.linkedItemId}
+                    linkedSourceProviderId={prWatch.linkedSourceProviderId}
+                    linkedSourceExternalId={prWatch.linkedSourceExternalId}
                     expanded={hasRuns ? expanded : undefined}
                     onToggleExpanded={hasRuns ? () => togglePRRuns(prWatch.id, expanded) : undefined}
                   >
@@ -202,6 +204,8 @@ interface WatchCardProps {
   url?: string;
   watchId: string;
   linkedItemId?: string;
+  linkedSourceProviderId?: string;
+  linkedSourceExternalId?: string;
   expanded?: boolean;
   onToggleExpanded?: () => void;
   dismissible?: boolean;
@@ -220,6 +224,8 @@ function WatchCard({
   url,
   watchId,
   linkedItemId,
+  linkedSourceProviderId,
+  linkedSourceExternalId,
   expanded,
   onToggleExpanded,
   dismissible = true,
@@ -231,11 +237,21 @@ function WatchCard({
       postMessage({ type: 'openWatchUrl', url });
     }
   };
-  const hasActions = Boolean(linkedItemId) || dismissible;
+  const hasLinkedItem = Boolean(linkedItemId || (linkedSourceProviderId && linkedSourceExternalId));
+  const hasActions = hasLinkedItem || dismissible;
   const hasDetails = Boolean(onToggleExpanded && children);
   const openLinkedItem = () => {
     if (linkedItemId) {
       postMessage({ type: 'openItem', itemId: linkedItemId });
+      return;
+    }
+    if (linkedSourceProviderId && linkedSourceExternalId) {
+      postMessage({
+        type: 'openItem',
+        itemId: `${linkedSourceProviderId}::${linkedSourceExternalId}`,
+        providerId: linkedSourceProviderId,
+        externalId: linkedSourceExternalId,
+      });
     }
   };
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -290,7 +306,7 @@ function WatchCard({
         </div>
         {hasActions ? (
           <div class="item-actions" role="group" aria-label={`${title} actions`}>
-            {linkedItemId ? (
+            {hasLinkedItem ? (
               <button
                 type="button"
                 class="item-action-btn"

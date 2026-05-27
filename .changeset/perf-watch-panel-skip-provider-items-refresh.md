@@ -2,4 +2,4 @@
 "devdocket": patch
 ---
 
-Avoid refreshing the CI Watches panel when provider item lists change, reducing unnecessary webview updates while watches are open.
+Avoid refreshing the CI Watches panel when provider item lists change, while preserving Open in DevDocket links to matching Sources PRs.

@@ -166,6 +166,8 @@ export interface PRWatchData {
   state: 'open' | 'merged' | 'closed';
   url?: string;
   linkedItemId?: string;
+  linkedSourceProviderId?: string;
+  linkedSourceExternalId?: string;
   runs: RunWatchData[];
   hasWarning?: boolean;
   errorMessage?: string;
