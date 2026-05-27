@@ -1,6 +1,6 @@
 # DevDocket VS Code Extension Agent Instructions
 
-> **⚠️ BEFORE making any code changes:** Create a git worktree and feature branch. Never modify files directly in the main working tree. See [Use git worktrees for feature branches](#use-git-worktrees-for-feature-branches).
+> **⚠️ BEFORE making any code changes:** (1) Create a git worktree and feature branch — never modify files directly in the main working tree (see [Use git worktrees for feature branches](#use-git-worktrees-for-feature-branches)). (2) Start a DevDocket bot session so commits, pushes, and `gh` calls are attributed to the bot, not to the developer (see [DevDocket bot identity for local Copilot CLI work](#devdocket-bot-identity-for-local-copilot-cli-work)).
 
 ## Build & Test
 
@@ -190,6 +190,7 @@ When creating pull requests in an environment with [GitHub Copilot CLI](https://
 Key rules:
 - **Never skip or shortcut the process.** Every PR goes through all phases. Do NOT push branches or create PRs via `gh pr create` until the `create-pr` skill's Phase 1 (local loop) is complete.
 - **Invoke the `create-pr` skill before creating any PR.** The skill must be loaded and its phases followed in order. Never hand-roll `gh pr create` or `git push` without the skill orchestrating it.
+- **Ensure a DevDocket bot session is active before pushing or running any `gh` command that creates/modifies remote state** (PRs, issues, comments, reviews, labels, assignments). See [DevDocket bot identity for local Copilot CLI work](#devdocket-bot-identity-for-local-copilot-cli-work). If the bot session cannot be started (missing App ID / private key), STOP and ask the user how to proceed — do NOT silently fall back to the developer's identity.
 - **Any code change re-triggers the local loop** — whether from code review, Copilot feedback, CI fix, or conflict resolution.
 - **Use `superpowers:code-reviewer` agent** for code review, not a generic code-review agent.
 - **Add a `.changeset/*.md` file when the PR changes user-facing behavior of a publishable package.** See [Releases & Changesets](#releases--changesets) for the required format, when a changeset is and isn't needed, and the exact package names to use.
@@ -320,9 +321,22 @@ The core extension must not rely on anything from the other extensions (github, 
 
 ### DevDocket bot identity for local Copilot CLI work
 
-When a Copilot CLI agent does work on a developer's behalf, the resulting commits, PRs, and issues should be attributed to the DevDocket bot (the same GitHub App identity used by the Changesets workflow), not to the developer.
+When a Copilot CLI agent does work on a developer's behalf, the resulting commits, PRs, and issues **must** be attributed to the DevDocket bot (the same GitHub App identity used by the Changesets workflow), not to the developer.
 
-A helper script mints a short-lived (≤ 1 hour) installation access token from the bot's GitHub App and configures the current shell to use that identity for subsequent `gh` and `git` calls:
+**When to start a bot session (mandatory):**
+
+Agents MUST run the bot-session helper at the very start of any task that will:
+
+- make a `git commit` in the worktree, or
+- run a `gh` command that creates or modifies remote state — including (but not limited to) `gh pr create`, `gh pr comment`, `gh pr review`, `gh pr edit`, `gh issue create`, `gh issue comment`, `gh issue edit`, `gh api` calls with `-X POST/PATCH/PUT/DELETE`, `gh release create`, etc.
+
+Read-only `gh` calls (`gh issue view`, `gh pr view`, `gh pr diff`, `gh run list`, `gh api` GETs) do not require a bot session, but it's fine to start one preemptively. When in doubt, start the session before doing anything that could touch remote state.
+
+The session must be started **before** any committing/pushing/PR work. Starting it after the fact does not re-attribute prior commits.
+
+**Helper script:**
+
+A helper mints a short-lived (≤ 1 hour) installation access token from the bot's GitHub App and configures the current shell to use that identity for subsequent `gh` and `git` calls:
 
 ```bash
 # bash / zsh
@@ -333,6 +347,19 @@ node scripts/start-bot-session.mjs --shell=powershell | Invoke-Expression
 ```
 
 The script assumes the App's private key lives at `keys/devdocket-bot.pem` and that either the `DEVDOCKET_BOT_APP_ID` environment variable is set or the numeric App ID is written to `keys/devdocket-bot.app-id`. The `keys/` directory is git-ignored — never commit the PEM or App ID. After running the helper, the working tree's `user.name` / `user.email` and `GH_TOKEN` / `GITHUB_TOKEN` point at the bot for the lifetime of that shell; opening a new shell reverts to the developer's normal identity.
+
+**Verify the session is active** before proceeding:
+
+```bash
+git config user.email   # should end in @users.noreply.github.com (bot's noreply address)
+gh api user --jq .login # should return the bot account login, not your personal login
+```
+
+If either check fails (e.g., still shows the developer's identity), the bot session is not active and the helper either errored out or its output was not applied to the current shell — fix that before continuing.
+
+**If the bot session cannot be started** (helper prints "App ID not found", missing PEM, expired key, etc.): STOP. Do not fall back to the developer's identity. Report the failure to the user and ask how to proceed — typically the user needs to populate `keys/devdocket-bot.app-id` and `keys/devdocket-bot.pem` (or set `DEVDOCKET_BOT_APP_ID`) for their environment.
+
+**Sub-agents:** The orchestrating agent is responsible for starting the bot session in each worktree before dispatching sub-agents that will commit/push/`gh`-create. Sub-agents inherit the parent shell's environment only when they share it; if a sub-agent runs in a separately spawned shell, that shell must independently run the helper (or the orchestrator must export the resulting env vars to it).
 
 Note: commits made in the working tree will be **authored** by the bot, but `git push` over HTTPS still uses the developer's stored credential helper — so the *pusher* recorded on GitHub is the developer. Use `gh pr create` / `gh issue create` / other `gh` subcommands for remote actions that need bot attribution; those consume `GH_TOKEN` directly.
 

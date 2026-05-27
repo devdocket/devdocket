@@ -86,7 +86,7 @@ async function ghApi(path, { method = "GET", token, accept, body } = {}) {
     method,
     headers: {
       Accept: accept ?? "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       "User-Agent": "devdocket-start-bot-session",
       "X-GitHub-Api-Version": "2022-11-28",
       ...(body ? { "Content-Type": "application/json" } : {}),
@@ -198,7 +198,7 @@ async function main() {
   const slug = appMeta.slug;
   if (!slug) fail("GitHub App metadata missing `slug`.");
 
-  const botUser = await ghApi(`/users/${slug}%5Bbot%5D`, { token: jwt });
+  const botUser = await ghApi(`/users/${slug}%5Bbot%5D`);
   const botUserId = botUser.id;
   if (!botUserId) fail(`Could not resolve numeric user id for ${slug}[bot].`);
 
