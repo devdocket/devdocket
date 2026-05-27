@@ -7,11 +7,6 @@ interface WatchSnapshot {
   prs: WatchedPR[];
 }
 
-interface PendingWatchSnapshot {
-  runs: WatchedRun[];
-  prs: WatchedPR[];
-}
-
 interface SaveOptions {
   immediate?: boolean;
 }
@@ -64,7 +59,7 @@ export class WatchPersistence {
   private readonly pendingPRWatchKeys = new Set<string>();
   private persistFailureNotified = false;
   private pendingSave: Promise<void> = Promise.resolve();
-  private pendingSnapshot: PendingWatchSnapshot | undefined;
+  private pendingSnapshot: WatchSnapshot | undefined;
   private lastPersistedSnapshot: WatchSnapshot | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
 
