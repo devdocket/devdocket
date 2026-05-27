@@ -17,7 +17,7 @@ Your extension must declare a dependency on DevDocket so that VS Code activates 
 
 ### Installing `@devdocket/shared`
 
-The `@devdocket/shared` package provides the TypeScript types, base classes, and polling helpers (`ProviderItem`, `BaseProvider`, `Event`, `Disposable`, `BackoffPolicy`, `parseRetryAfterHeader`, `parseRateLimitResetHeader`, `PollingBackoffError`, `isPollingBackoffError`, etc.) needed to build providers and actions with full type safety.
+The `@devdocket/shared` package provides the TypeScript types, shared models, and base classes (`ProviderItem`, `BaseProvider`, `Event`, `Disposable`, etc.) needed to build providers and actions with full type safety.
 
 The package is published to the GitHub Packages npm registry. Add a `.npmrc` file to your project to configure the `@devdocket` scope:
 
@@ -36,15 +36,10 @@ npm install @devdocket/shared
 You can then import types directly instead of redefining them:
 
 ```ts
-import {
-  BaseProvider,
-  PollingBackoffError,
-  parseRetryAfterHeader,
-  type ProviderItem,
-} from '@devdocket/shared';
+import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the provider item type emitted by providers. The same package also exports the polling backoff primitives providers can use to react to `Retry-After` and rate-limit headers without reimplementing their own cooldown logic. `parseRetryAfterHeader()` returns a delay in milliseconds; `parseRateLimitResetHeader()` returns an absolute reset timestamp in milliseconds that providers should convert to a delay before passing it as `retryAfterMs`.
+`ProviderItem` is the provider item type emitted by providers. If your provider later needs optional throttling support, see [Handling rate limits and throttling](#handling-rate-limits-and-throttling) below.
 
 ### Acquiring the API
 
@@ -153,10 +148,9 @@ interface DevDocketProvider {
   /**
    * Called by DevDocket during initial registration/activation (for initial
    * discovery) and whenever the user requests a manual refresh. Must be safe
-   * to call multiple times and during extension activation. Providers that
-   * also extend `BaseProvider` can separately throw `PollingBackoffError`
-   * from `doBackgroundRefresh()` to delay the periodic schedule started by
-   * `startPeriodicRefresh()`.
+   * to call multiple times and during extension activation. See "Handling
+   * rate limits and throttling" below for the optional `BaseProvider`
+   * backoff flow used by periodic background refresh.
    */
   refresh(token?: vscode.CancellationToken): Promise<void>;
 
@@ -384,6 +378,17 @@ const provider = new MyProvider();
 const disposable = api.registerProvider(provider);
 context.subscriptions.push(disposable);
 ```
+
+### Handling rate limits and throttling
+
+This support is optional. If your provider extends `BaseProvider` and uses `startPeriodicRefresh()`, it can opt into the shared backoff flow for 429/503-style responses instead of implementing its own cooldown scheduler.
+
+- Throw `PollingBackoffError` from `doBackgroundRefresh()` when the upstream service asks callers to wait.
+- Use `parseRetryAfterHeader()` when the service sends `Retry-After`.
+- Use `parseRateLimitResetHeader()` when the service sends a reset timestamp, then convert that timestamp to a delay before assigning it to `retryAfterMs`.
+- `BaseProvider` automatically delays the next scheduled periodic refresh and returns to the normal interval after a successful background refresh.
+
+For a concrete provider example, see [Handling rate limits and throttling](./provider-api.md#handling-rate-limits-and-throttling) in the provider guide.
 
 ## Actions
 
