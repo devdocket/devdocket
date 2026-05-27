@@ -349,7 +349,13 @@ export class WorkItemEditorPanel {
     }
 
     const nextSnapshot = this.buildProviderItemSnapshot(item);
-    if (nextSnapshot === this.lastProviderItemSnapshot) { return; }
+    const nextRelatedSnapshot = this.buildRelatedProviderItemSnapshot(item, item.providerId);
+    if (
+      nextSnapshot === this.lastProviderItemSnapshot
+      && nextRelatedSnapshot === this.lastRelatedProviderItemSnapshots.get(item.providerId)
+    ) {
+      return;
+    }
 
     this.update();
   }
