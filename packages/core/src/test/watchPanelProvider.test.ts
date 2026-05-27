@@ -306,7 +306,7 @@ describe('WatchPanelProvider', () => {
     expect(workGraph.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it('adds linked source provider and external IDs when only a matching discovered PR exists', () => {
+  it('does not derive PR watch link targets from discovered provider items', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
     const watcherService = createWatcherService([createPRWatch()]);
@@ -325,11 +325,11 @@ describe('WatchPanelProvider', () => {
     const message = getUpdateWatchPanelMessage(mockPanel);
     expect(message.prWatches[0]).toEqual(expect.objectContaining({
       id: 'pr:github-pr:owner/repo:42',
-      linkedSourceProviderId: 'github-pr-reviews',
-      linkedSourceExternalId: 'owner/repo#42',
     }));
     expect(message.prWatches[0]).not.toHaveProperty('linkedItemId');
-    expect(providerRegistry.getAllProviderItems).toHaveBeenCalledTimes(1);
+    expect(message.prWatches[0]).not.toHaveProperty('linkedSourceProviderId');
+    expect(message.prWatches[0]).not.toHaveProperty('linkedSourceExternalId');
+    expect(providerRegistry.getAllProviderItems).not.toHaveBeenCalled();
   });
 
   it('omits DevDocket link data when no matching PR item exists', () => {
