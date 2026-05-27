@@ -450,12 +450,12 @@ export class InboxStateStore {
 
   /** Flushes pending persistence and disposes the change event emitter. */
   async dispose(): Promise<void> {
+    this.disposed = true;
     try {
       await this.flush();
     } catch (err) {
       logger.error('Failed to flush inbox state during dispose', err);
     } finally {
-      this.disposed = true;
       this._onDidChange.dispose();
       this._onDidPersist.dispose();
     }
