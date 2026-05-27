@@ -113,12 +113,13 @@ export class WalkthroughParticipant {
       this.log.debug(`Using cached worktree at ${info.worktreePath}`);
     }
     this.sessions.set(prUrl, info);
-    const progress = await this.getOrCreateProgress(prUrl, info, context.history.length === 0);
 
     if (token.isCancellationRequested) {
       this.log.info('Request cancelled before model invocation');
       return { metadata: { phase: 'error' } };
     }
+
+    const progress = await this.getOrCreateProgress(prUrl, info, context.history.length === 0);
 
     // Build system prompt
     const systemPrompt = buildWalkthroughPrompt(info);

@@ -200,6 +200,30 @@ describe('WalkthroughParticipant', () => {
       );
     });
 
+    it('does not derive progress or call the model when cancelled before model invocation', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Should not stream.');
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: true },
+      );
+
+      expect(gitExec).not.toHaveBeenCalled();
+      expect(mockModel.sendRequest).not.toHaveBeenCalled();
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('error');
+    });
+
     it('finds PR URL from chat history when not in current prompt', async () => {
       participant.register();
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
