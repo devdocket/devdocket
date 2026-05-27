@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
 import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
-import { ActionRegistry } from '../services/actionRegistry';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
@@ -20,7 +19,6 @@ import { toItemAuthorData } from './itemAuthorData';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
-  InlineActionData,
   ItemCardData,
   SourceGroupData,
   SourceItemData,
@@ -57,7 +55,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     private readonly stateStore: InboxStateStore,
     private readonly readStateStore: ReadStateStore,
     private readonly watcherService: WatcherService,
-    private readonly actionRegistry: ActionRegistry,
   ) {}
 
   /**
@@ -352,7 +349,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       hasRelatedItems: this.hasResolvedRelatedItems(providerId, providerItem.externalId, relatedItemsIndex),
       providerId,
       externalId: providerItem.externalId,
-      inlineActions: this.getIncomingInlineActions(providerId, providerItem),
     };
   }
 
@@ -377,9 +373,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         : false,
       providerId: item.providerId,
       externalId: item.externalId,
-      inlineActions: tierType === 'readyToStart'
-        ? this.actionRegistry.getSurfaceActionsFor(item, 'cardHover')
-        : undefined,
     };
   }
 
@@ -389,31 +382,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     relatedItemsIndex: RelatedItemsIndex,
   ): boolean {
     return (relatedItemsIndex.get(getRelatedItemsIndexKey(providerId, externalId))?.length ?? 0) > 0;
-  }
-
-  private createSyntheticIncomingWorkItem(providerId: string, providerItem: ProviderItem): WorkItem {
-    const now = Date.now();
-    return {
-      id: getProviderItemKey(providerId, providerItem.externalId),
-      title: providerItem.title,
-      description: providerItem.description,
-      state: WorkItemState.New,
-      providerId,
-      externalId: providerItem.externalId,
-      itemType: providerItem.itemType,
-      url: providerItem.url,
-      group: providerItem.group,
-      createdAt: now,
-      updatedAt: now,
-    };
-  }
-
-  private getIncomingInlineActions(providerId: string, providerItem: ProviderItem): InlineActionData[] | undefined {
-    const actions = this.actionRegistry.getSurfaceActionsFor(
-      this.createSyntheticIncomingWorkItem(providerId, providerItem),
-      'cardHover',
-    );
-    return actions.length > 0 ? actions : undefined;
   }
 
   private buildAcceptPayload(providerId: string, providerItem: ProviderItem): Record<string, unknown> {
@@ -590,9 +558,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;
-      case 'acceptAndRunAction':
-        await this.handleAcceptAndRunAction(message.providerId, message.externalId, message.actionId);
-        break;
       case 'acceptToFocus':
         await this.handleAcceptToFocus(message.providerId, message.externalId);
         break;
@@ -626,9 +591,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'runAction':
         await vscode.commands.executeCommand('devdocket.runAction', { id: message.itemId });
         break;
-      case 'runActionById':
-        await vscode.commands.executeCommand('devdocket.runActionById', { id: message.itemId, actionId: message.actionId });
-        break;
       case 'openUrl': {
         // Use the canonical href returned by isSafeUrl, not the raw
         // message.url. WHATWG URL and vscode.Uri.parse are different
@@ -661,31 +623,19 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleAcceptItem(providerId: string, externalId: string): Promise<WorkItem | undefined> {
+  private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
     try {
       const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
       if (!providerItem) {
         logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
-        return undefined;
+        return;
       }
 
       await vscode.commands.executeCommand('devdocket.acceptFromInbox', this.buildAcceptPayload(providerId, providerItem));
-      return this.workGraph.findItemByProvenance(providerId, externalId);
     } catch (err) {
       logger.error('DevDocket: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
-      return undefined;
     }
-  }
-
-  private async handleAcceptAndRunAction(providerId: string, externalId: string, actionId: string): Promise<void> {
-    const workItem = await this.handleAcceptItem(providerId, externalId);
-    if (!workItem) {
-      logger.warn(`DevDocket: accepted item ${providerId}/${externalId} was not found for action ${actionId}`);
-      void vscode.window.showErrorMessage('Item was accepted but the action could not be started. Try selecting it from DevDocket.');
-      return;
-    }
-    await vscode.commands.executeCommand('devdocket.runActionById', { id: workItem.id, actionId });
   }
 
   private async handleAcceptAll(requestedItems?: ReadonlyArray<{ providerId: string; externalId: string }>): Promise<void> {
@@ -1355,16 +1305,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       border-radius: 4px;
       padding: 4px 9px;
       cursor: pointer;
-      line-height: 1;
-      white-space: nowrap;
-    }
-    .item-action-btn--icon {
       font-size: 18px;
-    }
-    .item-action-btn--text {
-      font-size: 12px;
-      font-weight: 600;
-      line-height: 1.2;
+      line-height: 1;
     }
     .item-action-btn:hover {
       background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));

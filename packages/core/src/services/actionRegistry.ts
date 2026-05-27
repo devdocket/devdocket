@@ -4,7 +4,7 @@ import { WorkItem } from '../models/workItem';
 import { logger } from './logger';
 import { Registry } from './registry';
 
-export type ActionSurface = 'cardHover' | 'incomingPreview';
+export type ActionSurface = 'incomingPreview';
 
 export interface SurfaceAction {
   id: string;
@@ -98,14 +98,12 @@ export class ActionRegistry {
       .filter(action => this.isActionVisibleOnSurface(action, surface))
       .map(action => ({
         id: action.id,
-        label: action.presentation?.compactLabel ?? action.label,
+        label: action.label,
       }));
   }
 
   private isActionVisibleOnSurface(action: DevDocketAction, surface: ActionSurface): boolean {
     switch (surface) {
-      case 'cardHover':
-        return action.presentation?.cardHover === true;
       case 'incomingPreview':
         return action.presentation?.incomingPreview === true;
       default:

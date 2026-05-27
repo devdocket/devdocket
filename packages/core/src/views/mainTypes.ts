@@ -18,12 +18,10 @@ export type WebviewMessage =
   | { type: 'openSourceItem'; providerId: string; externalId: string }
   | { type: 'showProviderHealth'; providerId: string }
   | { type: 'acceptItem'; providerId: string; externalId: string }
-  | { type: 'acceptAndRunAction'; providerId: string; externalId: string; actionId: string }
   | { type: 'acceptToFocus'; providerId: string; externalId: string }
   | { type: 'acceptAll'; items?: Array<{ providerId: string; externalId: string }> }
   | { type: 'dismissItem'; providerId: string; externalId: string }
   | { type: 'transitionState'; itemId: string; targetState: string }
-  | { type: 'runActionById'; itemId: string; actionId: string }
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
   | { type: 'openWalkthrough' }
@@ -77,7 +75,6 @@ export interface ItemCardData {
   hasRelatedItems?: boolean;
   providerId?: string;
   externalId?: string;
-  inlineActions?: InlineActionData[];
 }
 
 export interface BadgeData {

@@ -555,7 +555,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ss,
     readStateStore,
     ws,
-    ar,
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(

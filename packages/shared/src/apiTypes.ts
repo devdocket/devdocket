@@ -145,13 +145,6 @@ export interface DevDocketActionPresentation {
    * it matches the synthetic post-accept work item shape.
    */
   readonly incomingPreview?: boolean;
-  /**
-   * Show this action as a hover affordance on Incoming and Ready to Start cards
-   * when it can run for the item.
-   */
-  readonly cardHover?: boolean;
-  /** Optional shorter label for compact button surfaces. Defaults to {@link DevDocketAction.label}. */
-  readonly compactLabel?: string;
 }
 
 /**

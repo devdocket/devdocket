@@ -221,15 +221,8 @@ describe('ActionRegistry', () => {
     expect(registry.getActionsFor(pausedItem)).toEqual([pausedOnly]);
   });
 
-  it('returns only presentation-opted actions for a surface', () => {
+  it('returns only presentation-opted actions for the incoming preview surface', () => {
     const item = createWorkItem();
-    const hoverAction: DevDocketAction = {
-      id: 'hover',
-      label: 'Hover Action',
-      presentation: { cardHover: true, compactLabel: 'Hover' },
-      canRun: vi.fn(() => true),
-      run: vi.fn(async () => {}),
-    };
     const previewAction: DevDocketAction = {
       id: 'preview',
       label: 'Preview Action',
@@ -237,10 +230,15 @@ describe('ActionRegistry', () => {
       canRun: vi.fn(() => true),
       run: vi.fn(async () => {}),
     };
-    registry.register(hoverAction);
+    const standardAction: DevDocketAction = {
+      id: 'standard',
+      label: 'Standard Action',
+      canRun: vi.fn(() => true),
+      run: vi.fn(async () => {}),
+    };
     registry.register(previewAction);
+    registry.register(standardAction);
 
-    expect(registry.getSurfaceActionsFor(item, 'cardHover')).toEqual([{ id: 'hover', label: 'Hover' }]);
     expect(registry.getSurfaceActionsFor(item, 'incomingPreview')).toEqual([{ id: 'preview', label: 'Preview Action' }]);
   });
 

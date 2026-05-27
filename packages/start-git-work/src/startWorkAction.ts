@@ -130,7 +130,6 @@ export class StartWorkAction implements DevDocketAction {
   readonly label = 'Start Git Work';
   readonly presentation = {
     incomingPreview: true,
-    cardHover: true,
   } as const;
 
   private readonly globalState: vscode.Memento;

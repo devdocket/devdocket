@@ -62,7 +62,6 @@ function createMainViewProvider(): MainViewProvider {
     {} as any,
     { has: () => false } as any,
     { getActiveWatches: () => [], getActivePRWatches: () => [] } as any,
-    { getSurfaceActionsFor: () => [] } as any,
   );
 }
 
@@ -148,27 +147,6 @@ describe('ItemCard author annotation', () => {
     expect(container.querySelector('.item-repo-annotation')?.textContent).toBe('owner/repo');
   });
 
-  it('renders inline hover actions with text labels', async () => {
-    const onAcceptAndRunAction = vi.fn();
-    const container = document.createElement('div');
-    document.body.appendChild(container);
-    render(h(ItemCard, {
-      item: makeCardItem({
-        providerId: 'github',
-        externalId: 'owner/repo#1',
-        inlineActions: [{ id: 'startGitWork', label: 'Start Git Work' }],
-      }),
-      tabIndex: 0,
-      onClick: vi.fn(),
-      onAcceptAndRunAction,
-    }), container);
-
-    const button = Array.from(container.querySelectorAll<HTMLButtonElement>('.item-action-btn')).find(candidate => candidate.textContent === 'Start Git Work');
-    expect(button).not.toBeUndefined();
-    await act(async () => button?.click());
-
-    expect(onAcceptAndRunAction).toHaveBeenCalledWith('github', 'owner/repo#1', 'startGitWork');
-  });
 });
 
 describe('EditorApp author annotation', () => {
