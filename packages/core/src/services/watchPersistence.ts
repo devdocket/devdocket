@@ -7,6 +7,11 @@ interface WatchSnapshot {
   prs: WatchedPR[];
 }
 
+interface PendingWatchSnapshot {
+  runs: WatchedRun[];
+  prs: WatchedPR[];
+}
+
 interface SaveOptions {
   immediate?: boolean;
 }
@@ -59,7 +64,7 @@ export class WatchPersistence {
   private readonly pendingPRWatchKeys = new Set<string>();
   private persistFailureNotified = false;
   private pendingSave: Promise<void> = Promise.resolve();
-  private pendingSnapshot: WatchSnapshot | undefined;
+  private pendingSnapshot: PendingWatchSnapshot | undefined;
   private lastPersistedSnapshot: WatchSnapshot | undefined;
   private debounceTimer: NodeJS.Timeout | undefined;
 
@@ -104,7 +109,7 @@ export class WatchPersistence {
   }
 
   saveAll(runs: WatchedRun[], prs: WatchedPR[], options: SaveOptions = {}): Promise<void> | void {
-    this.pendingSnapshot = clonePersistedSnapshot(runs, prs);
+    this.pendingSnapshot = { runs, prs };
 
     if (options.immediate) {
       return this.flush();
@@ -117,7 +122,9 @@ export class WatchPersistence {
     this.clearDebounceTimer();
 
     while (true) {
-      const snapshot = this.pendingSnapshot;
+      const snapshot = this.pendingSnapshot
+        ? clonePersistedSnapshot(this.pendingSnapshot.runs, this.pendingSnapshot.prs)
+        : undefined;
       this.pendingSnapshot = undefined;
 
       if (snapshot) {
