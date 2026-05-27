@@ -1119,6 +1119,7 @@ describe('InboxStateStore', () => {
         expect(fileStore.write).not.toHaveBeenCalled();
         expect(persistListener).not.toHaveBeenCalled();
         await vi.advanceTimersByTimeAsync(250);
+        await debouncedStore.flush();
 
         expect(fileStore.write).toHaveBeenCalledTimes(1);
         expect(persistListener).toHaveBeenCalledTimes(1);
