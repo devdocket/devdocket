@@ -366,6 +366,8 @@ export class ReadStateStore {
   async dispose(): Promise<void> {
     try {
       await this.flush();
+    } catch (err) {
+      logger.error('Failed to flush read state during dispose', err);
     } finally {
       this.disposed = true;
       this._onDidChange.dispose();
