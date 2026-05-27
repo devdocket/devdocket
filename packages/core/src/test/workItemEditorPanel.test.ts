@@ -369,19 +369,19 @@ describe('WorkItemEditorPanel', () => {
     const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42' });
     const providerRegistry = createMockProviderRegistry({
       'github-my-prs': [{ externalId: 'owner/repo#42', title: 'Primary', state: 'open', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }],
-      'github-issues': [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active', itemType: 'issue' }],
+      'github-issues': [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active' }],
     });
     const { mock } = openPanel(item, createMockWorkGraph(item), providerRegistry);
     vi.mocked(mock.panel.webview.postMessage).mockClear();
     providerRegistry.getProviderItems.mockImplementation((providerId: string) => {
       if (providerId === 'github-issues') {
-        return [{ externalId: 'owner/repo#99', title: 'Peer', state: 'closed', itemType: 'issue' }];
+        return [{ externalId: 'owner/repo#99', title: 'Peer', state: 'closed' }];
       }
       return [{ externalId: 'owner/repo#42', title: 'Primary', state: 'open', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }];
     });
     providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github-my-prs', [{ externalId: 'owner/repo#42', title: 'Primary', state: 'open', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }]],
-      ['github-issues', [{ externalId: 'owner/repo#99', title: 'Peer', state: 'closed', itemType: 'issue' }]],
+      ['github-issues', [{ externalId: 'owner/repo#99', title: 'Peer', state: 'closed' }]],
     ]));
 
     providerRegistry._fireProviderItemsChange('github-issues');

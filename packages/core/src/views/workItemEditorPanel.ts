@@ -594,7 +594,7 @@ export class WorkItemEditorPanel {
 
     const relatedKeys = new Set(relatedRefs.map(ref => providerItemSnapshotKey(ref.itemType, ref.externalId)));
     const relatedItems = this.providerRegistry.getProviderItems(providerId)
-      .filter(candidate => relatedKeys.has(providerItemSnapshotKey(candidate.itemType, candidate.externalId)))
+      .filter(candidate => providerItemMatchesRelatedKeys(candidate, relatedKeys))
       .sort((left, right) => providerItemSnapshotKey(left.itemType, left.externalId).localeCompare(providerItemSnapshotKey(right.itemType, right.externalId)));
     return relatedItems.length > 0 ? stableStringify(relatedItems) : undefined;
   }
@@ -848,6 +848,14 @@ function stableStringify(value: unknown): string {
 
 function providerItemSnapshotKey(itemType: ProviderItem['itemType'], externalId: string): string {
   return `${itemType ?? ''}\u0000${externalId}`;
+}
+
+function providerItemMatchesRelatedKeys(item: ProviderItem, relatedKeys: Set<string>): boolean {
+  if (item.itemType) {
+    return relatedKeys.has(providerItemSnapshotKey(item.itemType, item.externalId));
+  }
+  return relatedKeys.has(providerItemSnapshotKey('issue', item.externalId))
+    || relatedKeys.has(providerItemSnapshotKey('pr', item.externalId));
 }
 
 function toStableJson(value: unknown): unknown {
