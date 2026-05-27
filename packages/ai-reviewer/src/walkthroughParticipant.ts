@@ -2,11 +2,18 @@ import * as vscode from 'vscode';
 import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
 import { truncateToolContent } from './toolUtils';
+import { gitExec } from './tools/gitUtils';
 
 const PR_URL_PATTERN = /https?:\/\/(?:github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+|dev\.azure\.com\/[^/\s]+\/[^/\s]+\/_git\/[^/\s]+\/pullrequest\/\d+)/;
 
+interface WalkthroughProgress {
+  allFiles: string[];
+  presentedFiles: string[];
+}
+
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
+  private progressByPrUrl = new Map<string, WalkthroughProgress>();
 
   constructor(
     private readonly repoManager: RepoManager,
@@ -33,7 +40,11 @@ export class WalkthroughParticipant {
     _context: vscode.ChatContext,
     _token: vscode.CancellationToken,
   ): vscode.ChatFollowup[] {
-    const phase = (result.metadata as Record<string, unknown> | undefined)?.phase as string | undefined;
+    const metadata = result.metadata as Record<string, unknown> | undefined;
+    const phase = metadata?.phase as string | undefined;
+    const remainingFiles = typeof metadata?.remainingFiles === 'number'
+      ? metadata.remainingFiles
+      : undefined;
 
     if (phase === 'no-url' || phase === 'error' || phase === 'wrapup') {
       return [];
@@ -47,7 +58,7 @@ export class WalkthroughParticipant {
       ];
     }
 
-    if (phase === 'lastFile') {
+    if (phase === 'lastFile' || (phase === 'walkthrough' && remainingFiles === 0)) {
       return [
         { prompt: 'Go deeper — show callers and related code', label: '🔍 Go deeper' },
         { prompt: 'Wrap up — show the final summary', label: '✅ Wrap up' },
@@ -102,6 +113,7 @@ export class WalkthroughParticipant {
       this.log.debug(`Using cached worktree at ${info.worktreePath}`);
     }
     this.sessions.set(prUrl, info);
+    const progress = await this.getOrCreateProgress(prUrl, info);
 
     if (token.isCancellationRequested) {
       this.log.info('Request cancelled before model invocation');
@@ -183,6 +195,10 @@ export class WalkthroughParticipant {
               enum: ['summary', 'walkthrough', 'lastFile', 'wrapup'],
               description: 'Current phase: "summary" after presenting the opening overview, "walkthrough" during file-by-file presentation, "lastFile" when presenting the last file in the reading order, "wrapup" after the final wrap-up.',
             },
+            filePath: {
+              type: 'string' as const,
+              description: 'Relative path of the file or representative file in the group just presented. Pass this for walkthrough and lastFile phases using the exact path from the diff.',
+            },
           },
           required: ['phase'],
         },
@@ -232,10 +248,14 @@ export class WalkthroughParticipant {
 
           // Handle phase signals locally; only loop again for them if no text was streamed.
           if (part.name === 'devdocket-signalPhase') {
-            const input = part.input as { phase?: string };
-            this.log.debug(`Phase signal: ${input.phase}`);
+            const input = part.input as { phase?: string; filePath?: string };
+            this.log.debug(`Phase signal: ${input.phase}${input.filePath ? ` for ${input.filePath}` : ''}`);
             if (input.phase) {
               phase = input.phase;
+            }
+            if (input.filePath) {
+              this.recordPresentedFile(progress, input.filePath);
+              phase = this.deriveFileWalkthroughPhase(phase, progress);
             }
             toolResults.push({
               callId: part.callId,
@@ -310,8 +330,96 @@ export class WalkthroughParticipant {
     if (!streamedAnyText && !token.isCancellationRequested) {
       response.markdown('⚠️ The model did not produce walkthrough text. Please try again.');
     }
+    const remainingFiles = this.getRemainingFiles(progress);
     this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
-    return { metadata: { phase } };
+    return {
+      metadata: {
+        phase,
+        files: [...progress.allFiles],
+        presentedFiles: [...progress.presentedFiles],
+        remainingFiles,
+      },
+    };
+  }
+
+  private async getOrCreateProgress(prUrl: string, info: WorktreeInfo): Promise<WalkthroughProgress> {
+    const existing = this.progressByPrUrl.get(prUrl);
+    if (existing) {
+      return existing;
+    }
+
+    const progress: WalkthroughProgress = {
+      allFiles: await this.getChangedFiles(info),
+      presentedFiles: [],
+    };
+    this.progressByPrUrl.set(prUrl, progress);
+    return progress;
+  }
+
+  private async getChangedFiles(info: WorktreeInfo): Promise<string[]> {
+    try {
+      const output = await gitExec(
+        ['diff', '--name-only', `${info.baseRef}...${info.headRef}`],
+        info.worktreePath,
+      );
+      return output
+        .split(/\r?\n/)
+        .map(file => this.normalizePresentedFilePath(file))
+        .filter(Boolean);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.warn(`Unable to derive walkthrough file list: ${msg}`);
+      return [];
+    }
+  }
+
+  private recordPresentedFile(progress: WalkthroughProgress, filePath: string): void {
+    const normalizedPath = this.normalizePresentedFilePath(filePath);
+    if (!normalizedPath) {
+      return;
+    }
+
+    const canonicalPath = this.findCanonicalFilePath(progress.allFiles, normalizedPath) ?? normalizedPath;
+    if (!progress.allFiles.includes(canonicalPath)) {
+      this.log.debug(`Presented walkthrough file is not in the changed-file list: ${filePath}`);
+    }
+    if (!progress.presentedFiles.includes(canonicalPath)) {
+      progress.presentedFiles.push(canonicalPath);
+    }
+  }
+
+  private normalizePresentedFilePath(filePath: string): string {
+    return filePath
+      .trim()
+      .replace(/^[`'"]+|[`'"]+$/g, '')
+      .replace(/\\/g, '/')
+      .replace(/^\.\//, '');
+  }
+
+  private findCanonicalFilePath(allFiles: string[], filePath: string): string | undefined {
+    if (allFiles.includes(filePath)) {
+      return filePath;
+    }
+    const withoutDiffPrefix = filePath.replace(/^[ab]\//, '');
+    return allFiles.includes(withoutDiffPrefix) ? withoutDiffPrefix : undefined;
+  }
+
+  private deriveFileWalkthroughPhase(phase: string, progress: WalkthroughProgress): string {
+    if (phase === 'lastFile') {
+      return phase;
+    }
+    if (phase !== 'walkthrough' || progress.allFiles.length === 0) {
+      return phase;
+    }
+    return this.getRemainingFiles(progress) === 0 ? 'lastFile' : phase;
+  }
+
+  private getRemainingFiles(progress: WalkthroughProgress): number | undefined {
+    if (progress.allFiles.length === 0) {
+      return undefined;
+    }
+    const presented = new Set(progress.presentedFiles);
+    return progress.allFiles.filter(file => !presented.has(file)).length;
   }
 
   private extractPrUrl(

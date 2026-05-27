@@ -2,7 +2,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn, mockLogOutputChannel } from 'vscode';
 import { WalkthroughParticipant } from '../walkthroughParticipant';
 import type { RepoManager } from '../repoManager';
+import { gitExec } from '../tools/gitUtils';
 import { createMockRepoManager } from './testFactories';
+
+vi.mock('../tools/gitUtils', () => ({
+  gitExec: vi.fn(),
+}));
 
 function createMockRequest(prompt: string, model?: unknown) {
   return {
@@ -39,6 +44,7 @@ describe('WalkthroughParticipant', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(gitExec).mockResolvedValue('src/first.ts\nsrc/second.ts\n');
     lm.tools = [];
     mockRepoManager = createMockRepoManager();
     participant = new WalkthroughParticipant(mockRepoManager, mockLogOutputChannel as never);
@@ -417,6 +423,148 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
     });
 
+    it('overrides walkthrough phase to lastFile when signalPhase reports the final file', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: '"./src/first.ts"',
+            });
+          })(),
+        }),
+      };
+      const lastFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: '`b\\src\\second.ts`',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const mockParticipant = vi.mocked(chat.createChatParticipant).mock.results[0].value;
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const provider = mockParticipant.followupProvider as {
+        provideFollowups: (
+          result: { metadata?: Record<string, unknown> },
+          context: unknown,
+          token: unknown,
+        ) => { prompt: string; label: string }[];
+      };
+      const token = { isCancellationRequested: false };
+
+      const firstResult = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      const firstFollowups = provider.provideFollowups(
+        firstResult as { metadata?: Record<string, unknown> },
+        { history: [] },
+        token,
+      );
+
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+      expect(firstFollowups.map(followup => followup.label).join(' ')).toContain('Next file');
+
+      const lastResult = await handler(
+        createMockRequest('Continue', lastFileModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+      const lastFollowups = provider.provideFollowups(
+        lastResult as { metadata?: Record<string, unknown> },
+        { history: [] },
+        token,
+      );
+
+      expect((lastResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((lastResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+      expect(lastFollowups).toHaveLength(2);
+      expect(lastFollowups[0].label).toContain('Go deeper');
+      expect(lastFollowups[1].label).toContain('Wrap up');
+      expect(lastFollowups.map(followup => followup.label).join(' ')).not.toContain('Next file');
+    });
+
+    it('does not downgrade a model-reported lastFile phase when files appear to remain', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Model says this is the final file.');
+            yield new LanguageModelToolCallPart('phase-last', 'devdocket-signalPhase', {
+              phase: 'lastFile',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext([new ChatRequestTurn('previous turn')]),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('falls back to normal walkthrough followups when the changed-file list cannot be derived', async () => {
+      vi.mocked(gitExec).mockRejectedValueOnce(new Error('missing refs'));
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('A file analysis.');
+            yield new LanguageModelToolCallPart('phase-unknown', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/only.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const mockParticipant = vi.mocked(chat.createChatParticipant).mock.results[0].value;
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const provider = mockParticipant.followupProvider as {
+        provideFollowups: (
+          result: { metadata?: Record<string, unknown> },
+          context: unknown,
+          token: unknown,
+        ) => { prompt: string; label: string }[];
+      };
+      const token = { isCancellationRequested: false };
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      const followups = provider.provideFollowups(
+        result as { metadata?: Record<string, unknown> },
+        { history: [] },
+        token,
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBeUndefined();
+      expect(followups[0].label).toContain('Next file');
+    });
+
     it('signalPhase updates ChatResult metadata without triggering another loop', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({
@@ -498,6 +646,33 @@ describe('WalkthroughParticipant', () => {
       expect(followups[0].label).toContain('Next file');
       expect(followups[1].label).toContain('Go deeper');
       expect(followups[2].label).toContain('Wrap up');
+    });
+
+    it('keeps Next file for walkthrough phase while files remain', () => {
+      const provider = getFollowupProvider();
+      const followups = provider.provideFollowups(
+        { metadata: { phase: 'walkthrough', remainingFiles: 1 } },
+        { history: [] },
+        { isCancellationRequested: false },
+      );
+
+      expect(followups).toHaveLength(3);
+      expect(followups[0].label).toContain('Next file');
+      expect(followups[1].label).toContain('Go deeper');
+      expect(followups[2].label).toContain('Wrap up');
+    });
+
+    it('returns last-file buttons for walkthrough phase when no files remain', () => {
+      const provider = getFollowupProvider();
+      const followups = provider.provideFollowups(
+        { metadata: { phase: 'walkthrough', remainingFiles: 0 } },
+        { history: [] },
+        { isCancellationRequested: false },
+      );
+
+      expect(followups).toHaveLength(2);
+      expect(followups[0].label).toContain('Go deeper');
+      expect(followups[1].label).toContain('Wrap up');
     });
 
     it('returns empty array for wrapup phase', () => {
