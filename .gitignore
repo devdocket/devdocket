@@ -12,3 +12,9 @@ webview-dist/
 # OS files
 .DS_Store
 Thumbs.db
+
+# DevDocket bot App private key + App ID (see scripts/start-bot-session.mjs)
+keys/
+# Defense in depth: also ignore App private keys / App-id files anywhere.
+*.pem
+devdocket-bot.app-id
