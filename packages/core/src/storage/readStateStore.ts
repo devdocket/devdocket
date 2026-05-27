@@ -5,6 +5,7 @@ import type { FileStore } from './fileStore';
 import { trimByAge } from './trimByAge';
 
 const MAX_TOTAL_ENTRIES = 5_000;
+const MAX_DEBOUNCED_PERSIST_RETRIES = 5;
 
 interface PersistedReadStateRecord {
   key: string;
@@ -29,6 +30,7 @@ export class ReadStateStore {
   private persistTimer: ReturnType<typeof setTimeout> | undefined;
   private flushInProgress: Promise<void> | undefined;
   private disposed = false;
+  private debouncedPersistFailures = 0;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
   readonly onDidChange = this._onDidChange.event;
@@ -52,9 +54,13 @@ export class ReadStateStore {
     return this.addedSinceLoad.size > 0 || this.removedSinceLoad.size > 0;
   }
 
-  private schedulePersist(): Promise<void> {
+  private schedulePersist(isRetry = false): Promise<void> {
     if (this.disposed) {
       return Promise.resolve();
+    }
+
+    if (!isRetry) {
+      this.debouncedPersistFailures = 0;
     }
 
     if (this.persistDebounceMs <= 0) {
@@ -68,8 +74,9 @@ export class ReadStateStore {
       this.persistTimer = undefined;
       void this.flush().catch(err => {
         logger.error('Failed to flush debounced read state persistence', err);
-        if (this.hasPendingPersist() && !this.disposed) {
-          void this.schedulePersist();
+        if (this.hasPendingPersist() && !this.disposed && this.debouncedPersistFailures < MAX_DEBOUNCED_PERSIST_RETRIES) {
+          this.debouncedPersistFailures++;
+          void this.schedulePersist(true);
         }
       });
     }, this.persistDebounceMs);
@@ -149,6 +156,7 @@ export class ReadStateStore {
       },
     );
     await this.fileStore.write(trimmed);
+    this.debouncedPersistFailures = 0;
 
     for (const [key, createdAt] of addedRecords) {
       if (this.items.get(key) === createdAt) {
