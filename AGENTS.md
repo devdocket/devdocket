@@ -352,12 +352,35 @@ The script assumes the App's private key lives at `keys/devdocket-bot.pem` and t
 
 ```bash
 git config user.email   # should end in @users.noreply.github.com (bot's noreply address)
-gh api user --jq .login # should return the bot account login, not your personal login
+gh api /repos/devdocket/devdocket --jq .full_name  # should succeed; do NOT use `gh api user`,
+                                                   # installation tokens 403 on /user
 ```
 
 If either check fails (e.g., still shows the developer's identity), the bot session is not active and the helper either errored out or its output was not applied to the current shell — fix that before continuing.
 
+> **Note:** an installation token returns 403 on `GET /user` ("Resource not accessible by integration"), so do NOT use `gh api user` to verify. Use a repo-scoped call like the one above instead. A 403 from `gh api user` after starting a bot session is expected, not a failure.
+
 **If the bot session cannot be started** (helper prints "App ID not found", missing PEM, expired key, etc.): STOP. Do not fall back to the developer's identity. Report the failure to the user and ask how to proceed — typically the user needs to populate `keys/devdocket-bot.app-id` and `keys/devdocket-bot.pem` (or set `DEVDOCKET_BOT_APP_ID`) for their environment.
+
+**⚠️ Bot session env vars do NOT persist across sync shell invocations.** Many Copilot CLI shell tools (e.g., `powershell` in sync mode) create a fresh shell per call and discard `$env:GH_TOKEN` / `$env:GITHUB_TOKEN` set by a previous call. The `git config` changes made by the helper are persistent in the worktree (they live in `.git/config`), so commits stay bot-authored — but `gh` calls in a fresh shell will use the developer's cached `gh auth` credential and create PRs/comments/issues under the developer's account.
+
+To avoid this, choose one of these patterns:
+
+1. **Single-shell chain (preferred for one-off `gh` actions):** Run the helper and the `gh` command in the same tool invocation, e.g.:
+   ```powershell
+   cd <worktree>
+   node scripts/start-bot-session.mjs --shell=powershell | Invoke-Expression
+   gh pr create --base dev --title "..." --body-file pr-body.md
+   ```
+2. **Long-lived async shell:** Start an async/persistent shell, run the helper there once, then send subsequent `gh` / `git` commands into the same shell (e.g. Copilot CLI's `powershell` with `mode: "async"`). All subsequent calls share the same `$env:GH_TOKEN`.
+
+**Always verify** after creating any remote artifact that the actor is the bot, not the developer:
+
+```bash
+gh pr view <number> --json author --jq .author.login   # should be "app/devdocket-bot"
+```
+
+If a PR / issue / comment was accidentally created as the developer, close it and recreate with the bot session active.
 
 **Sub-agents:** The orchestrating agent is responsible for starting the bot session in each worktree before dispatching sub-agents that will commit/push/`gh`-create. Sub-agents inherit the parent shell's environment only when they share it; if a sub-agent runs in a separately spawned shell, that shell must independently run the helper (or the orchestrator must export the resulting env vars to it).
 
