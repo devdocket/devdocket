@@ -14,6 +14,7 @@ import { trimByAge } from './trimByAge';
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
 const MAX_TOTAL_ENTRIES = 5_000;
+const MAX_DEBOUNCED_PERSIST_RETRIES = 5;
 
 export type InboxState = (typeof inboxStates)[number];
 
@@ -79,6 +80,7 @@ export class InboxStateStore {
   private persistTimer: ReturnType<typeof setTimeout> | undefined;
   private flushInProgress: Promise<void> | undefined;
   private disposed = false;
+  private debouncedPersistFailures = 0;
   /** Keys modified locally since the last load/persist. */
   private dirtyKeys = new Set<string>();
   /** Keys removed locally since the last load/persist. */
@@ -118,9 +120,13 @@ export class InboxStateStore {
     return this.dirtyKeys.size > 0 || this.removedKeys.size > 0;
   }
 
-  private schedulePersist(): Promise<void> {
+  private schedulePersist(isRetry = false): Promise<void> {
     if (this.disposed) {
       return Promise.resolve();
+    }
+
+    if (!isRetry) {
+      this.debouncedPersistFailures = 0;
     }
 
     if (this.persistDebounceMs <= 0) {
@@ -134,8 +140,9 @@ export class InboxStateStore {
       this.persistTimer = undefined;
       void this.flush().catch(err => {
         logger.error('Failed to flush debounced inbox state persistence', err);
-        if (this.hasPendingPersist() && !this.disposed) {
-          void this.schedulePersist();
+        if (this.hasPendingPersist() && !this.disposed && this.debouncedPersistFailures < MAX_DEBOUNCED_PERSIST_RETRIES) {
+          this.debouncedPersistFailures++;
+          void this.schedulePersist(true);
         }
       });
     }, this.persistDebounceMs);
@@ -209,6 +216,7 @@ export class InboxStateStore {
       getKey: record => this.key(record.providerId, record.externalId),
     });
     await this.fileStore.write(trimmed);
+    this.debouncedPersistFailures = 0;
 
     for (const [k, record] of dirtyRecords) {
       if (this.cache.get(k) === record) {

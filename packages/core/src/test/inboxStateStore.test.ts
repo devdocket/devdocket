@@ -1173,6 +1173,44 @@ describe('InboxStateStore', () => {
       }
     });
 
+    it('retries failed timer-triggered flushes with the dirty payload', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      let writes = 0;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => {
+          writes++;
+          if (writes === 1) {
+            throw new Error('locked');
+          }
+          persisted = value;
+        }),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+
+      try {
+        await debouncedStore.setState('gh', 'issue-1', 'accepted');
+
+        await vi.advanceTimersByTimeAsync(250);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(250);
+        await debouncedStore.flush();
+
+        expect(fileStore.write).toHaveBeenCalledTimes(2);
+        expect(persisted).toEqual([expect.objectContaining({ providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' })]);
+
+        await vi.advanceTimersByTimeAsync(250);
+        expect(fileStore.write).toHaveBeenCalledTimes(2);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
     it('flushes pending writes before invalidating the cache', async () => {
       vi.useFakeTimers();
       let persisted: unknown[] | undefined;
