@@ -38,6 +38,7 @@ export class WorkGraph {
   private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
+  private changeVersion = 0;
   private currentMutation: Promise<void> = Promise.resolve();
   private shutdownRequested = false;
   private readonly _onDidChange = new vscode.EventEmitter<WorkGraphChangeEvent>();
@@ -148,8 +149,14 @@ export class WorkGraph {
     return Array.from(this.items.values());
   }
 
+  /** Cache-invalidation token that may increase more often than user-visible mutations. */
+  getChangeVersion(): number {
+    return this.changeVersion;
+  }
+
   private invalidateStateCache(): void {
     this.stateCache = null;
+    this.changeVersion++;
   }
 
   private getOrBuildStateCache(): Map<WorkItemState, WorkItem[]> {

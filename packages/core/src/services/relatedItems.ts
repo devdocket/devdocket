@@ -5,7 +5,21 @@ import type { ProviderRegistry } from './providerRegistry';
 import type { WorkGraph } from './workGraph';
 import { logger } from './logger';
 
+/** Cached related-item lookup. Treat the map and arrays as immutable. */
 export type RelatedItemsIndex = Map<string, ResolvedRelatedItem[]>;
+
+interface RelatedItemsIndexSignature {
+  value: string;
+  hasAnyRelatedItems: boolean;
+  hasPrRelatedItems: boolean;
+}
+
+interface RelatedItemsIndexCacheEntry {
+  signature: string;
+  index: RelatedItemsIndex;
+}
+
+let relatedItemsIndexCache = new WeakMap<WorkGraph, RelatedItemsIndexCacheEntry>();
 
 interface ResolvedRelatedItemWithSort extends ResolvedRelatedItem {
   externalId: string;
@@ -62,6 +76,18 @@ function buildRelatedItemsIndexForDiscovered(
   providerItems: Map<string, ProviderItem[]>,
   workGraph: WorkGraph,
 ): RelatedItemsIndex {
+  const signature = getRelatedItemsIndexSignature(providerItems, workGraph);
+  const cached = relatedItemsIndexCache.get(workGraph);
+  if (cached?.signature === signature.value) {
+    return cached.index;
+  }
+
+  if (!signature.hasAnyRelatedItems) {
+    const emptyIndex: RelatedItemsIndex = new Map();
+    relatedItemsIndexCache.set(workGraph, { signature: signature.value, index: emptyIndex });
+    return emptyIndex;
+  }
+
   const providerItemsByRef = buildProviderItemsByRef(providerItems, workGraph);
   const workingIndex = new Map<string, Map<string, ResolvedRelatedItemWithSort>>();
   let totalRefCount = 0;
@@ -89,23 +115,25 @@ function buildRelatedItemsIndexForDiscovered(
     }
   }
 
-  for (const [providerId, items] of providerItems) {
-    for (const candidate of items) {
-      if (candidate.itemType !== 'pr' || !candidate.relatedItems?.length) {
-        continue;
-      }
-
-      for (const ref of candidate.relatedItems) {
-        const target = resolveProviderItemTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse', candidate.title);
-        if (!target) {
+  if (signature.hasPrRelatedItems) {
+    for (const [providerId, items] of providerItems) {
+      for (const candidate of items) {
+        if (candidate.itemType !== 'pr' || !candidate.relatedItems?.length) {
           continue;
         }
 
-        for (const match of providerItemsByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
-          if (match.providerId === providerId && match.externalId === candidate.externalId) {
+        for (const ref of candidate.relatedItems) {
+          const target = resolveProviderItemTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse', candidate.title);
+          if (!target) {
             continue;
           }
-          upsertResolved(getOrCreateResolvedSet(workingIndex, match.providerId, match.externalId), target);
+
+          for (const match of providerItemsByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
+            if (match.providerId === providerId && match.externalId === candidate.externalId) {
+              continue;
+            }
+            upsertResolved(getOrCreateResolvedSet(workingIndex, match.providerId, match.externalId), target);
+          }
         }
       }
     }
@@ -122,7 +150,94 @@ function buildRelatedItemsIndexForDiscovered(
       publicIndex.set(key, relatedItems);
     }
   }
+  relatedItemsIndexCache.set(workGraph, { signature: signature.value, index: publicIndex });
   return publicIndex;
+}
+
+export function clearRelatedItemsIndexCacheForTests(): void {
+  relatedItemsIndexCache = new WeakMap<WorkGraph, RelatedItemsIndexCacheEntry>();
+}
+
+function getRelatedItemsIndexSignature(providerItems: Map<string, ProviderItem[]>, workGraph: WorkGraph): RelatedItemsIndexSignature {
+  let hash = 2166136261;
+  let itemCount = 0;
+  let refCount = 0;
+  let hasAnyRelatedItems = false;
+  let hasPrRelatedItems = false;
+
+  for (const [providerId, items] of providerItems) {
+    hash = appendHashPart(hash, providerId);
+    hash = appendHashPart(hash, items.length);
+    for (const item of items) {
+      itemCount++;
+      const relatedItems = item.relatedItems ?? [];
+      hash = appendHashPart(hash, item.externalId);
+      hash = appendHashPart(hash, item.itemType);
+      hash = appendHashPart(hash, item.version);
+      hash = appendHashPart(hash, item.resurfaceVersion);
+      hash = appendHashPart(hash, item.title);
+      hash = appendHashPart(hash, relatedItems.length);
+
+      if (relatedItems.length > 0) {
+        hasAnyRelatedItems = true;
+        hasPrRelatedItems ||= item.itemType === 'pr';
+      }
+
+      for (const ref of relatedItems) {
+        refCount++;
+        hash = appendHashPart(hash, ref.externalId);
+        hash = appendHashPart(hash, ref.itemType);
+        hash = appendHashPart(hash, ref.relation);
+      }
+    }
+  }
+
+  const workGraphSignature = getWorkGraphSignature(workGraph);
+  return {
+    value: `${itemCount}:${refCount}:${hasPrRelatedItems ? 1 : 0}:${hash.toString(36)}:${workGraphSignature}`,
+    hasAnyRelatedItems,
+    hasPrRelatedItems,
+  };
+}
+
+function getWorkGraphSignature(workGraph: WorkGraph): string {
+  const getChangeVersion = (workGraph as Partial<Pick<WorkGraph, 'getChangeVersion'>>).getChangeVersion;
+  const changeVersion = getChangeVersion?.call(workGraph);
+  if (changeVersion !== undefined) {
+    return `v:${changeVersion}`;
+  }
+
+  let hash = 2166136261;
+  let provenanceCount = 0;
+  for (const item of workGraph.getAll()) {
+    if (!item.providerId || !item.externalId) {
+      continue;
+    }
+    provenanceCount++;
+    hash = appendHashPart(hash, item.id);
+    hash = appendHashPart(hash, item.providerId);
+    hash = appendHashPart(hash, item.externalId);
+    hash = appendHashPart(hash, item.itemType);
+    hash = appendHashPart(hash, item.title);
+  }
+  return `h:${provenanceCount}:${hash.toString(36)}`;
+}
+
+function appendHashPart(hash: number, value: unknown): number {
+  const text = value === undefined ? '<undefined>' : String(value);
+  hash = appendHashText(hash, String(text.length));
+  hash = appendHashText(hash, ':');
+  hash = appendHashText(hash, text);
+  return appendHashText(hash, ';');
+}
+
+function appendHashText(hash: number, text: string): number {
+  let next = hash;
+  for (let index = 0; index < text.length; index++) {
+    next ^= text.charCodeAt(index);
+    next = Math.imul(next, 16777619) >>> 0;
+  }
+  return next;
 }
 
 function resolveReverseRefsForUndiscovered(

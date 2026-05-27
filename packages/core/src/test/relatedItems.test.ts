@@ -1,7 +1,7 @@
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { buildRelatedItemsIndex, resolveRelatedItemsFor } from '../services/relatedItems';
+import { buildRelatedItemsIndex, clearRelatedItemsIndexCacheForTests, resolveRelatedItemsFor } from '../services/relatedItems';
 import { logger } from '../services/logger';
 
 vi.mock('../services/logger', () => ({
@@ -12,6 +12,11 @@ vi.mock('../services/logger', () => ({
     error: vi.fn(),
   },
 }));
+
+beforeEach(() => {
+  clearRelatedItemsIndexCacheForTests();
+  vi.mocked(logger.debug).mockClear();
+});
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   const now = Date.now();
@@ -301,8 +306,101 @@ describe('resolveRelatedItemsFor', () => {
     ]);
   });
 
+  it('reuses the cached index when provider items and work graph are unchanged', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+    const workGraph = {
+      getChangeVersion: vi.fn(() => 1),
+      getAll: vi.fn(() => [issue, pr]),
+      findItemByProvenance: vi.fn((providerId: string, externalId: string) => [issue, pr].find(
+        item => item.providerId === providerId && item.externalId === externalId,
+      )),
+    } as any;
+
+    const firstIndex = buildRelatedItemsIndex(registry, workGraph);
+    const callCountAfterFirstBuild = workGraph.findItemByProvenance.mock.calls.length;
+    const secondIndex = buildRelatedItemsIndex(registry, workGraph);
+
+    expect(secondIndex).toBe(firstIndex);
+    expect(callCountAfterFirstBuild).toBeGreaterThan(0);
+    expect(workGraph.findItemByProvenance.mock.calls.length).toBe(callCountAfterFirstBuild);
+  });
+
+  it('invalidates the cached index when provider inputs change', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const prDiscovered: ProviderItem = {
+      externalId: 'owner/repo#10',
+      title: 'PR',
+      itemType: 'pr',
+      version: '1',
+      relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }],
+    };
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [prDiscovered]],
+    ]));
+    const workGraph = makeWorkGraph([issue, pr]);
+
+    const firstIndex = buildRelatedItemsIndex(registry, workGraph);
+    prDiscovered.version = '2';
+    const secondIndex = buildRelatedItemsIndex(registry, workGraph);
+
+    expect(secondIndex).not.toBe(firstIndex);
+    expect(resolveRelatedItemsFor(pr, registry, workGraph, secondIndex)).toEqual([
+      { targetItemId: 'issue-1', targetTitle: 'Item', targetExternalId: 'owner/repo#2', targetKind: 'workItem', label: 'Closes Item', relation: 'closes', itemType: 'issue' },
+    ]);
+  });
+
+  it('returns an empty index without scanning work graph items when no provider item has related refs', () => {
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr' }]],
+    ]));
+    const workGraph = {
+      getChangeVersion: vi.fn(() => 1),
+      getAll: vi.fn(() => { throw new Error('workGraph.getAll should not be called'); }),
+      findItemByProvenance: vi.fn(() => { throw new Error('workGraph.findItemByProvenance should not be called'); }),
+    } as any;
+
+    const index = buildRelatedItemsIndex(registry, workGraph);
+
+    expect(index.size).toBe(0);
+    expect(workGraph.getAll).not.toHaveBeenCalled();
+    expect(workGraph.findItemByProvenance).not.toHaveBeenCalled();
+  });
+
+  it('resolves non-PR forward refs without doing reverse PR resolution work', () => {
+    const source = makeWorkItem({ id: 'source-1', providerId: 'custom-provider', externalId: 'source-with-refs' });
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const items = [source, issue];
+    const registry = makeRegistry(new Map([
+      ['custom-provider', [{ externalId: 'source-with-refs', title: 'Source', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'linked' }] }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr' }]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+    ]));
+    const workGraph = {
+      getChangeVersion: vi.fn(() => 1),
+      getAll: vi.fn(() => items),
+      findItemByProvenance: vi.fn((providerId: string, externalId: string) => items.find(
+        item => item.providerId === providerId && item.externalId === externalId,
+      )),
+    } as any;
+
+    const index = buildRelatedItemsIndex(registry, workGraph);
+
+    expect(resolveRelatedItemsFor(source, registry, workGraph, index)).toEqual([
+      { targetItemId: 'issue-1', targetTitle: 'Item', targetExternalId: 'owner/repo#2', targetKind: 'workItem', label: 'Linked to Item', relation: 'linked', itemType: 'issue' },
+    ]);
+    expect(index.has(JSON.stringify(['github-my-prs', 'owner/repo#10']))).toBe(false);
+    expect(workGraph.findItemByProvenance).toHaveBeenCalledTimes(1);
+  });
+
   it('logs strict misses when related refs are not discovered locally', () => {
-    vi.mocked(logger.debug).mockClear();
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
     const registry = makeRegistry(new Map([
       ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#404', itemType: 'issue', relation: 'closes' }] }]],
