@@ -61,8 +61,18 @@ If unsure between two levels, choose the higher one.
 
 ### Structure
 
+You must always produce a complete structured body after the review header. A header-only response is invalid. The body must include:
+
+1. A one-paragraph summary of what you reviewed, including the files, areas, or scope you examined.
+2. A findings section that always has content. If you find nothing to flag, write exactly **No issues found.** followed by a short rationale explaining why the reviewed changes appear safe.
+3. Optionally, a concise list of files or areas examined when that helps the reader understand the review coverage.
+
 \`\`\`
 ## 🤖 Code Review
+
+### Reviewed Scope
+
+<One paragraph summarizing the files, areas, and scope reviewed.>
 
 ### Holistic Assessment
 
@@ -82,7 +92,11 @@ If unsure between two levels, choose the higher one.
 
 <Explanation with specifics. Reference code, line numbers, evidence.>
 
-(Repeat for each finding. Group related findings under a single heading.)
+(Repeat for each finding. Group related findings under a single heading. If there are no findings, write: **No issues found.** <Short rationale.>)
+
+### Files / Areas Examined (optional)
+
+- <Path or area examined>
 \`\`\`
 
 ### Verdict Rules
