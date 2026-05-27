@@ -62,7 +62,6 @@ function createMainViewProvider(): MainViewProvider {
     {} as any,
     { has: () => false } as any,
     { getActiveWatches: () => [], getActivePRWatches: () => [] } as any,
-    {} as any,
   );
 }
 
@@ -147,6 +146,7 @@ describe('ItemCard author annotation', () => {
 
     expect(container.querySelector('.item-repo-annotation')?.textContent).toBe('owner/repo');
   });
+
 });
 
 describe('EditorApp author annotation', () => {
@@ -236,5 +236,25 @@ describe('EditorApp author annotation', () => {
     });
 
     expect(postMessage).toHaveBeenLastCalledWith({ type: 'autosave', data: { notes: 'Draft note' } });
+  });
+
+  it('posts acceptAndRunAction for incoming preview inline actions', async () => {
+    const { container, postMessage } = await renderEditorWithPostMessage(makeEditorItem({
+      isIncoming: true,
+      providerId: 'github',
+      externalId: 'owner/repo#1',
+      inlineActions: [{ id: 'startGitWork', label: 'Start Git Work' }],
+    }));
+
+    const button = Array.from(container.querySelectorAll<HTMLButtonElement>('button')).find(candidate => candidate.textContent === 'Start Git Work');
+    expect(button).not.toBeUndefined();
+    await act(async () => button?.click());
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'acceptAndRunAction',
+      providerId: 'github',
+      externalId: 'owner/repo#1',
+      actionId: 'startGitWork',
+    });
   });
 });

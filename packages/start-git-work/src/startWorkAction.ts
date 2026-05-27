@@ -128,6 +128,9 @@ interface FlowCancellationState {
 export class StartWorkAction implements DevDocketAction {
   readonly id = 'startGitWork';
   readonly label = 'Start Git Work';
+  readonly presentation = {
+    incomingPreview: true,
+  } as const;
 
   private readonly globalState: vscode.Memento;
 
@@ -139,7 +142,7 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    if (item.state !== WorkItemState.InProgress || !item.providerId || !item.externalId) {
+    if ((item.state !== WorkItemState.New && item.state !== WorkItemState.InProgress) || !item.providerId || !item.externalId) {
       return false;
     }
 
@@ -163,10 +166,12 @@ export class StartWorkAction implements DevDocketAction {
       return;
     }
 
-    if (gitWork.kind === 'pr') {
-      await this.runPrFlow(item, gitWork, repoPath);
-    } else {
-      await this.runIssueFlow(item, gitWork, repoPath);
+    const started = gitWork.kind === 'pr'
+      ? await this.runPrFlow(item, gitWork, repoPath)
+      : await this.runIssueFlow(item, gitWork, repoPath);
+
+    if (started && item.state === WorkItemState.New) {
+      await vscode.commands.executeCommand('devdocket.acceptToFocus', { id: item.id });
     }
   }
 
@@ -242,18 +247,18 @@ export class StartWorkAction implements DevDocketAction {
     item: Readonly<WorkItem>,
     gitWork: ResolvedGitWork,
     repoPath: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     let branchName = this.normalizeBranchName(gitWork.ref);
     const repoLabel = gitWork.repoLabel ?? gitWork.cloneUrl;
 
     const baseBranch = await this.promptForBaseBranch(repoLabel);
     if (!baseBranch) {
-      return;
+      return false;
     }
 
     const workMode = await this.promptForWorkMode();
     if (!workMode) {
-      return;
+      return false;
     }
 
     const promptForNames = this.shouldPromptForNames();
@@ -265,19 +270,19 @@ export class StartWorkAction implements DevDocketAction {
       if (promptForNames) {
         const promptedBranchName = await this.promptForBranchName(branchName, workMode);
         if (promptedBranchName === undefined) {
-          return;
+          return false;
         }
         branchName = promptedBranchName;
 
         if (workMode === 'worktree') {
           worktreePath = await this.promptForWorktreePath(repoPath, branchName, item, gitWork);
           if (worktreePath === undefined) {
-            return;
+            return false;
           }
         }
       }
 
-      await vscode.window.withProgress(
+      return await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
           title: 'Starting git work for issue',
@@ -285,21 +290,20 @@ export class StartWorkAction implements DevDocketAction {
         },
         async (progress, token) => {
           const abortController = abortFromToken(token);
-          if (workMode === 'worktree') {
-            await this.issueWorktreeFlow(item, gitWork, repoPath, branchName, baseBranch, progress, abortController.signal, cancellationState, worktreePath);
-          } else {
-            await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress, abortController.signal, cancellationState);
-          }
+          return workMode === 'worktree'
+            ? this.issueWorktreeFlow(item, gitWork, repoPath, branchName, baseBranch, progress, abortController.signal, cancellationState, worktreePath)
+            : this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress, abortController.signal, cancellationState);
         },
       );
     } catch (err: unknown) {
       if (await this.handleFlowCancellation(item, err, cancellationState)) {
-        return;
+        return false;
       }
       logger.error('Failed to start work', err);
       const message = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(`DevDocket: Failed to start work — ${message}`);
     }
+    return false;
   }
 
   private async issueWorktreeFlow(
@@ -312,12 +316,12 @@ export class StartWorkAction implements DevDocketAction {
     signal: AbortSignal,
     cancellationState: FlowCancellationState,
     promptedWorktreePath?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
-      return;
+      return false;
     }
 
     this.reportStep(progress, cancellationState, 'Creating branch...', 'creating branch');
@@ -325,7 +329,7 @@ export class StartWorkAction implements DevDocketAction {
     const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT, signal });
     if (branchList.trim()) {
       void vscode.window.showErrorMessage(`DevDocket: Branch "${branchName}" already exists.`);
-      return;
+      return false;
     }
 
     await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT, signal });
@@ -367,7 +371,7 @@ export class StartWorkAction implements DevDocketAction {
       const errStderr = (worktreeErr as any)?.stderr ?? '';
       if (errMsg.includes('already exists') || errStderr.includes('already exists')) {
         void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
-        return;
+        return false;
       }
       throw worktreeErr;
     }
@@ -390,6 +394,7 @@ export class StartWorkAction implements DevDocketAction {
     void vscode.window.showInformationMessage(
       `DevDocket: Created worktree for ${branchName}`,
     );
+    return true;
   }
 
   private async issueCheckoutFlow(
@@ -400,10 +405,10 @@ export class StartWorkAction implements DevDocketAction {
     progress: vscode.Progress<{ message?: string }>,
     signal: AbortSignal,
     cancellationState: FlowCancellationState,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const canProceed = await this.checkDirtyTree(repoPath, signal);
     if (!canProceed) {
-      return;
+      return false;
     }
 
     this.reportStep(progress, cancellationState, 'Creating and checking out branch...', 'creating and checking out branch');
@@ -424,16 +429,17 @@ export class StartWorkAction implements DevDocketAction {
     void vscode.window.showInformationMessage(
       `DevDocket: Checked out branch ${branchName}`,
     );
+    return true;
   }
 
   private async runPrFlow(
     item: Readonly<WorkItem>,
     gitWork: ResolvedGitWork,
     repoPath: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const workMode = await this.promptForWorkMode();
     if (!workMode) {
-      return;
+      return false;
     }
 
     const upstreamBranchName = this.normalizeBranchName(gitWork.ref);
@@ -443,14 +449,14 @@ export class StartWorkAction implements DevDocketAction {
       // PR branch prompts rename only the local branch; fetch still uses the upstream ref.
       const promptedBranchName = await this.promptForBranchName(branchName, workMode);
       if (promptedBranchName === undefined) {
-        return;
+        return false;
       }
       branchName = promptedBranchName;
 
       if (workMode === 'worktree') {
         worktreePath = await this.promptForWorktreePath(repoPath, branchName, item, gitWork);
         if (worktreePath === undefined) {
-          return;
+          return false;
         }
       }
     }
@@ -458,7 +464,7 @@ export class StartWorkAction implements DevDocketAction {
     const cancellationState: FlowCancellationState = { currentStep: 'fetching PR branch' };
 
     try {
-      await vscode.window.withProgress(
+      return await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
           title: 'Starting git work for PR',
@@ -470,24 +476,23 @@ export class StartWorkAction implements DevDocketAction {
 
           const branchInfo = await this.fetchPrBranch(gitWork, repoPath, branchName, abortController.signal);
           if (!branchInfo) {
-            return;
+            return false;
           }
 
-          if (workMode === 'worktree') {
-            await this.prWorktreeFlow(item, gitWork, repoPath, branchInfo, progress, abortController.signal, cancellationState, worktreePath);
-          } else {
-            await this.prCheckoutFlow(item, repoPath, branchInfo, progress, abortController.signal, cancellationState);
-          }
+          return workMode === 'worktree'
+            ? this.prWorktreeFlow(item, gitWork, repoPath, branchInfo, progress, abortController.signal, cancellationState, worktreePath)
+            : this.prCheckoutFlow(item, repoPath, branchInfo, progress, abortController.signal, cancellationState);
         },
       );
     } catch (err: unknown) {
       if (await this.handleFlowCancellation(item, err, cancellationState)) {
-        return;
+        return false;
       }
       logger.error('Failed to start work', err);
       const message = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(`DevDocket: Failed to start work — ${message}`);
     }
+    return false;
   }
 
   private async fetchPrBranch(
@@ -583,13 +588,13 @@ export class StartWorkAction implements DevDocketAction {
     signal: AbortSignal,
     cancellationState: FlowCancellationState,
     promptedWorktreePath?: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { branchName, sourceRef, trackingRef } = branchInfo;
     const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
-      return;
+      return false;
     }
 
     this.reportStep(progress, cancellationState, 'Creating worktree...', 'creating worktree');
@@ -692,6 +697,7 @@ export class StartWorkAction implements DevDocketAction {
     void vscode.window.showInformationMessage(
       `DevDocket: Created worktree for ${branchName}`,
     );
+    return true;
   }
 
   private async prCheckoutFlow(
@@ -701,11 +707,11 @@ export class StartWorkAction implements DevDocketAction {
     progress: vscode.Progress<{ message?: string }>,
     signal: AbortSignal,
     cancellationState: FlowCancellationState,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const { branchName, sourceRef, trackingRef } = branchInfo;
     const canProceed = await this.checkDirtyTree(repoPath, signal);
     if (!canProceed) {
-      return;
+      return false;
     }
 
     this.reportStep(progress, cancellationState, 'Checking out branch...', 'checking out branch');
@@ -727,7 +733,7 @@ export class StartWorkAction implements DevDocketAction {
         void vscode.window.showErrorMessage(
           `DevDocket: Branch "${branchName}" is already checked out by the worktree at "${conflictingWorktree}". Use worktree mode instead, or remove the conflicting worktree first.`,
         );
-        return;
+        return false;
       }
     }
 
@@ -769,6 +775,7 @@ export class StartWorkAction implements DevDocketAction {
     void vscode.window.showInformationMessage(
       `DevDocket: Checked out branch ${branchName}`,
     );
+    return true;
   }
 
   /**

@@ -138,6 +138,15 @@ export interface DevDocketProvider {
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
+/** Optional UI hints for how the core should surface a contextual action. */
+export interface DevDocketActionPresentation {
+  /**
+   * Show this action as a dedicated button in the Incoming preview header when
+   * it matches the synthetic post-accept work item shape.
+   */
+  readonly incomingPreview?: boolean;
+}
+
 /**
  * A context-menu action that can be run against a {@link WorkItem}.
  *
@@ -168,6 +177,8 @@ export interface DevDocketAction {
   readonly id: string;
   /** Label shown in the context menu. */
   readonly label: string;
+  /** Optional hints for richer DevDocket surfaces beyond the Run Action picker. */
+  readonly presentation?: DevDocketActionPresentation;
   /**
    * Determine whether this action is applicable to the given work item.
    *

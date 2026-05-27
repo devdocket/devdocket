@@ -55,6 +55,11 @@ export interface ItemAuthorData {
   handle?: string;
 }
 
+export interface InlineActionData {
+  id: string;
+  label: string;
+}
+
 export interface ItemCardData {
   id: string;
   title: string;
@@ -123,6 +128,7 @@ export interface EditorItemData {
   isProviderManaged: boolean;
   validTransitions: string[];
   hasActions: boolean;
+  inlineActions?: InlineActionData[];
   activityLog: EditorActivityLogEntry[];
   relatedItems: ResolvedRelatedItem[];
   ciWatch?: EditorCIWatchData;

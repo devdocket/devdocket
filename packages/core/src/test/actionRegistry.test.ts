@@ -221,6 +221,27 @@ describe('ActionRegistry', () => {
     expect(registry.getActionsFor(pausedItem)).toEqual([pausedOnly]);
   });
 
+  it('returns only presentation-opted actions for the incoming preview surface', () => {
+    const item = createWorkItem();
+    const previewAction: DevDocketAction = {
+      id: 'preview',
+      label: 'Preview Action',
+      presentation: { incomingPreview: true },
+      canRun: vi.fn(() => true),
+      run: vi.fn(async () => {}),
+    };
+    const standardAction: DevDocketAction = {
+      id: 'standard',
+      label: 'Standard Action',
+      canRun: vi.fn(() => true),
+      run: vi.fn(async () => {}),
+    };
+    registry.register(previewAction);
+    registry.register(standardAction);
+
+    expect(registry.getSurfaceActionsFor(item, 'incomingPreview')).toEqual([{ id: 'preview', label: 'Preview Action' }]);
+  });
+
   it('dispose makes getActionsFor return empty for previously matching actions', () => {
     registry.register(createMockAction('will-clear'));
     registry.dispose();

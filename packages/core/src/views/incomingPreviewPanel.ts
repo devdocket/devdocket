@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
 import type { ProviderItem } from '../api/types';
+import { type WorkItem, WorkItemState } from '../models/workItem';
+import { ActionRegistry } from '../services/actionRegistry';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
@@ -58,6 +60,7 @@ export class IncomingPreviewPanel {
   private readonly stateStore: InboxStateStore;
   private readonly readStateStore: ReadStateStore;
   private readonly workGraph: WorkGraph;
+  private readonly actionRegistry: ActionRegistry;
   private readonly panelManager: IncomingPreviewPanelManager;
   private readonly providerId: string;
   private readonly externalId: string;
@@ -75,6 +78,7 @@ export class IncomingPreviewPanel {
     stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
+    actionRegistry: ActionRegistry,
   ): vscode.WebviewPanelSerializer {
     return {
       async deserializeWebviewPanel(panel, state): Promise<void> {
@@ -92,6 +96,7 @@ export class IncomingPreviewPanel {
           stateStore,
           readStateStore,
           workGraph,
+          actionRegistry,
           panel,
           restoredState.providerId,
           restoredState.externalId,
@@ -107,6 +112,7 @@ export class IncomingPreviewPanel {
     stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
+    actionRegistry: ActionRegistry,
     providerId: string,
     externalId: string,
   ): void {
@@ -136,7 +142,7 @@ export class IncomingPreviewPanel {
       },
     );
 
-    const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, panelManager, providerId, externalId, context.extensionUri, false);
+    const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, actionRegistry, panelManager, providerId, externalId, context.extensionUri, false);
     panelManager.openPanels.set(key, preview);
     // Panel cleanup is wired in the constructor via panel.onDidDispose →
     // this.dispose(). Pushing onto context.subscriptions would leak a
@@ -150,6 +156,7 @@ export class IncomingPreviewPanel {
     stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
+    actionRegistry: ActionRegistry,
     panel: vscode.WebviewPanel,
     providerId: string,
     externalId: string,
@@ -161,7 +168,7 @@ export class IncomingPreviewPanel {
     }
 
     panel.webview.options = IncomingPreviewPanel.getWebviewOptions(context);
-    const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, panelManager, providerId, externalId, context.extensionUri, true);
+    const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, actionRegistry, panelManager, providerId, externalId, context.extensionUri, true);
     panelManager.openPanels.set(key, preview);
   }
 
@@ -183,6 +190,7 @@ export class IncomingPreviewPanel {
     stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
+    actionRegistry: ActionRegistry,
     panelManager: IncomingPreviewPanelManager,
     providerId: string,
     externalId: string,
@@ -194,6 +202,7 @@ export class IncomingPreviewPanel {
     this.stateStore = stateStore;
     this.readStateStore = readStateStore;
     this.workGraph = workGraph;
+    this.actionRegistry = actionRegistry;
     this.panelManager = panelManager;
     this.providerId = providerId;
     this.externalId = externalId;
@@ -221,7 +230,7 @@ export class IncomingPreviewPanel {
 
   private async handleMessage(msg: unknown): Promise<void> {
     if (!msg || typeof msg !== 'object') return;
-    const message = msg as { type?: string; url?: string; text?: string; itemId?: string; providerId?: string; externalId?: string };
+    const message = msg as { type?: string; url?: string; text?: string; itemId?: string; providerId?: string; externalId?: string; actionId?: string };
 
     switch (message.type) {
       case 'openUrl':
@@ -239,6 +248,11 @@ export class IncomingPreviewPanel {
         break;
       case 'acceptItem':
         await this.acceptAndOpen();
+        break;
+      case 'acceptAndRunAction':
+        if (typeof message.actionId === 'string') {
+          await this.acceptAndRunAction(message.actionId);
+        }
         break;
       case 'dismissItem':
         await this.dismiss();
@@ -269,36 +283,60 @@ export class IncomingPreviewPanel {
     }
   }
 
+  private createSyntheticIncomingWorkItem(providerItem: ProviderItem): WorkItem {
+    const now = Date.now();
+    return {
+      id: getProviderItemKey(this.providerId, this.externalId),
+      title: providerItem.title,
+      description: providerItem.description,
+      state: WorkItemState.New,
+      providerId: this.providerId,
+      externalId: this.externalId,
+      itemType: providerItem.itemType,
+      url: providerItem.url,
+      group: providerItem.group,
+      createdAt: now,
+      updatedAt: now,
+    };
+  }
+
+  private getIncomingPreviewActions(providerItem: ProviderItem): EditorItemData['inlineActions'] {
+    const actions = this.actionRegistry.getSurfaceActionsFor(
+      this.createSyntheticIncomingWorkItem(providerItem),
+      'incomingPreview',
+    );
+    return actions.length > 0 ? actions : undefined;
+  }
+
+  private buildAcceptPayload(providerItem: ProviderItem): Record<string, unknown> {
+    return {
+      kind: 'item',
+      providerId: this.providerId,
+      externalId: this.externalId,
+      title: providerItem.title,
+      description: providerItem.description,
+      url: providerItem.url,
+      ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
+      ...(providerItem.group ? { group: providerItem.group } : {}),
+      ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
+    };
+  }
+
+  private async acceptItem(): Promise<WorkItem | undefined> {
+    const providerItem = this.findProviderItem();
+    if (!providerItem) {
+      void vscode.window.showWarningMessage('Item is no longer available from the provider.');
+      return undefined;
+    }
+
+    await vscode.commands.executeCommand('devdocket.acceptFromInbox', this.buildAcceptPayload(providerItem));
+    return this.workGraph.findItemByProvenance(this.providerId, this.externalId);
+  }
+
   private async acceptAndOpen(): Promise<void> {
     try {
-      const providerItem = this.findProviderItem();
-      if (!providerItem) {
-        void vscode.window.showWarningMessage('Item is no longer available from the provider.');
-        return;
-      }
-
-      let existing = this.workGraph.findItemByProvenance(this.providerId, this.externalId);
+      const existing = await this.acceptItem();
       if (!existing) {
-        await this.workGraph.createItem(
-          { title: providerItem.title, description: providerItem.description },
-          {
-            providerId: this.providerId,
-            externalId: this.externalId,
-            itemType: providerItem.itemType,
-            url: providerItem.url,
-            ...(providerItem.group ? { group: providerItem.group } : {}),
-          },
-        );
-        existing = this.workGraph.findItemByProvenance(this.providerId, this.externalId);
-      }
-
-      await this.stateStore.setState(this.providerId, this.externalId, 'accepted');
-
-      if (!existing) {
-        // createItem succeeded above (no throw) but findItemByProvenance still
-        // returns nothing — almost certainly a concurrent dispose() of the work
-        // graph. Surface this so the user knows the click did something even
-        // though no editor opened.
         logger.warn(`IncomingPreview: WorkItem missing after accept (${this.providerId}/${this.externalId})`);
         void vscode.window.showErrorMessage('Item was accepted but the editor could not be opened. Try selecting it from DevDocket.');
         this.dispose();
@@ -310,6 +348,28 @@ export class IncomingPreviewPanel {
     } catch (err) {
       logger.error('IncomingPreview: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async acceptAndRunAction(actionId: string): Promise<void> {
+    try {
+      const existing = await this.acceptItem();
+      if (!existing) {
+        logger.warn(`IncomingPreview: WorkItem missing after accept-and-run (${this.providerId}/${this.externalId})`);
+        void vscode.window.showErrorMessage('Item was accepted but the action could not be started. Try selecting it from DevDocket.');
+        this.dispose();
+        return;
+      }
+
+      const ran = await vscode.commands.executeCommand<boolean>('devdocket.runActionById', { id: existing.id, actionId });
+      if (!ran) {
+        return;
+      }
+      await vscode.commands.executeCommand('devdocket.editItem', { id: existing.id });
+      this.dispose();
+    } catch (err) {
+      logger.error('IncomingPreview: accept-and-run failed', err);
+      void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -413,6 +473,7 @@ export class IncomingPreviewPanel {
       isProviderManaged: true,
       validTransitions: [],
       hasActions: false,
+      inlineActions: this.getIncomingPreviewActions(providerItem),
       activityLog: [],
       relatedItems: resolveRelatedItemsFor(
         { providerId: this.providerId, externalId: this.externalId, itemType: providerItem.itemType },

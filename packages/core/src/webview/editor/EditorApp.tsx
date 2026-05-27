@@ -146,7 +146,9 @@ export function EditorApp() {
             item={item}
             onTransition={targetState => postMessage({ type: 'transitionState', itemId: item.id, targetState })}
             onRunAction={() => postMessage({ type: 'runAction', itemId: item.id })}
+            onRunActionById={actionId => postMessage({ type: 'runActionById', itemId: item.id, actionId })}
             onAccept={() => item.providerId && item.externalId && postMessage({ type: 'acceptItem', providerId: item.providerId, externalId: item.externalId })}
+            onAcceptAndRunAction={actionId => item.providerId && item.externalId && postMessage({ type: 'acceptAndRunAction', providerId: item.providerId, externalId: item.externalId, actionId })}
             onDismiss={() => item.providerId && item.externalId && postMessage({ type: 'dismissItem', providerId: item.providerId, externalId: item.externalId })}
           />
         }

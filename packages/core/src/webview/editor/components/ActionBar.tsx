@@ -5,7 +5,9 @@ interface ActionBarProps {
   item: EditorItemData;
   onTransition: (targetState: string) => void;
   onRunAction: () => void;
+  onRunActionById: (actionId: string) => void;
   onAccept: () => void;
+  onAcceptAndRunAction: (actionId: string) => void;
   onDismiss: () => void;
 }
 
@@ -16,11 +18,19 @@ interface ButtonSpec {
   onClick: () => void;
 }
 
-export function ActionBar({ item, onTransition, onRunAction, onAccept, onDismiss }: ActionBarProps) {
+export function ActionBar({ item, onTransition, onRunAction, onRunActionById, onAccept, onAcceptAndRunAction, onDismiss }: ActionBarProps) {
   const buttons: ButtonSpec[] = [];
 
   if (item.isIncoming && item.providerId && item.externalId) {
     buttons.push({ key: 'accept', label: 'Accept', style: 'primary', onClick: onAccept });
+    for (const action of item.inlineActions ?? []) {
+      buttons.push({
+        key: action.id,
+        label: action.label,
+        style: 'secondary',
+        onClick: () => onAcceptAndRunAction(action.id),
+      });
+    }
     buttons.push({ key: 'dismiss', label: 'Dismiss', style: 'danger', onClick: onDismiss });
   } else {
     for (const targetState of preferredTransitions(item.state, item.validTransitions)) {
@@ -29,6 +39,15 @@ export function ActionBar({ item, onTransition, onRunAction, onAccept, onDismiss
         label: transitionLabel(item.state, targetState),
         style: targetState === 'Done' || targetState === 'InProgress' ? 'primary' : 'secondary',
         onClick: () => onTransition(targetState),
+      });
+    }
+
+    for (const action of item.inlineActions ?? []) {
+      buttons.push({
+        key: action.id,
+        label: action.label,
+        style: 'secondary',
+        onClick: () => onRunActionById(action.id),
       });
     }
 
