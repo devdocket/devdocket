@@ -95,6 +95,8 @@ export class WorkItemEditorPanel {
   private lastDisplayedState: WorkItemState | undefined;
   private lastDisplayedGroup: string | undefined;
   private lastManagedState: boolean | undefined;
+  private lastProviderItemSnapshot: string | undefined;
+  private lastRelatedProviderItemSnapshots = new Map<string, string>();
   private lastDisplayedCIWatchSignature: string | undefined;
   private lastDisplayedCIWatchRunKeys = new Set<string>();
 
@@ -233,8 +235,8 @@ export class WorkItemEditorPanel {
       this.update();
     });
 
-    this.providerChangeSub = this.providerRegistry.onDidChangeProviderItems(() => {
-      this.update();
+    this.providerChangeSub = this.providerRegistry.onDidChangeProviderItems((providerId) => {
+      this.refreshForProviderItemsChange(providerId);
     });
 
     this.actionRegistrySub = this.actionRegistry.onDidChangeRegistrations(() => {
@@ -333,6 +335,23 @@ export class WorkItemEditorPanel {
 
   private isProviderManaged(item: WorkItem): boolean {
     return !!(item.providerId && this.providerRegistry.getProvider(item.providerId));
+  }
+
+  private refreshForProviderItemsChange(providerId?: string): void {
+    if (this.disposed) { return; }
+    const item = this.workGraph.getItem(this.itemId);
+    if (!item?.providerId || !item.externalId) { return; }
+    if (providerId !== undefined && providerId !== item.providerId) {
+      const nextRelatedSnapshot = this.buildRelatedProviderItemSnapshot(item, providerId);
+      if (nextRelatedSnapshot === this.lastRelatedProviderItemSnapshots.get(providerId)) { return; }
+      this.update();
+      return;
+    }
+
+    const nextSnapshot = this.buildProviderItemSnapshot(item);
+    if (nextSnapshot === this.lastProviderItemSnapshot) { return; }
+
+    this.update();
   }
 
   private refreshForPRWatchChange(): void {
@@ -457,6 +476,8 @@ export class WorkItemEditorPanel {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       this.htmlInitialized = false;
+      this.lastProviderItemSnapshot = undefined;
+      this.lastRelatedProviderItemSnapshots.clear();
       this.lastDisplayedCIWatchSignature = undefined;
       this.lastDisplayedCIWatchRunKeys.clear();
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
@@ -473,6 +494,8 @@ export class WorkItemEditorPanel {
     this.lastDisplayedState = item.state;
     this.lastDisplayedGroup = item.group;
     this.lastManagedState = editorItem.isProviderManaged;
+    this.lastProviderItemSnapshot = this.buildProviderItemSnapshot(item);
+    this.lastRelatedProviderItemSnapshots = this.buildRelatedProviderItemSnapshots(item);
     this.panel.title = `Edit: ${item.title}`;
 
     if (!this.htmlInitialized) {
@@ -540,6 +563,39 @@ export class WorkItemEditorPanel {
     }
 
     return this.providerRegistry.findProviderItem(item.providerId, item.externalId);
+  }
+
+  private buildProviderItemSnapshot(item: WorkItem): string | undefined {
+    const providerItem = this.getProviderItem(item);
+    return providerItem ? stableStringify(providerItem) : undefined;
+  }
+
+  private buildRelatedProviderItemSnapshots(item: WorkItem): Map<string, string> {
+    const snapshots = new Map<string, string>();
+    const providerItem = this.getProviderItem(item);
+    if (!providerItem?.relatedItems?.length) {
+      return snapshots;
+    }
+
+    for (const providerId of this.providerRegistry.getAllProviderItems().keys()) {
+      const snapshot = this.buildRelatedProviderItemSnapshot(item, providerId, providerItem);
+      if (snapshot !== undefined) {
+        snapshots.set(providerId, snapshot);
+      }
+    }
+    return snapshots;
+  }
+
+  private buildRelatedProviderItemSnapshot(item: WorkItem, providerId: string, providerItem = this.getProviderItem(item)): string | undefined {
+    const relatedRefs = providerItem?.relatedItems;
+    if (!relatedRefs?.length) {
+      return undefined;
+    }
+
+    const relatedItems = this.providerRegistry.getProviderItems(providerId)
+      .filter(candidate => relatedRefs.some(ref => ref.externalId === candidate.externalId && ref.itemType === candidate.itemType))
+      .sort((left, right) => `${left.itemType ?? ''}\u0000${left.externalId}`.localeCompare(`${right.itemType ?? ''}\u0000${right.externalId}`));
+    return relatedItems.length > 0 ? stableStringify(relatedItems) : undefined;
   }
 
   private buildCIWatchData(item: WorkItem): EditorItemData['ciWatch'] {
@@ -783,6 +839,29 @@ function setsEqual(left: Set<string>, right: Set<string>): boolean {
     }
   }
   return true;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(toStableJson(value));
+}
+
+function toStableJson(value: unknown): unknown {
+  if (value === null || typeof value !== 'object') {
+    return value;
+  }
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+  if (Array.isArray(value)) {
+    return value.map(toStableJson);
+  }
+
+  const record = value as Record<string, unknown>;
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(record).sort()) {
+    sorted[key] = toStableJson(record[key]);
+  }
+  return sorted;
 }
 
 function toEditorRunState(state: WatchedRun['status']['overallState']): NonNullable<EditorItemData['ciWatch']>['runs'][number]['state'] {
