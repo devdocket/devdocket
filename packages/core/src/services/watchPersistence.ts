@@ -110,19 +110,11 @@ export class WatchPersistence {
       return this.flush();
     }
 
-    if (!this.debounceTimer) {
-      this.debounceTimer = setTimeout(() => {
-        this.debounceTimer = undefined;
-        void this.flush();
-      }, this.debounceMs);
-    }
+    this.scheduleDebouncedFlush();
   }
 
   async flush(): Promise<void> {
-    if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
-      this.debounceTimer = undefined;
-    }
+    this.clearDebounceTimer();
 
     while (true) {
       const snapshot = this.pendingSnapshot;
@@ -145,6 +137,21 @@ export class WatchPersistence {
       if (!this.pendingSnapshot && pendingSave === this.pendingSave) {
         return;
       }
+    }
+  }
+
+  private scheduleDebouncedFlush(): void {
+    this.clearDebounceTimer();
+    this.debounceTimer = setTimeout(() => {
+      this.debounceTimer = undefined;
+      void this.flush();
+    }, this.debounceMs);
+  }
+
+  private clearDebounceTimer(): void {
+    if (this.debounceTimer) {
+      clearTimeout(this.debounceTimer);
+      this.debounceTimer = undefined;
     }
   }
 
