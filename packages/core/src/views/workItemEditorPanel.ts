@@ -445,6 +445,11 @@ export class WorkItemEditorPanel {
       return;
     }
 
+    if (this.disposed) {
+      await this.workGraph.updateItemDuringShutdown(this.itemId, patch);
+      return;
+    }
+
     await this.workGraph.updateItem(this.itemId, patch);
   }
 

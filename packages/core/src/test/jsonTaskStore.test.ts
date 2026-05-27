@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { JsonTaskStore } from '../storage/jsonTaskStore';
 import { JsonFileStore } from '../storage/fileStore';
@@ -14,6 +14,11 @@ describe('JsonTaskStore', () => {
     vi.clearAllMocks();
     fileSystem = useMockFileSystem();
     store = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
+  });
+
+  afterEach(async () => {
+    await store.flush();
+    vi.useRealTimers();
   });
 
   function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -123,6 +128,7 @@ describe('JsonTaskStore', () => {
         makeItem({ id: 'x', title: 'X' }),
         makeItem({ id: 'y', title: 'Y' }),
       ]);
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri);
       expect(persisted).toHaveLength(2);
@@ -143,6 +149,7 @@ describe('JsonTaskStore', () => {
 
   it('persists data to the backing JSON file', async () => {
     await store.save(makeItem());
+    await store.flush();
     const persisted = fileSystem.readJson<WorkItem[]>(fileUri);
     expect(persisted).toHaveLength(1);
     expect(persisted![0].id).toBe('test-1');
@@ -151,6 +158,7 @@ describe('JsonTaskStore', () => {
   it('loads from a fresh store instance sharing the same file', async () => {
     await store.save(makeItem({ id: 'a' }));
     await store.save(makeItem({ id: 'b' }));
+    await store.flush();
 
     const store2 = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
     const items = await store2.loadAll();
@@ -286,10 +294,67 @@ describe('JsonTaskStore', () => {
     });
   });
 
+  describe('persistence batching', () => {
+    it('coalesces back-to-back mutations into a single disk write', async () => {
+      vi.useFakeTimers();
+      store = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'), { persistDelayMs: 25 });
+
+      await store.save(makeItem({ id: 'batched', title: 'First', updatedAt: 1000 }));
+      await store.save(makeItem({ id: 'batched', title: 'Second', updatedAt: 2000 }));
+
+      expect(vscode.workspace.fs.writeFile).not.toHaveBeenCalled();
+      expect(vscode.workspace.fs.rename).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(25);
+      await store.flush();
+
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].title).toBe('Second');
+      expect(vscode.workspace.fs.writeFile).toHaveBeenCalledTimes(1);
+      expect(vscode.workspace.fs.rename).toHaveBeenCalledTimes(1);
+    });
+
+    it('flushes queued mutations so a fresh store can load them after reactivation', async () => {
+      const queuedStore = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'), { persistDelayMs: 60_000 });
+
+      await queuedStore.save(makeItem({ id: 'queued', title: 'Queued update', updatedAt: 1000 }));
+      expect(fileSystem.readJson<WorkItem[]>(fileUri)).toBeUndefined();
+
+      await queuedStore.flush();
+
+      const reactivatedStore = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
+      const items = await reactivatedStore.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('queued');
+      expect(items[0].title).toBe('Queued update');
+    });
+
+    it('retries staged work on a later flush after a transient persist failure', async () => {
+      const diskFull = new Error('disk full');
+      (vscode.workspace.fs.writeFile as ReturnType<typeof vi.fn>).mockRejectedValueOnce(diskFull);
+
+      await store.save(makeItem({ id: 'failing-write', updatedAt: 1000 }));
+
+      await expect(store.flush()).rejects.toThrow('disk full');
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'DevDocket could not save work items. Recent work item edits may be lost when the window reloads.',
+      );
+      expect(fileSystem.readJson<WorkItem[]>(fileUri)).toBeUndefined();
+
+      await store.flush();
+
+      const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
+      expect(persisted).toHaveLength(1);
+      expect(persisted[0].id).toBe('failing-write');
+    });
+  });
+
   describe('merge-on-write (multi-window safety)', () => {
     it('preserves items added by another window during persist', async () => {
       // Window A creates item1
       await store.save(makeItem({ id: 'item1', title: 'Window A item', updatedAt: 1000 }));
+      await store.flush();
 
       // Simulate another window adding item2 directly to the shared JSON file
       const current = fileSystem.readJson<WorkItem[]>(fileUri) ?? [];
@@ -300,6 +365,7 @@ describe('JsonTaskStore', () => {
 
       // Window A saves item3 — should preserve item2 from remote
       await store.save(makeItem({ id: 'item3', title: 'Another A item', updatedAt: 3000 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(3);
@@ -308,6 +374,7 @@ describe('JsonTaskStore', () => {
 
     it('keeps locally modified item when it has later updatedAt', async () => {
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.flush();
 
       // Another window writes an older version
       fileSystem.writeJson(fileUri, [
@@ -316,6 +383,7 @@ describe('JsonTaskStore', () => {
 
       // Window A updates the item
       await store.save(makeItem({ id: 'shared', title: 'Local newer', updatedAt: 2000 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
@@ -324,6 +392,7 @@ describe('JsonTaskStore', () => {
 
     it('takes remote item when it has later updatedAt', async () => {
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.flush();
 
       // Another window writes a newer version
       fileSystem.writeJson(fileUri, [
@@ -332,6 +401,7 @@ describe('JsonTaskStore', () => {
 
       // Window A saves an unrelated item — merge should pick up remote's newer version
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       const shared = persisted.find(i => i.id === 'shared');
@@ -340,7 +410,9 @@ describe('JsonTaskStore', () => {
 
     it('does not restore locally deleted items from remote', async () => {
       await store.save(makeItem({ id: 'to-delete', title: 'Delete me', updatedAt: 1000 }));
+      await store.flush();
       await store.delete('to-delete');
+      await store.flush();
 
       // Remote still has the item (from before the delete)
       fileSystem.writeJson(fileUri, [
@@ -349,6 +421,7 @@ describe('JsonTaskStore', () => {
 
       // Window A saves something else — should not restore deleted item
       await store.save(makeItem({ id: 'new', title: 'New', updatedAt: 2000 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
@@ -360,13 +433,17 @@ describe('JsonTaskStore', () => {
       vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
 
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.flush();
 
       const windowB = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'));
       await windowB.loadAll();
       await windowB.save(makeItem({ id: 'shared', title: 'Remote update', updatedAt: 2000 }));
+      await windowB.flush();
 
       await store.delete('shared');
+      await store.flush();
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 3000 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted.map(item => item.id).sort()).toEqual(['other']);
@@ -376,12 +453,14 @@ describe('JsonTaskStore', () => {
 
     it('honors remote deletions for untouched items', async () => {
       await store.save(makeItem({ id: 'shared', title: 'Shared', updatedAt: 1000 }));
+      await store.flush();
 
       // Another window deletes the item entirely.
       fileSystem.writeJson(fileUri, []);
 
       // This window only changes an unrelated item, so the deleted item should stay deleted.
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: 2000 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted).toHaveLength(1);
@@ -393,13 +472,16 @@ describe('JsonTaskStore', () => {
       vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
 
       await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.flush();
       await store.delete('shared');
+      await store.flush();
 
       fileSystem.writeJson(fileUri, [
         makeItem({ id: 'shared', title: 'Remote newer', updatedAt: Date.now() + 1 }),
       ]);
 
       await store.save(makeItem({ id: 'other', title: 'Other', updatedAt: Date.now() + 2 }));
+      await store.flush();
 
       const persisted = fileSystem.readJson<WorkItem[]>(fileUri)!;
       expect(persisted.map(item => item.id).sort()).toEqual(['other', 'shared']);
@@ -408,15 +490,39 @@ describe('JsonTaskStore', () => {
       vi.useRealTimers();
     });
 
+    it('rehydrates newer remote items into cache after a queued delete loses to a newer update', async () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-05-21T02:00:00Z'));
+      store = new JsonTaskStore(new JsonFileStore(fileUri, 'workitems.json'), { persistDelayMs: 25 });
+
+      await store.save(makeItem({ id: 'shared', title: 'Original', updatedAt: 1000 }));
+      await store.flush();
+      await store.delete('shared');
+
+      fileSystem.writeJson(fileUri, [
+        makeItem({ id: 'shared', title: 'Remote resurrected', updatedAt: Date.now() + 1 }),
+      ]);
+
+      await store.flush();
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('shared');
+      expect(items[0].title).toBe('Remote resurrected');
+
+      vi.useRealTimers();
+    });
+
     it('invalidateCache forces re-read on next access', async () => {
       await store.save(makeItem({ id: 'a', title: 'Original' }));
+      await store.flush();
 
       // Another window modifies the data
       fileSystem.writeJson(fileUri, [
         makeItem({ id: 'a', title: 'Modified by other window' }),
       ]);
 
-      store.invalidateCache();
+      await store.invalidateCache();
       const items = await store.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].title).toBe('Modified by other window');

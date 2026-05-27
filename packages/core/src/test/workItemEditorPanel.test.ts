@@ -63,17 +63,20 @@ function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record
     items.set(item.id, { ...item });
   }
 
+  const applyPatch = async (id: string, patch: Record<string, unknown>) => {
+    const current = items.get(id);
+    if (!current) {
+      throw new Error(`Missing item ${id}`);
+    }
+    items.set(id, { ...current, ...patch, updatedAt: Date.now() });
+    changeEmitter.fire();
+  };
+
   return {
     getAll: vi.fn(() => Array.from(items.values())),
     getItem: vi.fn((id: string) => items.get(id)),
-    updateItem: vi.fn(async (id: string, patch: Record<string, unknown>) => {
-      const current = items.get(id);
-      if (!current) {
-        throw new Error(`Missing item ${id}`);
-      }
-      items.set(id, { ...current, ...patch, updatedAt: Date.now() });
-      changeEmitter.fire();
-    }),
+    updateItem: vi.fn(applyPatch),
+    updateItemDuringShutdown: vi.fn(applyPatch),
     transitionState: vi.fn(async (id: string, targetState: WorkItemState) => {
       const current = items.get(id);
       if (!current) {
@@ -567,11 +570,12 @@ describe('WorkItemEditorPanel', () => {
     mock.simulateDispose();
 
     await vi.waitFor(() => {
-      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+      expect(workGraph.updateItemDuringShutdown).toHaveBeenCalledWith('item-1', {
         title: 'Updated before close',
         notes: 'Draft notes',
       });
     });
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
 
   it('saves manual notes without requiring title or URL fields', async () => {
