@@ -342,8 +342,7 @@ describe('ADO provider config edge cases', () => {
         listener({ affectsConfiguration: (k: string) => k === 'devDocketAdo.projects' });
       }
 
-      // New providers registered
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(6);
+      await vi.waitFor(() => expect(mockRegisterProvider).toHaveBeenCalledTimes(6));
     });
 
     it('reconfigures providers on refreshInterval change', async () => {
@@ -359,7 +358,7 @@ describe('ADO provider config edge cases', () => {
         });
       }
 
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(6);
+      await vi.waitFor(() => expect(mockRegisterProvider).toHaveBeenCalledTimes(6));
     });
   });
 });

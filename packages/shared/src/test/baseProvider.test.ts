@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BaseProvider, ProviderItem, EventEmitterLike, WindowStateProvider, Disposable } from '../baseProvider';
 import { PollingBackoffError } from '../pollingErrors';
+import { createAbortError } from '../signalUtils';
 
 
 /** Minimal EventEmitter stub for testing. */
@@ -47,6 +48,7 @@ class TestProvider extends BaseProvider {
   refreshCalls = 0;
   backgroundRefreshCalls = 0;
   refreshError: Error | undefined;
+  abortOnSignal = false;
   /** Set to a deferred promise to simulate an in-flight refresh. */
   refreshGate: { promise: Promise<void>; resolve: () => void } | undefined;
 
@@ -59,18 +61,27 @@ class TestProvider extends BaseProvider {
     if (this.refreshError) {
       throw this.refreshError;
     }
-    this._onDidDiscoverItems.fire([{ externalId: 'item-1', title: 'Item 1' }]);
+    this.publishDiscoveredItems([{ externalId: 'item-1', title: 'Item 1' }]);
   }
 
-  protected async doBackgroundRefresh(): Promise<void> {
+  protected async doBackgroundRefresh(signal?: AbortSignal): Promise<void> {
     this.backgroundRefreshCalls++;
     if (this.refreshGate) {
-      await this.refreshGate.promise;
+      if (this.abortOnSignal && signal) {
+        await Promise.race([
+          this.refreshGate.promise,
+          new Promise<never>((_, reject) => {
+            signal.addEventListener('abort', () => reject(createAbortError()), { once: true });
+          }),
+        ]);
+      } else {
+        await this.refreshGate.promise;
+      }
     }
     if (this.refreshError) {
       throw this.refreshError;
     }
-    this._onDidDiscoverItems.fire([{ externalId: 'bg-1', title: 'BG Item' }]);
+    this.publishDiscoveredItems([{ externalId: 'bg-1', title: 'BG Item' }]);
   }
 }
 
@@ -285,6 +296,56 @@ describe('BaseProvider', () => {
       expect(provider.backgroundRefreshCalls).toBe(0);
     });
 
+    it('waits for in-flight refreshes to finish before shutdown resolves', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(resolve => { resolveGate = resolve; }),
+        resolve: () => resolveGate(),
+      };
+
+      const refreshPromise = provider.refreshInBackground();
+      await Promise.resolve();
+      const shutdownPromise = provider.shutdown();
+
+      let shutdownResolved = false;
+      void shutdownPromise.then(() => {
+        shutdownResolved = true;
+      });
+      await Promise.resolve();
+      expect(shutdownResolved).toBe(false);
+
+      resolveGate();
+      await refreshPromise;
+      await shutdownPromise;
+      expect(shutdownResolved).toBe(true);
+
+      provider.dispose();
+    });
+
+    it('suppresses discovery events after shutdown begins', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(resolve => { resolveGate = resolve; }),
+        resolve: () => resolveGate(),
+      };
+
+      const refreshPromise = provider.refreshInBackground();
+      await Promise.resolve();
+      const shutdownPromise = provider.shutdown();
+      resolveGate();
+
+      await refreshPromise;
+      await shutdownPromise;
+
+      expect(listener).not.toHaveBeenCalled();
+      provider.dispose();
+    });
+
     it('does not subscribe to window state after dispose', () => {
       const provider = new TestProvider(createMockEmitter());
       const windowState = createMockWindowState();
@@ -340,6 +401,27 @@ describe('BaseProvider', () => {
       await provider.refreshInBackground();
       expect(provider.backgroundRefreshCalls).toBe(2);
 
+      provider.dispose();
+    });
+
+    it('does not route expected aborts through the background error handler', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      provider.abortOnSignal = true;
+      const errors: unknown[] = [];
+      provider.setErrorHandler((err) => errors.push(err));
+
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(resolve => { resolveGate = resolve; }),
+        resolve: () => resolveGate(),
+      };
+
+      const refreshPromise = provider.refreshInBackground();
+      await Promise.resolve();
+      await provider.abortInFlight();
+      await refreshPromise;
+
+      expect(errors).toHaveLength(0);
       provider.dispose();
     });
   });
