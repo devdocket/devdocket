@@ -197,7 +197,12 @@ export class WalkthroughParticipant {
             },
             filePath: {
               type: 'string' as const,
-              description: 'Relative path of the file or representative file in the group just presented. Pass this for walkthrough and lastFile phases using the exact path from the diff.',
+              description: 'Relative path of the file just presented. Pass this for walkthrough and lastFile phases using the exact path from the diff.',
+            },
+            filePaths: {
+              type: 'array' as const,
+              items: { type: 'string' as const },
+              description: 'Relative paths for every file in the group just presented. Use exact paths from the diff.',
             },
           },
           required: ['phase'],
@@ -248,13 +253,16 @@ export class WalkthroughParticipant {
 
           // Handle phase signals locally; only loop again for them if no text was streamed.
           if (part.name === 'devdocket-signalPhase') {
-            const input = part.input as { phase?: string; filePath?: string };
-            this.log.debug(`Phase signal: ${input.phase}${input.filePath ? ` for ${input.filePath}` : ''}`);
+            const input = part.input as { phase?: string; filePath?: string; filePaths?: string[] };
+            const signaledPaths = this.getSignaledFilePaths(input);
+            this.log.debug(`Phase signal: ${input.phase}${signaledPaths.length > 0 ? ` for ${signaledPaths.join(', ')}` : ''}`);
             if (input.phase) {
               phase = input.phase;
             }
-            if (input.filePath) {
-              this.recordPresentedFile(progress, input.filePath);
+            for (const filePath of signaledPaths) {
+              this.recordPresentedFile(progress, filePath);
+            }
+            if (signaledPaths.length > 0) {
               phase = this.deriveFileWalkthroughPhase(phase, progress);
             }
             toolResults.push({
@@ -371,6 +379,13 @@ export class WalkthroughParticipant {
       this.log.warn(`Unable to derive walkthrough file list: ${msg}`);
       return [];
     }
+  }
+
+  private getSignaledFilePaths(input: { filePath?: string; filePaths?: string[] }): string[] {
+    return [
+      ...(input.filePath ? [input.filePath] : []),
+      ...(Array.isArray(input.filePaths) ? input.filePaths : []),
+    ];
   }
 
   private recordPresentedFile(progress: WalkthroughProgress, filePath: string): void {
