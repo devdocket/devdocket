@@ -353,7 +353,7 @@ describe('WatchPanelProvider', () => {
     expect(prWatch).not.toHaveProperty('linkedSourceExternalId');
   });
 
-  it('refreshes linked PR targets when work items or discovered items change', () => {
+  it('does not refresh when provider items change, but still refreshes when work items change', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
     const watcherService = createWatcherService([createPRWatch()]);
@@ -371,16 +371,15 @@ describe('WatchPanelProvider', () => {
     provider.open();
 
     expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).not.toHaveProperty('linkedItemId');
+    const initialPostCount = vi.mocked(mockPanel.panel.webview.postMessage).mock.calls.length;
 
     providerItems.set('github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]);
     providerRegistry.fireDidChangeProviderItems();
-    expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
-      linkedSourceProviderId: 'github-pr-reviews',
-      linkedSourceExternalId: 'owner/repo#42',
-    }));
+    expect(mockPanel.panel.webview.postMessage).toHaveBeenCalledTimes(initialPostCount);
 
     workItems.push({ id: 'work-42', providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
     workGraph.fireDidChange();
+    expect(mockPanel.panel.webview.postMessage).toHaveBeenCalledTimes(initialPostCount + 1);
     expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
       linkedItemId: 'work-42',
     }));

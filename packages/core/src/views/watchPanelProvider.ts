@@ -26,7 +26,6 @@ export class WatchPanelProvider implements vscode.Disposable {
   ) {
     this.refreshDisposables = [
       this.workGraph.onDidChange(() => this.refresh()),
-      this.providerRegistry.onDidChangeProviderItems(() => this.refresh()),
     ];
   }
 
