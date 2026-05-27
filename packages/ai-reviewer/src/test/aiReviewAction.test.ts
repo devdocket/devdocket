@@ -714,6 +714,30 @@ describe('AiReviewAction', () => {
       expect(userMsg.content).toContain('/mock/worktrees/pr-42');
       expect(userMsg.content).toContain('devdocket-readFile');
       expect(userMsg.content).toContain('devdocket-searchCode');
+      expect(userMsg.content).toContain('A one-paragraph summary of what you reviewed');
+      expect(userMsg.content).toContain('**No issues found.**');
+    });
+
+    it('returns undefined and warns when the first model stream has no text or tool calls', async () => {
+      const model = {
+        id: 'mock-model',
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {})(),
+        }),
+      } as never;
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+
+      const result = await action.analyzeWithTools(
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockLogOutputChannel.error).toHaveBeenCalledWith(
+        'AI Code Review: model returned no content and no tool calls on the first iteration',
+      );
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+      );
     });
 
     it('appends truncation note when diff exceeds limit and worktree is available', async () => {

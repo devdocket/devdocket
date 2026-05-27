@@ -343,6 +343,7 @@ ${displayList || '(file list unavailable — use devdocket-getDiff to get the st
           break;
         }
 
+        let hasTextParts = false;
         let hasToolCalls = false;
         const assistantParts: (
           | vscode.LanguageModelTextPart
@@ -355,6 +356,7 @@ ${displayList || '(file list unavailable — use devdocket-getDiff to get the st
 
         for await (const part of chatResponse.stream) {
           if (part instanceof vscode.LanguageModelTextPart) {
+            hasTextParts = true;
             result += part.value;
             assistantParts.push(part);
           } else if (part instanceof vscode.LanguageModelToolCallPart) {
@@ -386,6 +388,14 @@ ${displayList || '(file list unavailable — use devdocket-getDiff to get the st
         this.log.debug(
           `Iteration ${iterations}: ${assistantParts.length} parts, ${toolResults.length} tool results`,
         );
+
+        if (iterations === 1 && !hasTextParts && !hasToolCalls) {
+          this.log.error('AI Code Review: model returned no content and no tool calls on the first iteration');
+          vscode.window.showWarningMessage(
+            'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+          );
+          return undefined;
+        }
 
         if (assistantParts.length > 0) {
           loopMessages.push(vscode.LanguageModelChatMessage.Assistant(assistantParts));
