@@ -277,7 +277,8 @@ export class InboxStateStore {
   }
 
   /**
-   * Sets the inbox state for a single discovered item and persists to disk.
+   * Sets the inbox state for a single discovered item and queues persistence.
+   * Call `flush()` when the queued write must be durable before continuing.
    *
    * Note: `resurfaceVersion` is only settable via `setStates()`, not here.
    * This method preserves any existing `resurfaceVersion` from the previous record.
@@ -316,7 +317,8 @@ export class InboxStateStore {
   }
 
   /**
-   * Sets the inbox state for multiple discovered items in a single write.
+   * Sets inbox state for multiple discovered items and queues one coalesced write.
+   * Call `flush()` when the queued write must be durable before continuing.
    */
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }>): Promise<void> {
     if (!this.loaded) { await this.load(); }
