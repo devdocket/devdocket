@@ -5,6 +5,7 @@ import type { FileStore } from './fileStore';
 import { trimByAge } from './trimByAge';
 
 const MAX_TOTAL_ENTRIES = 5_000;
+const MAX_DEBOUNCED_PERSIST_RETRIES = 5;
 
 interface PersistedReadStateRecord {
   key: string;
@@ -26,18 +27,84 @@ interface ReadStateSnapshot {
 export class ReadStateStore {
   private readonly items = new Map<string, number>();
   private loaded = false;
+  private persistTimer: ReturnType<typeof setTimeout> | undefined;
+  private flushInProgress: Promise<void> | undefined;
+  private disposed = false;
+  private debouncedPersistFailures = 0;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
   readonly onDidChange = this._onDidChange.event;
+  private readonly _onDidPersist = new vscode.EventEmitter<void>();
+  readonly onDidPersist = this._onDidPersist.event;
   /** Keys added locally since the last load or persist — ensures local additions survive remote merges. */
   private readonly addedSinceLoad = new Set<string>();
   /** Keys removed locally since the last load or persist — prevents re-adding from stale remote data. */
   private readonly removedSinceLoad = new Set<string>();
 
-  constructor(private readonly fileStore: FileStore<unknown[]>) {}
+  constructor(
+    private readonly fileStore: FileStore<unknown[]>,
+    private readonly persistDebounceMs = 250,
+  ) {}
 
   has(key: string): boolean {
     return this.items.has(key);
+  }
+
+  private hasPendingPersist(): boolean {
+    return this.addedSinceLoad.size > 0 || this.removedSinceLoad.size > 0;
+  }
+
+  private schedulePersist(isRetry = false): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
+    if (!isRetry) {
+      this.debouncedPersistFailures = 0;
+    }
+
+    if (this.persistDebounceMs <= 0) {
+      return this.flush();
+    }
+
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+    }
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = undefined;
+      void this.flush().catch(err => {
+        logger.error('Failed to flush debounced read state persistence', err);
+        if (this.hasPendingPersist() && !this.disposed && this.debouncedPersistFailures < MAX_DEBOUNCED_PERSIST_RETRIES) {
+          this.debouncedPersistFailures++;
+          void this.schedulePersist(true);
+        }
+      });
+    }, this.persistDebounceMs);
+    return Promise.resolve();
+  }
+
+  /** Flushes any pending debounced persistence immediately. */
+  async flush(): Promise<void> {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = undefined;
+    }
+
+    while (true) {
+      if (this.flushInProgress) {
+        await this.flushInProgress;
+        continue;
+      }
+
+      if (!this.hasPendingPersist()) {
+        return;
+      }
+
+      this.flushInProgress = this.persist().finally(() => {
+        this.flushInProgress = undefined;
+      });
+      await this.flushInProgress;
+    }
   }
 
   /**
@@ -45,26 +112,36 @@ export class ReadStateStore {
    * keys, and writes the merged result.
    */
   private async persist(): Promise<void> {
+    const addedKeys = new Set(this.addedSinceLoad);
+    const removedKeys = new Set(this.removedSinceLoad);
+    const addedRecords = new Map<string, number>();
+    for (const key of addedKeys) {
+      const createdAt = this.items.get(key);
+      if (createdAt !== undefined) {
+        addedRecords.set(key, createdAt);
+      }
+    }
+
     const snapshot = await this.parseFromFileStore();
     const remoteKeys = new Set(snapshot.records.map(record => record.key));
     const merged = new Map<string, number>();
 
     if (snapshot.available) {
       for (const remote of snapshot.records) {
-        if (!this.removedSinceLoad.has(remote.key)) {
+        if (!removedKeys.has(remote.key)) {
           merged.set(remote.key, remote.createdAt);
         }
       }
     } else {
       for (const [key, createdAt] of this.items) {
-        if (!this.removedSinceLoad.has(key)) {
+        if (!removedKeys.has(key)) {
           merged.set(key, createdAt);
         }
       }
     }
 
     for (const [key, createdAt] of this.items) {
-      if (!this.removedSinceLoad.has(key) && (!snapshot.available || this.addedSinceLoad.has(key) || remoteKeys.has(key))) {
+      if (!removedKeys.has(key) && (!snapshot.available || addedKeys.has(key) || remoteKeys.has(key))) {
         const existingCreatedAt = merged.get(key);
         merged.set(key, existingCreatedAt === undefined ? createdAt : Math.min(existingCreatedAt, createdAt));
       }
@@ -79,12 +156,39 @@ export class ReadStateStore {
       },
     );
     await this.fileStore.write(trimmed);
+    this.debouncedPersistFailures = 0;
+
+    for (const [key, createdAt] of addedRecords) {
+      if (this.items.get(key) === createdAt) {
+        this.addedSinceLoad.delete(key);
+      }
+    }
+    for (const key of removedKeys) {
+      if (!this.items.has(key)) {
+        this.removedSinceLoad.delete(key);
+      }
+    }
+
+    const remainingAdded = new Map<string, number>();
+    for (const key of this.addedSinceLoad) {
+      const createdAt = this.items.get(key);
+      if (createdAt !== undefined) {
+        remainingAdded.set(key, createdAt);
+      }
+    }
+    const remainingRemoved = new Set(this.removedSinceLoad);
+
     this.items.clear();
     for (const record of trimmed) {
       this.items.set(record.key, record.createdAt);
     }
-    this.addedSinceLoad.clear();
-    this.removedSinceLoad.clear();
+    for (const key of remainingRemoved) {
+      this.items.delete(key);
+    }
+    for (const [key, createdAt] of remainingAdded) {
+      this.items.set(key, createdAt);
+    }
+    this._onDidPersist.fire();
   }
 
   private async parseFromFileStore(): Promise<ReadStateSnapshot> {
@@ -139,19 +243,19 @@ export class ReadStateStore {
     return { records: Array.from(deduped.values()), available };
   }
 
-  /** Returns true only when the key is newly added. Persists automatically. */
+  /** Returns true only when the key is newly added and queues persistence. Call `flush()` when durability is required before continuing. */
   async add(key: string): Promise<boolean> {
     if (!this.loaded) { await this.load(); }
     if (this.items.has(key)) { return false; }
     this.items.set(key, Date.now());
     this.addedSinceLoad.add(key);
     this.removedSinceLoad.delete(key);
-    await this.persist();
+    await this.schedulePersist();
     this._onDidChange.fire();
     return true;
   }
 
-  /** Adds multiple keys in a single write. Returns newly added keys that remain persisted after capacity trimming. */
+  /** Adds multiple keys, queues one coalesced write, and returns newly added keys that remain in memory after capacity trimming. Call `flush()` when durability is required before continuing. */
   async addMany(keys: string[]): Promise<string[]> {
     if (keys.length === 0) { return []; }
     if (!this.loaded) { await this.load(); }
@@ -165,7 +269,7 @@ export class ReadStateStore {
       }
     }
     if (newlyAdded.length > 0) {
-      await this.persist();
+      await this.schedulePersist();
       this._onDidChange.fire();
     }
     return newlyAdded.filter(key => this.items.has(key));
@@ -186,7 +290,7 @@ export class ReadStateStore {
       }
     }
     if (changed) {
-      await this.persist();
+      await this.schedulePersist();
       this._onDidChange.fire();
     }
   }
@@ -211,7 +315,10 @@ export class ReadStateStore {
       }
     }
 
-    if (activeProviderIds.size === 0) { return 0; }
+    if (activeProviderIds.size === 0) {
+      await this.flush();
+      return 0;
+    }
 
     const staleKeys: string[] = [];
     for (const key of this.items.keys()) {
@@ -223,14 +330,18 @@ export class ReadStateStore {
       }
     }
 
-    if (staleKeys.length === 0) { return 0; }
+    if (staleKeys.length === 0) {
+      await this.flush();
+      return 0;
+    }
 
     for (const key of staleKeys) {
       this.items.delete(key);
+      this.addedSinceLoad.delete(key);
       this.removedSinceLoad.add(key);
     }
 
-    await this.persist();
+    await this.flush();
     this._onDidChange.fire();
     return staleKeys.length;
   }
@@ -264,15 +375,26 @@ export class ReadStateStore {
     this.loaded = true;
   }
 
-  dispose(): void {
-    this._onDidChange.dispose();
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    try {
+      await this.flush();
+    } catch (err) {
+      logger.error('Failed to flush read state during dispose', err);
+    } finally {
+      this._onDidChange.dispose();
+      this._onDidPersist.dispose();
+    }
   }
 
   /**
    * Invalidates the in-memory cache so the next access re-reads from disk.
    * Used for cross-window change propagation.
    */
-  invalidateCache(): void {
+  async invalidateCache(): Promise<void> {
+    if (this.hasPendingPersist()) {
+      await this.flush();
+    }
     this.items.clear();
     this.addedSinceLoad.clear();
     this.removedSinceLoad.clear();

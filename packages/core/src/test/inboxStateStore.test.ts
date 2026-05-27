@@ -22,7 +22,7 @@ describe('InboxStateStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fileSystem = useMockFileSystem();
-    store = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    store = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
   });
 
   afterEach(() => {
@@ -77,7 +77,7 @@ describe('InboxStateStore', () => {
     const listener = vi.fn();
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(999);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     store2.onDidChange(listener);
 
     try {
@@ -134,7 +134,7 @@ describe('InboxStateStore', () => {
     await store.setState('gh', 'issue-1', 'accepted');
     await store.setState('gh', 'issue-2', 'dismissed');
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     await store2.load();
 
     expect(store2.getState('gh', 'issue-1')).toBe('accepted');
@@ -165,7 +165,7 @@ describe('InboxStateStore', () => {
     ]);
     const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(654);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     await store2.load();
     await store2.setState('gh', 'issue-1', 'dismissed');
 
@@ -187,7 +187,7 @@ describe('InboxStateStore', () => {
       { providerId: 'gh', externalId: 'legacy', inboxState: 'accepted' },
     ]);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     const records = await store2.loadAll();
 
     expect(records).toEqual([
@@ -204,7 +204,7 @@ describe('InboxStateStore', () => {
       { providerId: 'gh', externalId: 'other', inboxState: 'unseen', createdAt: 3 },
     ]);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     const records = await store2.loadAll();
 
     expect(records).toEqual([
@@ -221,7 +221,7 @@ describe('InboxStateStore', () => {
       { providerId: 'gh', externalId: 'keep', inboxState: 'accepted', createdAt: 1 },
     ]);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     await store2.load();
     await vscode.workspace.fs.delete(fileUri);
     await store2.setState('gh', 'fresh', 'dismissed');
@@ -239,7 +239,7 @@ describe('InboxStateStore', () => {
     ]);
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     await store2.load();
     fileSystem.writeJson(fileUri, { invalid: true });
     await store2.setState('gh', 'fresh', 'dismissed');
@@ -259,7 +259,7 @@ describe('InboxStateStore', () => {
     ]);
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
 
-    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+    const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
     await store2.load();
     fileSystem.writeJson(fileUri, [42]);
     await store2.setState('gh', 'fresh', 'dismissed');
@@ -282,7 +282,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -295,7 +295,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -308,7 +308,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -318,7 +318,7 @@ describe('InboxStateStore', () => {
     it('should return empty for non-array data', async () => {
       fileSystem.writeJson(fileUri, { not: 'an array' });
 
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await store2.loadAll();
       expect(records).toEqual([]);
       store2.dispose();
@@ -332,7 +332,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' },
       ]);
 
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-1');
@@ -461,7 +461,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'dismissed' },
       ]);
 
-      store.invalidateCache();
+      await store.invalidateCache();
       await store.load();
 
       expect(store.getState('gh', 'issue-1')).toBe('dismissed');
@@ -470,8 +470,8 @@ describe('InboxStateStore', () => {
 
   describe('merge-on-write', () => {
     it('preserves remote additions while persisting local changes', async () => {
-      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
-      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
+      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await windowA.load();
 
       await windowB.setState('gh', 'remote', 'accepted');
@@ -494,8 +494,8 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
       ]);
 
-      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
-      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
+      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await windowA.load();
       await windowB.load();
 
@@ -514,8 +514,8 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'shared', inboxState: 'unseen' },
       ]);
 
-      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
-      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const windowA = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
+      const windowB = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await windowA.load();
       await windowB.load();
 
@@ -545,7 +545,7 @@ describe('InboxStateStore', () => {
           fileSystem.writeJson(fileUri, value);
         }),
       };
-      const failingStore = new InboxStateStore(failingFileStore);
+      const failingStore = new InboxStateStore(failingFileStore, 0);
       await failingStore.load();
 
       await expect(failingStore.setState('gh', 'shared', 'accepted')).rejects.toThrow('quota exceeded');
@@ -581,7 +581,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pre-existing', inboxState: 'unseen' },
       ]);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await freshStore.setState('gh', 'new-item', 'accepted');
 
       expect(freshStore.getState('gh', 'pre-existing')).toBe('unseen');
@@ -594,7 +594,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pre-existing', inboxState: 'dismissed' },
       ]);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await freshStore.setStates([
         { providerId: 'gh', externalId: 'new-item', state: 'unseen' },
       ]);
@@ -669,7 +669,7 @@ describe('InboxStateStore', () => {
       expect(store.getState('gh', 'item-1199')).toBe('unseen');
 
       // Verify persistence by reloading from a fresh instance
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await store2.load();
       const reloaded = await store2.loadAll();
       expect(reloaded).toHaveLength(1200);
@@ -719,7 +719,7 @@ describe('InboxStateStore', () => {
       ]);
       const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(20);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await freshStore.load();
       await freshStore.setState('gh', 'pr-1', 'accepted', 'sha-new');
 
@@ -746,7 +746,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-disk' },
       ]);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await freshStore.load();
       expect(freshStore.getVersion('gh', 'pr-1')).toBe('sha-disk');
       freshStore.dispose();
@@ -766,7 +766,7 @@ describe('InboxStateStore', () => {
       ]);
       const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(75);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await freshStore.load();
       await freshStore.setStates([
         { providerId: 'gh', externalId: 'pr-1', state: 'dismissed' },
@@ -789,7 +789,7 @@ describe('InboxStateStore', () => {
       const listener = vi.fn();
       const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(99);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       freshStore.onDidChange(listener);
       await freshStore.load();
       await freshStore.setStates([
@@ -823,7 +823,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', version: 'valid' },
       ]);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await freshStore.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('pr-2');
@@ -888,7 +888,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 'rv-disk' },
       ]);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await freshStore.load();
       expect(freshStore.getResurfaceVersion('gh', 'pr-1')).toBe('rv-disk');
       freshStore.dispose();
@@ -900,7 +900,7 @@ describe('InboxStateStore', () => {
         { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', resurfaceVersion: 'valid' },
       ]);
 
-      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const freshStore = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       const records = await freshStore.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('pr-2');
@@ -943,7 +943,7 @@ describe('InboxStateStore', () => {
         createdAt: i,
       })));
 
-      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'));
+      const store2 = new InboxStateStore(new JsonFileStore(fileUri, 'inbox-state.json'), 0);
       await store2.load();
 
       expect(await store2.loadAll()).toHaveLength(5_000);
@@ -1095,6 +1095,174 @@ describe('InboxStateStore', () => {
 
       const pruned = await store.prune(activeItems);
       expect(pruned).toBe(2);
+    });
+  });
+
+
+  describe('debounced persistence', () => {
+    it('coalesces multiple rapid setState calls into one persisted write', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+      const persistListener = vi.fn();
+      debouncedStore.onDidPersist(persistListener);
+
+      try {
+        await debouncedStore.setState('gh', 'issue-1', 'unseen');
+        await debouncedStore.setState('gh', 'issue-2', 'accepted');
+        await debouncedStore.setState('gh', 'issue-3', 'dismissed');
+
+        expect(fileStore.write).not.toHaveBeenCalled();
+        expect(persistListener).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(250);
+        await debouncedStore.flush();
+
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+        expect(persistListener).toHaveBeenCalledTimes(1);
+        expect(persisted).toHaveLength(3);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('exposes latest in-memory state before the debounce flush', async () => {
+      vi.useFakeTimers();
+      const fileStore = {
+        read: vi.fn(async () => undefined as unknown[] | undefined),
+        write: vi.fn(async (_value: unknown[]) => undefined),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+
+      try {
+        await debouncedStore.setState('gh', 'issue-1', 'unseen');
+        await debouncedStore.setState('gh', 'issue-1', 'accepted');
+
+        expect(debouncedStore.getState('gh', 'issue-1')).toBe('accepted');
+        expect((await debouncedStore.loadAll())[0]).toMatchObject({ providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' });
+        expect(fileStore.write).not.toHaveBeenCalled();
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes pending writes when disposed', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+
+      try {
+        await debouncedStore.setState('gh', 'issue-1', 'accepted');
+        expect(fileStore.write).not.toHaveBeenCalled();
+
+        await debouncedStore.dispose();
+
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+        expect(persisted).toEqual([expect.objectContaining({ providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' })]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('retries failed timer-triggered flushes with the dirty payload', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      let writes = 0;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => {
+          writes++;
+          if (writes === 1) {
+            throw new Error('locked');
+          }
+          persisted = value;
+        }),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+
+      try {
+        await debouncedStore.setState('gh', 'issue-1', 'accepted');
+
+        await vi.advanceTimersByTimeAsync(250);
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+
+        await vi.advanceTimersByTimeAsync(250);
+        await debouncedStore.flush();
+
+        expect(fileStore.write).toHaveBeenCalledTimes(2);
+        expect(persisted).toEqual([expect.objectContaining({ providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' })]);
+
+        await vi.advanceTimersByTimeAsync(250);
+        expect(fileStore.write).toHaveBeenCalledTimes(2);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes pending writes before invalidating the cache', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+
+      try {
+        await debouncedStore.setState('gh', 'local', 'accepted');
+        persisted = [{ providerId: 'gh', externalId: 'remote', inboxState: 'dismissed', createdAt: 1 }];
+
+        await debouncedStore.invalidateCache();
+        await debouncedStore.load();
+
+        expect(debouncedStore.getState('gh', 'local')).toBe('accepted');
+        expect(debouncedStore.getState('gh', 'remote')).toBe('dismissed');
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
+    });
+
+    it('flushes synchronously when prune returns', async () => {
+      vi.useFakeTimers();
+      let persisted: unknown[] | undefined;
+      const fileStore = {
+        read: vi.fn(async () => persisted),
+        write: vi.fn(async (value: unknown[]) => { persisted = value; }),
+      };
+      const debouncedStore = new InboxStateStore(fileStore);
+
+      try {
+        await debouncedStore.setStates([
+          { providerId: 'gh', externalId: 'keep', state: 'accepted' },
+          { providerId: 'gh', externalId: 'stale', state: 'accepted' },
+        ]);
+        expect(fileStore.write).not.toHaveBeenCalled();
+
+        const pruned = await debouncedStore.prune(new Map([
+          ['gh', [{ externalId: 'keep', title: 'Keep' }]],
+        ]));
+
+        expect(pruned).toBe(1);
+        expect(fileStore.write).toHaveBeenCalledTimes(1);
+        expect(persisted).toEqual([expect.objectContaining({ providerId: 'gh', externalId: 'keep' })]);
+      } finally {
+        await debouncedStore.dispose();
+        vi.useRealTimers();
+      }
     });
   });
 });

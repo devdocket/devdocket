@@ -65,8 +65,8 @@ export class ProviderRegistry {
   private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
   private allProviderItemsCache: Map<string, ProviderItem[]> | undefined;
   private readonly rehydratedImportedItems = new Map<string, Set<string>>();
-  private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
-  /** Fired whenever any provider's provider items change. */
+  private readonly _onDidChangeProviderItems = new vscode.EventEmitter<string | undefined>();
+  /** Fired whenever any provider's provider items change, with the provider ID when known. */
   readonly onDidChangeProviderItems = this._onDidChangeProviderItems.event;
   private readonly _onDidRegisterProvider = new vscode.EventEmitter<void>();
   /** Fired when a new provider is registered. */
@@ -218,14 +218,14 @@ export class ProviderRegistry {
     this._loadingProviders.add(provider.id);
     this.invalidateProviderItemCaches(provider.id);
     this._onDidRegisterProvider.fire();
-    this._onDidChangeProviderItems.fire();
+    this._onDidChangeProviderItems.fire(provider.id);
     this.refreshWithTimeout(provider, undefined, false)
       .finally(() => {
         const producedItemsDuringInitialRefresh = this.initialRefreshProducedItems.has(provider.id);
         this.initialRefreshProducedItems.delete(provider.id);
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
-          this._onDidChangeProviderItems.fire();
+          this._onDidChangeProviderItems.fire(provider.id);
           if (!producedItemsDuringInitialRefresh) {
             this.queueRehydrateSyntheticProviderItems(provider);
           }
@@ -249,7 +249,7 @@ export class ProviderRegistry {
       this._rehydrateQueues.delete(provider.id);
       this.invalidateProviderItemCaches(provider.id);
       if (!this._disposed) {
-        this._onDidChangeProviderItems.fire();
+        this._onDidChangeProviderItems.fire(provider.id);
       }
     });
   }
@@ -325,7 +325,7 @@ export class ProviderRegistry {
     this.markImportedItemRehydrated(providerId, item.externalId);
     syntheticItems.set(item.externalId, { ...item });
     this.invalidateProviderItemCaches(providerId);
-    this._onDidChangeProviderItems.fire();
+    this._onDidChangeProviderItems.fire(providerId);
   }
 
   private markImportedItemRehydrated(providerId: string, externalId: string): void {
@@ -799,7 +799,7 @@ export class ProviderRegistry {
       }
     }
     if (!this._disposed) {
-      this._onDidChangeProviderItems.fire();
+      this._onDidChangeProviderItems.fire(providerId);
       this._onDidRefreshProvider.fire(providerId);
       const provider = this.providers.get(providerId);
       if (provider) {

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mockLogOutputChannel } from 'vscode';
+import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, LanguageModelToolCallPart, mockLogOutputChannel } from 'vscode';
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
 import type { RepoManager } from '../repoManager';
 import type { DevDocketApi } from '../types';
@@ -472,6 +472,27 @@ describe('AiReviewAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith('AI Code Review: Analysis failed');
     });
 
+    it('returns undefined and warns when the diff-only model response has no substantive text', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{
+        sendRequest: vi.fn().mockResolvedValue({
+          text: (async function* () {
+            yield '\n  \t';
+          })(),
+        }),
+      }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const result = await action.analyzeWithAi('some diff', 'https://github.com/owner/repo/pull/42', token as never);
+
+      expect(result).toBeUndefined();
+      expect(consoleError).toHaveBeenCalledWith('AI Code Review: model returned no content');
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+      );
+      consoleError.mockRestore();
+    });
+
     it('uses custom prompt when configured', async () => {
       const customPrompt = 'Focus only on security issues.';
       const customPromptBytes = new TextEncoder().encode(customPrompt);
@@ -714,6 +735,59 @@ describe('AiReviewAction', () => {
       expect(userMsg.content).toContain('/mock/worktrees/pr-42');
       expect(userMsg.content).toContain('devdocket-readFile');
       expect(userMsg.content).toContain('devdocket-searchCode');
+      expect(userMsg.content).toContain('A one-paragraph summary of what you reviewed');
+      expect(userMsg.content).toContain('**No issues found.**');
+    });
+
+    it('returns undefined and warns when the first model stream has no text or tool calls', async () => {
+      const model = {
+        id: 'mock-model',
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {})(),
+        }),
+      } as never;
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+
+      const result = await action.analyzeWithTools(
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      expect(result).toBeUndefined();
+      expect(mockLogOutputChannel.error).toHaveBeenCalledWith(
+        'AI Code Review: model returned no content and no tool calls on the first iteration',
+      );
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+      );
+    });
+
+    it('returns undefined and warns when tool calls are followed by no review text', async () => {
+      const model = {
+        id: 'mock-model',
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelToolCallPart('call-1', 'devdocket-readFile', { path: 'src/file.ts' });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {})(),
+          }),
+      } as never;
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+
+      const result = await action.analyzeWithTools(
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      expect(result).toBeUndefined();
+      expect(model.sendRequest).toHaveBeenCalledTimes(2);
+      expect(mockLogOutputChannel.error).toHaveBeenCalledWith(
+        'AI Code Review: model returned no review content after 2 iteration(s)',
+      );
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+      );
     });
 
     it('appends truncation note when diff exceeds limit and worktree is available', async () => {

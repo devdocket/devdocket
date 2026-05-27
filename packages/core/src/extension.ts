@@ -38,6 +38,8 @@ export { logger } from './services/logger';
 
 let watcherServiceForDeactivation: WatcherService | undefined;
 let workGraphForDeactivation: WorkGraph | undefined;
+let inboxStateStoreForDeactivation: InboxStateStore | undefined;
+let readStateStoreForDeactivation: ReadStateStore | undefined;
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
 function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void | Promise<void>): (...args: T) => void {
@@ -118,6 +120,7 @@ async function migrateInboxState(workGraph: WorkGraph, stateStore: InboxStateSto
   if (itemsToMigrate.length > 0) {
     try {
       await stateStore.setStates(itemsToMigrate);
+      await stateStore.flush();
       logger.info(`Migrated ${itemsToMigrate.length} items to accepted state`);
     } catch (err) {
       logger.error('Migration failed', err);
@@ -526,14 +529,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const bumpStateVersion = () => stateVersion.bump();
   let mainProvider: MainViewProvider | undefined;
   wg.onDidChange(safeHandler('sv:workGraph', (event) => event.source === 'externalReload' ? Promise.resolve() : bumpStateVersion()));
-  ss.onDidChange(safeHandler('sv:stateStore', () => bumpStateVersion()));
-  readStateStore.onDidChange(safeHandler('sv:readState', () => bumpStateVersion()));
+  ss.onDidPersist(safeHandler('sv:stateStore', () => bumpStateVersion()));
+  readStateStore.onDidPersist(safeHandler('sv:readState', () => bumpStateVersion()));
   stateVersion.onDidExternalStateChange(safeHandler('sv:external', async () => {
     logger.debug('External state change detected — invalidating caches');
     await wg.invalidateAndReload();
-    ss.invalidateCache();
+    await ss.invalidateCache();
     await ss.load();
-    readStateStore.invalidateCache();
+    await readStateStore.invalidateCache();
     await readStateStore.load();
     mainProvider?.scheduleRefresh('discovered');
   }));
@@ -652,6 +655,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   workGraphForDeactivation = wg;
   watcherServiceForDeactivation = ws;
+  inboxStateStoreForDeactivation = ss;
+  readStateStoreForDeactivation = readStateStore;
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
 }
@@ -659,20 +664,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 /**
  * Deactivate the DevDocket extension.
  *
- * Flush queued work-item and watch persistence before VS Code disposes
+ * Flush queued work-item, inbox/read-state, and watch persistence before VS Code disposes
  * subscriptions so recent edits and dismissals survive window reloads.
  */
 export async function deactivate(): Promise<void> {
   const workGraph = workGraphForDeactivation;
   const watcherService = watcherServiceForDeactivation;
+  const inboxStateStore = inboxStateStoreForDeactivation;
+  const readStateStore = readStateStoreForDeactivation;
   workGraphForDeactivation = undefined;
   watcherServiceForDeactivation = undefined;
+  inboxStateStoreForDeactivation = undefined;
+  readStateStoreForDeactivation = undefined;
   workGraph?.beginShutdown();
   watcherService?.beginShutdown();
 
   const results = await Promise.allSettled([
     workGraph?.flushPersistence(),
     watcherService?.flushPersistence(),
+    inboxStateStore?.flush(),
+    readStateStore?.flush(),
   ]);
 
   for (const result of results) {

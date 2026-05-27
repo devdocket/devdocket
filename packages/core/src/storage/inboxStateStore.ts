@@ -14,6 +14,7 @@ import { trimByAge } from './trimByAge';
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
 const MAX_TOTAL_ENTRIES = 5_000;
+const MAX_DEBOUNCED_PERSIST_RETRIES = 5;
 
 export type InboxState = (typeof inboxStates)[number];
 
@@ -73,13 +74,22 @@ export class InboxStateStore {
   private readonly cache = new Map<string, PersistedInboxStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
+  private readonly _onDidPersist = new vscode.EventEmitter<void>();
+  readonly onDidPersist = this._onDidPersist.event;
   private loaded = false;
+  private persistTimer: ReturnType<typeof setTimeout> | undefined;
+  private flushInProgress: Promise<void> | undefined;
+  private disposed = false;
+  private debouncedPersistFailures = 0;
   /** Keys modified locally since the last load/persist. */
   private dirtyKeys = new Set<string>();
   /** Keys removed locally since the last load/persist. */
   private removedKeys = new Set<string>();
 
-  constructor(private readonly fileStore: FileStore<unknown[]>) {}
+  constructor(
+    private readonly fileStore: FileStore<unknown[]>,
+    private readonly persistDebounceMs = 250,
+  ) {}
 
   private key(providerId: string, externalId: string): string {
     return `${providerId}::${externalId}`;
@@ -106,12 +116,79 @@ export class InboxStateStore {
     return this.cache.get(this.key(providerId, externalId))?.resurfaceVersion;
   }
 
+  private hasPendingPersist(): boolean {
+    return this.dirtyKeys.size > 0 || this.removedKeys.size > 0;
+  }
+
+  private schedulePersist(isRetry = false): Promise<void> {
+    if (this.disposed) {
+      return Promise.resolve();
+    }
+
+    if (!isRetry) {
+      this.debouncedPersistFailures = 0;
+    }
+
+    if (this.persistDebounceMs <= 0) {
+      return this.flush();
+    }
+
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+    }
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = undefined;
+      void this.flush().catch(err => {
+        logger.error('Failed to flush debounced inbox state persistence', err);
+        if (this.hasPendingPersist() && !this.disposed && this.debouncedPersistFailures < MAX_DEBOUNCED_PERSIST_RETRIES) {
+          this.debouncedPersistFailures++;
+          void this.schedulePersist(true);
+        }
+      });
+    }, this.persistDebounceMs);
+    return Promise.resolve();
+  }
+
+  /** Flushes any pending debounced persistence immediately. */
+  async flush(): Promise<void> {
+    if (this.persistTimer) {
+      clearTimeout(this.persistTimer);
+      this.persistTimer = undefined;
+    }
+
+    while (true) {
+      if (this.flushInProgress) {
+        await this.flushInProgress;
+        continue;
+      }
+
+      if (!this.hasPendingPersist()) {
+        return;
+      }
+
+      this.flushInProgress = this.persist().finally(() => {
+        this.flushInProgress = undefined;
+      });
+      await this.flushInProgress;
+    }
+  }
+
   /**
    * Re-reads from disk, merges remote records with local mutations, and writes
    * the merged result. Untouched keys adopt the remote view, locally changed
    * keys win, and locally removed keys stay removed.
    */
   private async persist(): Promise<void> {
+    const dirtyKeys = new Set(this.dirtyKeys);
+    const removedKeys = new Set(this.removedKeys);
+    const dirtyRecords = new Map<string, PersistedInboxStateRecord>();
+    for (const k of dirtyKeys) {
+      const local = this.cache.get(k);
+      if (local) {
+        dirtyRecords.set(k, local);
+      }
+    }
+
     const snapshot = await this.parseFromFileStore();
     const merged = new Map<string, PersistedInboxStateRecord>();
 
@@ -125,15 +202,12 @@ export class InboxStateStore {
       }
     }
 
-    for (const k of this.removedKeys) {
+    for (const k of removedKeys) {
       merged.delete(k);
     }
 
-    for (const k of this.dirtyKeys) {
-      const local = this.cache.get(k);
-      if (local) {
-        merged.set(k, local);
-      }
+    for (const [k, local] of dirtyRecords) {
+      merged.set(k, local);
     }
 
     const trimmed = trimByAge(Array.from(merged.values()), {
@@ -142,12 +216,39 @@ export class InboxStateStore {
       getKey: record => this.key(record.providerId, record.externalId),
     });
     await this.fileStore.write(trimmed);
+    this.debouncedPersistFailures = 0;
+
+    for (const [k, record] of dirtyRecords) {
+      if (this.cache.get(k) === record) {
+        this.dirtyKeys.delete(k);
+      }
+    }
+    for (const k of removedKeys) {
+      if (!this.cache.has(k)) {
+        this.removedKeys.delete(k);
+      }
+    }
+
+    const remainingDirty = new Map<string, PersistedInboxStateRecord>();
+    for (const k of this.dirtyKeys) {
+      const local = this.cache.get(k);
+      if (local) {
+        remainingDirty.set(k, local);
+      }
+    }
+    const remainingRemoved = new Set(this.removedKeys);
+
     this.cache.clear();
     for (const record of trimmed) {
       this.cache.set(this.key(record.providerId, record.externalId), record);
     }
-    this.dirtyKeys.clear();
-    this.removedKeys.clear();
+    for (const k of remainingRemoved) {
+      this.cache.delete(k);
+    }
+    for (const [k, record] of remainingDirty) {
+      this.cache.set(k, record);
+    }
+    this._onDidPersist.fire();
   }
 
   /** Parse and validate inbox state records from the backing JSON file. */
@@ -188,7 +289,8 @@ export class InboxStateStore {
   }
 
   /**
-   * Sets the inbox state for a single discovered item and persists to disk.
+   * Sets the inbox state for a single discovered item and queues persistence.
+   * Call `flush()` when the queued write must be durable before continuing.
    *
    * Note: `resurfaceVersion` is only settable via `setStates()`, not here.
    * This method preserves any existing `resurfaceVersion` from the previous record.
@@ -222,12 +324,13 @@ export class InboxStateStore {
     this.cache.set(k, newRecord);
     this.dirtyKeys.add(k);
     this.removedKeys.delete(k);
-    await this.persist();
+    await this.schedulePersist();
     this._onDidChange.fire();
   }
 
   /**
-   * Sets the inbox state for multiple discovered items in a single write.
+   * Sets inbox state for multiple discovered items and queues one coalesced write.
+   * Call `flush()` when the queued write must be durable before continuing.
    */
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }>): Promise<void> {
     if (!this.loaded) { await this.load(); }
@@ -264,7 +367,7 @@ export class InboxStateStore {
       changed = true;
     }
     if (!changed) { return; }
-    await this.persist();
+    await this.schedulePersist();
     this._onDidChange.fire();
   }
 
@@ -331,7 +434,10 @@ export class InboxStateStore {
       }
     }
 
-    if (activeProviderIds.size === 0) { return 0; }
+    if (activeProviderIds.size === 0) {
+      await this.flush();
+      return 0;
+    }
 
     const staleKeys: string[] = [];
     for (const [k, record] of this.cache) {
@@ -340,7 +446,10 @@ export class InboxStateStore {
       }
     }
 
-    if (staleKeys.length === 0) { return 0; }
+    if (staleKeys.length === 0) {
+      await this.flush();
+      return 0;
+    }
 
     for (const k of staleKeys) {
       this.cache.delete(k);
@@ -348,21 +457,32 @@ export class InboxStateStore {
       this.dirtyKeys.delete(k);
     }
 
-    await this.persist();
+    await this.flush();
     this._onDidChange.fire();
     return staleKeys.length;
   }
 
-  /** Disposes the change event emitter. */
-  dispose(): void {
-    this._onDidChange.dispose();
+  /** Flushes pending persistence and disposes the change event emitter. */
+  async dispose(): Promise<void> {
+    this.disposed = true;
+    try {
+      await this.flush();
+    } catch (err) {
+      logger.error('Failed to flush inbox state during dispose', err);
+    } finally {
+      this._onDidChange.dispose();
+      this._onDidPersist.dispose();
+    }
   }
 
   /**
    * Invalidates the in-memory cache so the next mutation re-reads from disk.
    * Used for cross-window change propagation.
    */
-  invalidateCache(): void {
+  async invalidateCache(): Promise<void> {
+    if (this.hasPendingPersist()) {
+      await this.flush();
+    }
     this.cache.clear();
     this.dirtyKeys.clear();
     this.removedKeys.clear();
