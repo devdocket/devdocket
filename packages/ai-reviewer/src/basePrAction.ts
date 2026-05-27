@@ -252,7 +252,7 @@ export abstract class BasePrAction implements DevDocketAction {
       let result = this.outputHeader;
       let hasText = false;
       for await (const chunk of response.text) {
-        if (chunk.length > 0) {
+        if (chunk.trim().length > 0) {
           hasText = true;
         }
         result += chunk;

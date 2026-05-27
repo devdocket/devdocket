@@ -472,11 +472,13 @@ describe('AiReviewAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith('AI Code Review: Analysis failed');
     });
 
-    it('returns undefined and warns when the diff-only model response has no text', async () => {
+    it('returns undefined and warns when the diff-only model response has no substantive text', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       vi.mocked(lm.selectChatModels).mockResolvedValue([{
         sendRequest: vi.fn().mockResolvedValue({
-          text: (async function* () {})(),
+          text: (async function* () {
+            yield '\n  \t';
+          })(),
         }),
       }]);
 
