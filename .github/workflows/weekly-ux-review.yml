@@ -1,10 +1,9 @@
 name: Weekly UX Review
 
 # Authentication: this workflow runs GitHub Copilot CLI in programmatic mode.
-# Configure the shared COPILOT_CLI_PAT repository secret with a licensed Copilot
-# user's PAT that can make Copilot requests and create issues. Rotate that one
-# secret when the service identity changes; both COPILOT_GITHUB_TOKEN and GH_TOKEN
-# are sourced from it so Copilot CLI and gh authenticate as the same identity.
+# COPILOT_CLI_PAT is still required for Copilot CLI requests until #621 migrates
+# this review to an agentic workflow. Issue creation via gh uses the short-lived
+# DevDocket bot GitHub App token minted below.
 on:
   # Run every Wednesday at 10:00 AM UTC (offset from implementation review)
   schedule:
@@ -38,12 +37,19 @@ jobs:
       - name: Install Copilot CLI
         run: npm install -g @github/copilot
 
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.DEVDOCKET_BOT_APP_ID }}
+          private-key: ${{ secrets.DEVDOCKET_BOT_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Run weekly UX review
         env:
-          # Shared PAT for both Copilot CLI and gh. Rotate COPILOT_CLI_PAT instead
-          # of configuring workflow-specific tokens.
+          # COPILOT_CLI_PAT remains only for Copilot CLI auth until #621 removes it.
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
-          GH_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -o pipefail
           copilot -p "$(cat .github/prompts/weekly-ux-review.md)" \
