@@ -546,6 +546,34 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
     });
 
+    it('does not record file paths from summary phase signals', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Summary with reading order.');
+            yield new LanguageModelToolCallPart('phase-summary', 'devdocket-signalPhase', {
+              phase: 'summary',
+              filePaths: ['src/first.ts', 'src/second.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('summary');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(2);
+    });
+
     it('ignores non-string file path values in signalPhase input', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({

@@ -260,11 +260,13 @@ export class WalkthroughParticipant {
             if (input.phase) {
               phase = input.phase;
             }
-            for (const filePath of signaledPaths) {
-              this.recordPresentedFile(progress, filePath);
-            }
-            if (signaledPaths.length > 0) {
-              phase = this.deriveFileWalkthroughPhase(phase, progress);
+            if (this.isFileWalkthroughPhase(phase)) {
+              for (const filePath of signaledPaths) {
+                this.recordPresentedFile(progress, filePath);
+              }
+              if (signaledPaths.length > 0) {
+                phase = this.deriveFileWalkthroughPhase(phase, progress);
+              }
             }
             toolResults.push({
               callId: part.callId,
@@ -384,6 +386,10 @@ export class WalkthroughParticipant {
       this.log.warn(`Unable to derive walkthrough file list: ${msg}`);
       return [];
     }
+  }
+
+  private isFileWalkthroughPhase(phase: string): boolean {
+    return phase === 'walkthrough' || phase === 'lastFile';
   }
 
   private getSignaledFilePaths(input: { filePath?: unknown; filePaths?: unknown }): string[] {
