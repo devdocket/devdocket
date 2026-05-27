@@ -30,7 +30,7 @@ inputs:
     required: true
   copilot-assign-token:
     description: >
-      PAT with permissions for the agent_assignment API.
+      Token with permissions for the agent_assignment API.
       Falls back to github-token if not provided.
     required: false
     default: ''
