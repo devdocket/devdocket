@@ -144,21 +144,20 @@ export class InboxStateStore {
       this.persistTimer = undefined;
     }
 
-    if (this.flushInProgress) {
+    while (true) {
+      if (this.flushInProgress) {
+        await this.flushInProgress;
+        continue;
+      }
+
+      if (!this.hasPendingPersist()) {
+        return;
+      }
+
+      this.flushInProgress = this.persist().finally(() => {
+        this.flushInProgress = undefined;
+      });
       await this.flushInProgress;
-    }
-
-    if (!this.hasPendingPersist()) {
-      return;
-    }
-
-    this.flushInProgress = this.persist().finally(() => {
-      this.flushInProgress = undefined;
-    });
-    await this.flushInProgress;
-
-    if (this.hasPendingPersist()) {
-      await this.flush();
     }
   }
 
