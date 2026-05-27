@@ -522,6 +522,35 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
     });
 
+    it('ignores non-string file path values in signalPhase input', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Malformed phase input should not abort.');
+            yield new LanguageModelToolCallPart('phase-malformed', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: null,
+              filePaths: ['src/first.ts', null, 42],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
     it('resets file progress when a fresh chat starts for the same PR', async () => {
       const firstFileModel = {
         sendRequest: vi.fn().mockImplementation(() => ({

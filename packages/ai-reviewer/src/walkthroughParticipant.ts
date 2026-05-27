@@ -253,7 +253,7 @@ export class WalkthroughParticipant {
 
           // Handle phase signals locally; only loop again for them if no text was streamed.
           if (part.name === 'devdocket-signalPhase') {
-            const input = part.input as { phase?: string; filePath?: string; filePaths?: string[] };
+            const input = part.input as { phase?: string; filePath?: unknown; filePaths?: unknown };
             const signaledPaths = this.getSignaledFilePaths(input);
             this.log.debug(`Phase signal: ${input.phase}${signaledPaths.length > 0 ? ` for ${signaledPaths.join(', ')}` : ''}`);
             if (input.phase) {
@@ -385,10 +385,10 @@ export class WalkthroughParticipant {
     }
   }
 
-  private getSignaledFilePaths(input: { filePath?: string; filePaths?: string[] }): string[] {
+  private getSignaledFilePaths(input: { filePath?: unknown; filePaths?: unknown }): string[] {
     return [
-      ...(input.filePath ? [input.filePath] : []),
-      ...(Array.isArray(input.filePaths) ? input.filePaths : []),
+      ...(typeof input.filePath === 'string' ? [input.filePath] : []),
+      ...(Array.isArray(input.filePaths) ? input.filePaths.filter((filePath): filePath is string => typeof filePath === 'string') : []),
     ];
   }
 
