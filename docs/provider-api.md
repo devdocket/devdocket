@@ -101,7 +101,7 @@ The `@devdocket/shared` package provides the TypeScript types and the `BaseProvi
 import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the name for items emitted by providers. Provider code should import and emit `ProviderItem`.
+`ProviderItem` is the name for items emitted by providers. Provider code should import and emit `ProviderItem`. If you later need optional throttling support for periodic refresh, see [Handling rate limits and throttling](#handling-rate-limits-and-throttling) below.
 
 If you would rather avoid the GitHub Packages dependency, you can re-declare the small subset of interfaces your extension needs. Copy the following declarations into your provider code:
 
@@ -363,7 +363,7 @@ class JiraProvider implements DevDocketProvider {
 
 ### Periodic Refresh Pattern
 
-For providers that poll an external API, set up a `setInterval` timer. Clamp the interval to a reasonable minimum (e.g., 60 seconds) and guard against overlapping refreshes.
+For providers that extend `BaseProvider`, call `startPeriodicRefresh()` with a validated interval instead of building your own timer loop. `BaseProvider` clamps the configured interval to a reasonable minimum (60 seconds) and skips overlapping refreshes. If your provider also needs to react to throttling responses, see [Handling rate limits and throttling](#handling-rate-limits-and-throttling) below.
 
 The `@devdocket/shared` package provides a `validateRefreshInterval(value, logger?)` helper that validates and clamps user-configured intervals. It handles non-numeric values, enforces a 60-second minimum, and returns 0 (disabled) for zero/negative input:
 
@@ -376,6 +376,8 @@ const intervalSeconds = validateRefreshInterval(
 );
 provider.startPeriodicRefresh(intervalSeconds);
 ```
+
+After a successful background refresh, the provider returns to its normal interval. If you opt into the shared throttling flow described below, `BaseProvider` can also delay the next scheduled refresh until both the normal interval and the requested backoff window have elapsed.
 
 Typical refresh guard pattern:
 
@@ -563,6 +565,48 @@ Good patterns: `owner/repo#123`, `PROJECT-42`, `ticket/12345`
 - Cache API responses where appropriate
 - Guard against overlapping refreshes with a boolean flag
 - Clamp periodic intervals to a reasonable minimum (≥ 60 seconds)
+
+### Handling rate limits and throttling
+
+If your provider extends `BaseProvider`, you can tell the periodic scheduler to slow down instead of hammering a throttled API. Catch rate-limit or temporary-unavailability responses in your background refresh path, parse `Retry-After` when the service sends it, and throw `PollingBackoffError`.
+
+Inside your `BaseProvider` subclass:
+
+```ts
+import {
+  PollingBackoffError,
+  parseRetryAfterHeader,
+} from '@devdocket/shared';
+
+protected async doBackgroundRefresh(): Promise<void> {
+  const response = await fetch('https://api.example.com/issues');
+
+  if (!response.ok) {
+    if (response.status === 429 || response.status === 503) {
+      const retryAfterMs = parseRetryAfterHeader(
+        response.headers.get('retry-after'),
+      );
+
+      throw new PollingBackoffError({
+        message: response.status === 429
+          ? 'Example API throttled background refresh.'
+          : 'Example API is temporarily unavailable.',
+        backoffKey: 'api.example.com',
+        statusCode: response.status,
+        retryAfterMs,
+      });
+    }
+
+    throw new Error(
+      `Example API error: ${response.status} ${response.statusText}`,
+    );
+  }
+
+  // ...publish refreshed items...
+}
+```
+
+`BaseProvider` automatically applies that backoff to the next periodic refresh. Use a stable `backoffKey` for the upstream quota bucket you are protecting (for example, a host name or host/org combination). If `retryAfterMs` is omitted, the shared backoff policy falls back to exponential backoff and returns to the normal interval after a successful refresh. If your API exposes a reset timestamp header instead of `Retry-After` (for example, GitHub's `x-ratelimit-reset`), use `parseRateLimitResetHeader()` and convert the returned timestamp into a delay before assigning it to `retryAfterMs`.
 
 ### Don't store provider item data
 
@@ -978,4 +1022,4 @@ interface Event<T> {
 - [`packages/github`](../packages/github/src/) — Production provider implementation (GitHub Issues, PR reviews)
 - [`packages/ado`](../packages/ado/src/) — Azure DevOps provider implementation (work items, PR reviews)
 - [`packages/ai-reviewer`](../packages/ai-reviewer/src/) — Action-only extension that adds AI-powered code review and walkthroughs for GitHub and Azure DevOps PR items
-- [`packages/shared`](../packages/shared/src/) — Shared package published as `@devdocket/shared` to the GitHub Packages npm registry. Includes `BaseProvider` (an abstract base class that handles periodic refresh, concurrency guards, and disposal), `validateRefreshInterval`, URL validation, and logging utilities. See [the Extension API guide](./extension-api.md#installing-devdocketshared) for installation; the [Re-declare types](#3-install-devdocketshared-recommended-or-re-declare-types) section above shows the equivalent type declarations if you prefer to avoid the dependency.
+- [`packages/shared`](../packages/shared/src/) — Shared package published as `@devdocket/shared` to the GitHub Packages npm registry. Includes `BaseProvider`, `validateRefreshInterval`, URL validation, logging utilities, and other optional helpers such as the polling-throttling APIs documented above. See [the Extension API guide](./extension-api.md#installing-devdocketshared) for installation; the [Re-declare types](#3-install-devdocketshared-recommended-or-re-declare-types) section above shows the equivalent type declarations if you prefer to avoid the dependency.

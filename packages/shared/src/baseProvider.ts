@@ -419,6 +419,11 @@ export abstract class BaseProvider {
     return typeof error === 'object' && error !== null && expectedAbortErrors.has(error);
   }
 
+  /**
+   * Starts periodic background refresh using the supplied interval as the base schedule.
+   * If {@link doBackgroundRefresh} throws a {@link PollingBackoffError}, the next scheduled
+   * run is automatically delayed until the backoff window has elapsed.
+   */
   startPeriodicRefresh(intervalSeconds: number): void {
     if (this._disposed || this._shuttingDown) {
       return;
@@ -484,7 +489,11 @@ export abstract class BaseProvider {
     return this._shutdownPromise;
   }
 
-  /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
+  /**
+   * Runs one background refresh with a concurrency guard to prevent overlapping calls.
+   * When the refresh throws {@link PollingBackoffError}, the active periodic schedule records
+   * the requested cooldown before the error is rethrown to the provider's error handler.
+   */
   async refreshInBackground(): Promise<void> {
     if (this._isRefreshing || this._disposed || this._shuttingDown) {
       return;
