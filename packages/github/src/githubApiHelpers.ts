@@ -5,6 +5,9 @@ import {
   combineSignals,
   createAbortError,
   getSessionWithAuthFallback,
+  parseRateLimitResetHeader,
+  parseRetryAfterHeader,
+  PollingBackoffError,
   runWorkerPoolSettled,
   type ProviderBadge,
   type RecoverableError,
@@ -48,6 +51,7 @@ export interface GitHubPrMergeFields {
 }
 
 const AUTHORIZE_IN_BROWSER = 'Authorize in browser';
+const GITHUB_API_BACKOFF_KEY = 'api.github.com';
 
 interface GitHubSsoErrorOptions {
   ssoUrl?: string;
@@ -283,10 +287,16 @@ export async function throwApiError(response: Response, label: string): Promise<
   const bodyText = await safeReadResponseBody(response);
   const apiMessage = extractGitHubApiMessage(bodyText);
 
-  const remaining = response.headers.get('x-ratelimit-remaining');
-  const reset = response.headers.get('x-ratelimit-reset');
-  const retryAfter = response.headers.get('retry-after');
-  const sso = response.headers.get('x-github-sso');
+  const remaining = response.headers?.get?.('x-ratelimit-remaining') ?? null;
+  const reset = response.headers?.get?.('x-ratelimit-reset') ?? null;
+  const retryAfter = response.headers?.get?.('retry-after') ?? null;
+  const sso = response.headers?.get?.('x-github-sso') ?? null;
+  const retryAfterMs = parseRetryAfterHeader(retryAfter);
+  const rateLimitResetAtMs = parseRateLimitResetHeader(reset);
+  const resetDelayMs = rateLimitResetAtMs !== undefined
+    ? Math.max(0, rateLimitResetAtMs - Date.now())
+    : undefined;
+  const enforcedRetryAfterMs = Math.max(retryAfterMs ?? 0, resetDelayMs ?? 0) || undefined;
 
   const bodySnippet = bodyText ? truncateForLog(bodyText) : null;
   const diag = [
@@ -320,20 +330,46 @@ export async function throwApiError(response: Response, label: string): Promise<
     }
     if (isSecondaryRateLimited(retryAfter, apiMessage)) {
       const wait = formatRetryAfter(retryAfter);
-      throw new Error(`GitHub secondary rate limit hit for ${label}.${wait ? ` ${wait}` : ''}`);
+      throw new PollingBackoffError({
+        message: `GitHub secondary rate limit hit for ${label}.${wait ? ` ${wait}` : ''}`,
+        backoffKey: GITHUB_API_BACKOFF_KEY,
+        statusCode: status,
+        retryAfterMs: enforcedRetryAfterMs,
+      });
     }
     if (isPrimaryRateLimited(remaining, apiMessage)) {
       const resetHint = formatRateLimitReset(reset);
-      throw new Error(
-        `GitHub API rate limit exceeded for ${label}.` +
-        `${resetHint ? ` ${resetHint}` : ''}` +
-        ' Sign in to GitHub in VS Code for a higher quota.',
-      );
+      throw new PollingBackoffError({
+        message: `GitHub API rate limit exceeded for ${label}.`
+          + `${resetHint ? ` ${resetHint}` : ''}`
+          + ' Sign in to GitHub in VS Code for a higher quota.',
+        backoffKey: GITHUB_API_BACKOFF_KEY,
+        statusCode: status,
+        retryAfterMs: enforcedRetryAfterMs,
+      });
     }
     throw new Error(
       `GitHub denied access to ${label} (HTTP 403)` +
       `${apiMessage ? `: ${apiMessage}` : '. The token may lack required permissions, or the resource may be private.'}`,
     );
+  }
+  if (status === 429) {
+    const wait = formatRetryAfter(retryAfter);
+    throw new PollingBackoffError({
+      message: `GitHub rate limit hit for ${label}.${wait ? ` ${wait}` : ''}`,
+      backoffKey: GITHUB_API_BACKOFF_KEY,
+      statusCode: status,
+      retryAfterMs: enforcedRetryAfterMs,
+    });
+  }
+  if (status === 503) {
+    const wait = formatRetryAfter(retryAfter);
+    throw new PollingBackoffError({
+      message: `GitHub API temporarily unavailable for ${label}.${wait ? ` ${wait}` : ''}`,
+      backoffKey: GITHUB_API_BACKOFF_KEY,
+      statusCode: status,
+      retryAfterMs: enforcedRetryAfterMs,
+    });
   }
   throw new Error(
     `GitHub API error for ${label}: HTTP ${status}` +

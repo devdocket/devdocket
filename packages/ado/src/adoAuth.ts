@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { combineSignals, getSessionWithAuthFallback } from '@devdocket/shared';
+import { combineSignals, getSessionWithAuthFallback, parseRetryAfterHeader, PollingBackoffError } from '@devdocket/shared';
 
 export const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
@@ -46,8 +46,21 @@ export async function retryAdoWithAuth(
 }
 
 /** Throw a descriptive error for a non-ok ADO API response. */
-export function throwAdoApiError(response: Response, label: string): never {
+export async function throwAdoApiError(response: Response, label: string, backoffKey = 'dev.azure.com'): Promise<never> {
+  const retryAfterMs = parseRetryAfterHeader(response.headers?.get?.('retry-after') ?? null);
   if (response.status === 404) { throw new Error(`${label} not found. It may be private or deleted.`); }
+  if (response.status === 429 || response.status === 503) {
+    const waitMessage = retryAfterMs !== undefined ? ` Retry after ${Math.ceil(retryAfterMs / 1000)}s.` : '';
+    const message = response.status === 429
+      ? `Azure DevOps throttled ${label}.${waitMessage}`
+      : `Azure DevOps is temporarily unavailable for ${label}.${waitMessage}`;
+    throw new PollingBackoffError({
+      message,
+      backoffKey,
+      statusCode: response.status,
+      retryAfterMs,
+    });
+  }
   if (response.status === 401 || response.status === 403) { throw new Error(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`); }
   throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
 }

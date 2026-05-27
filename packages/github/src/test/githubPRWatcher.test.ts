@@ -67,6 +67,7 @@ describe('GitHubPRWatcher', () => {
     it('sets repo to owner/repo', () => {
       const result = watcher.parsePRUrl('https://github.com/owner/repo/pull/7');
       expect(result.repo).toBe('owner/repo');
+      expect(result.backoffKey).toBe('api.github.com');
     });
 
     it('throws for invalid URL format', () => {

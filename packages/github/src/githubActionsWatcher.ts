@@ -8,6 +8,7 @@ import type {
   RunConclusion,
   CancellationTokenLike 
 } from '@devdocket/shared';
+import { throwApiError } from './githubApiHelpers';
 import { logger } from './logger';
 
 
@@ -62,6 +63,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       displayName: 'CI Build', // We'll update this with the real name when we fetch status
       url,
       repo: `${owner}/${repo}`,
+      backoffKey: 'api.github.com',
     };
   }
 
@@ -78,13 +80,15 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     // Fetch run details
     const runData = await this.fetchApi<GitHubWorkflowRun>(
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}`,
-      token
+      token,
+      `GitHub Actions run ${identifier.runId}`,
     );
 
     // Fetch jobs for this run (request max page size to avoid omitting jobs on larger workflows)
     const jobsData = await this.fetchApi<{ jobs: GitHubWorkflowJob[] }>(
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}/jobs?per_page=100`,
-      token
+      token,
+      `GitHub Actions jobs for run ${identifier.runId}`,
     );
 
     const overallState = this.mapState(runData.status);
@@ -134,7 +138,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
 
   private static readonly FETCH_TIMEOUT_MS = 30_000;
 
-  private async fetchApi<T>(url: string, token?: CancellationTokenLike): Promise<T> {
+  private async fetchApi<T>(url: string, token: CancellationTokenLike | undefined, label: string): Promise<T> {
     // Background polling must not trigger interactive sign-in prompts.
     // Reuse an existing session if available; fail gracefully if not.
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
@@ -164,20 +168,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     }
 
     if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error('Run not found or access denied');
-      }
-      if (response.status === 401) {
-        throw new Error('GitHub authentication failed. Please re-authenticate.');
-      }
-      if (response.status === 403) {
-        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
-        if (rateLimitRemaining === '0') {
-          throw new Error('GitHub API rate limit exceeded. Please wait and try again.');
-        }
-        throw new Error('GitHub access denied. Check repository permissions.');
-      }
-      throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+      await throwApiError(response, label);
     }
 
     return await response.json() as T;

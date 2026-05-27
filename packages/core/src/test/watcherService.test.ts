@@ -5,7 +5,7 @@ import { WatcherService, WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WatchStore } from '../storage/watchStore';
-import type { DevDocketRunWatcher, RunIdentifier, RunStatus } from '@devdocket/shared';
+import { PollingBackoffError, type DevDocketRunWatcher, type RunIdentifier, type RunStatus } from '@devdocket/shared';
 
 function createMockLogger() {
   return {
@@ -86,9 +86,11 @@ describe('WatcherService', () => {
   let prRegistry: PRWatcherRegistry;
   let logger: ReturnType<typeof createMockLogger>;
   let watchStore: WatchStore;
+  let mathRandomSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     vi.useFakeTimers();
+    mathRandomSpy = vi.spyOn(Math, 'random').mockReturnValue(0);
     logger = createMockLogger();
     registry = new WatcherRegistry(logger);
     prRegistry = new PRWatcherRegistry(logger);
@@ -98,6 +100,7 @@ describe('WatcherService', () => {
 
   afterEach(() => {
     service.dispose();
+    mathRandomSpy.mockRestore();
     vi.useRealTimers();
   });
 
@@ -384,6 +387,57 @@ describe('WatcherService', () => {
       expect(callCountAfter).toBe(callCountBefore); // No new calls
     });
 
+    it('backs off run polling until Retry-After expires', async () => {
+      const { workspace } = await import('../test/__mocks__/vscode');
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'pollingIntervalSeconds') { return 15; }
+          return defaultValue;
+        }),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
+
+      let callCount = 0;
+      const watcher = createMockWatcher('test');
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+        callCount += 1;
+        if (callCount === 1) {
+          return { overallState: 'running' as const, conclusion: undefined, jobs: [] };
+        }
+        if (callCount === 2) {
+          throw new PollingBackoffError({
+            message: 'Rate limited',
+            backoffKey: 'api.github.com',
+            statusCode: 429,
+            retryAfterMs: 60_000,
+          });
+        }
+        return { overallState: 'running' as const, conclusion: undefined, jobs: [] };
+      });
+      registry.register(watcher);
+
+      await service.startWatch({ ...createIdentifier(), backoffKey: 'api.github.com' });
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+      expect(service.getActiveWatches()[0].hasWarning).not.toBe(true);
+
+      await vi.advanceTimersByTimeAsync(45_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+
+      await vi.advanceTimersByTimeAsync(15_000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(3);
+      expect(service.getActiveWatches()[0].hasWarning).not.toBe(true);
+
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((_: string, defaultValue?: any) => defaultValue),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
+    });
+
     it('stops polling when no active watches remain', async () => {
       const watcher = createMockWatcher('test');
       registry.register(watcher);
@@ -517,6 +571,32 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()[0].identifier.runId).toBe('run-1');
     });
 
+    it('backfills backoff keys for persisted run watches', async () => {
+      const watcher = createMockWatcher('test');
+      (watcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'test',
+        runId: 'run-1',
+        displayName: 'Test Run',
+        url: 'https://example.com/run/1',
+        backoffKey: 'api.example.com',
+      });
+      registry.register(watcher);
+
+      const persistedWatch: WatchedRun = {
+        identifier: createIdentifier(),
+        status: { overallState: 'running', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      delete persistedWatch.identifier.backoffKey;
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [persistedWatch], prs: [] });
+
+      await service.loadPersistedWatches();
+
+      expect(service.getActiveWatches()[0].identifier.backoffKey).toBe('api.example.com');
+    });
+
     it('does not clobber a run watch started while persisted watches load', async () => {
       const identifier = { ...createIdentifier(), displayName: 'Live Run' };
       const persistedWatch: WatchedRun = {
@@ -606,6 +686,34 @@ describe('WatcherService', () => {
 
       await expect(service.isPRWatched(identifier)).resolves.toBe(true);
       expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('backfills backoff keys for persisted PR watches', async () => {
+      const prWatcher = createMockPRWatcher();
+      (prWatcher.parsePRUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'test-pr',
+        prId: '42',
+        displayName: 'PR #42',
+        url: 'https://example.com/pr/42',
+        repo: 'owner/repo',
+        backoffKey: 'api.example.com',
+      });
+      prRegistry.register(prWatcher);
+
+      const persistedPR = {
+        identifier: createPRIdentifier(),
+        prState: 'open' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      delete persistedPR.identifier.backoffKey;
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({ runs: [], prs: [persistedPR] });
+
+      await service.loadPersistedWatches();
+
+      expect(service.getAllPRWatches()[0].identifier.backoffKey).toBe('api.example.com');
     });
 
     it('caches persisted PR watch lookups across repeated checks', async () => {

@@ -375,7 +375,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     }
 
     if (!response.ok) {
-      throwAdoApiError(response, `ADO PR ${org}/${project}/${repo}#${id}`);
+      await throwAdoApiError(response, `ADO PR ${org}/${project}/${repo}#${id}`, `dev.azure.com/${org}`);
     }
 
     const data = await response.json() as AdoPullRequest & {

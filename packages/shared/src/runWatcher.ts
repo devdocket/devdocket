@@ -44,6 +44,8 @@ export interface RunIdentifier {
   url: string;
   /** Optional repository identifier (e.g. "owner/repo") */
   repo?: string;
+  /** Optional shared rate-limit/backoff bucket for watches hitting the same upstream host. */
+  backoffKey?: string;
 }
 
 /**

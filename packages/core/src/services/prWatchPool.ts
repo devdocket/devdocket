@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import { runWorkerPool, type PRIdentifier, type PRRunsSnapshot, type RunIdentifier } from '@devdocket/shared';
+import { isPollingBackoffError, runWorkerPool, type PRIdentifier, type PRRunsSnapshot, type RunIdentifier } from '@devdocket/shared';
 import { PRWatcherRegistry } from './prWatcherRegistry';
 import type { WatchedPR, WatchedRun } from './watcherService';
+import { PollingBackoffRegistry } from './pollingBackoffRegistry';
 import type { StartWatchOptions, WatchStartResult } from './runWatchPool';
 
 const POLL_CONCURRENCY_PER_PROVIDER = 4;
@@ -65,6 +66,7 @@ export class PRWatchPool implements vscode.Disposable {
   constructor(
     private readonly prWatcherRegistry: PRWatcherRegistry,
     private readonly runControl: RunWatchControl,
+    private readonly pollingBackoffRegistry: PollingBackoffRegistry,
     private readonly logger: WatcherLogger,
     private readonly isDisposed: () => boolean,
     private readonly onPollingNeeded: () => void,
@@ -74,6 +76,7 @@ export class PRWatchPool implements vscode.Disposable {
   restore(prs: WatchedPR[]): number {
     let restored = 0;
     for (const pr of prs.filter(pr => !pr.dismissed)) {
+      pr.identifier = this.rehydrateRestoredPRIdentifier(pr.identifier);
       const key = this.getPRWatchKey(pr.identifier);
       if (this.prWatches.has(key)) {
         continue;
@@ -106,7 +109,14 @@ export class PRWatchPool implements vscode.Disposable {
       throw new Error(`No PR watcher registered for provider: ${identifier.providerId}`);
     }
 
-    const snapshot = await prWatcher.getPRRunsSnapshot(identifier);
+    let snapshot: PRRunsSnapshot;
+    try {
+      snapshot = await prWatcher.getPRRunsSnapshot(identifier);
+    } catch (error) {
+      this.pollingBackoffRegistry.recordFailure(error);
+      throw error;
+    }
+    this.pollingBackoffRegistry.recordSuccess(identifier.backoffKey);
     if (snapshot.displayName) {
       identifier.displayName = snapshot.displayName;
     }
@@ -245,8 +255,13 @@ export class PRWatchPool implements vscode.Disposable {
     );
     if (activePRs.length === 0) return { prChanged: false, childRunChanged: false };
 
-    const fetchResults = new Array<PRPollFetchResult>(activePRs.length);
-    await Promise.all(this.groupPRsByProvider(activePRs).map(group => runWorkerPool(
+    const eligiblePRs = activePRs.filter(
+      prWatch => !this.pollingBackoffRegistry.isCoolingDown(prWatch.identifier.backoffKey),
+    );
+    if (eligiblePRs.length === 0) return { prChanged: false, childRunChanged: false };
+
+    const fetchResults = new Array<PRPollFetchResult>(eligiblePRs.length);
+    await Promise.all(this.groupPRsByProvider(eligiblePRs).map(group => runWorkerPool(
       group,
       async ({ prWatch, index }) => {
         const key = this.getPRWatchKey(prWatch.identifier);
@@ -271,11 +286,18 @@ export class PRWatchPool implements vscode.Disposable {
       POLL_CONCURRENCY_PER_PROVIDER,
     )));
 
+    const failedBackoffKeys = new Set(
+      fetchResults
+        .map(result => result?.error)
+        .filter(isPollingBackoffError)
+        .map(error => error.backoffKey),
+    );
+
     let prChanged = false;
     let childRunChanged = false;
 
-    for (let index = 0; index < activePRs.length; index += 1) {
-      const prWatch = activePRs[index];
+    for (let index = 0; index < eligiblePRs.length; index += 1) {
+      const prWatch = eligiblePRs[index];
       const result = fetchResults[index];
       const key = result?.key ?? this.getPRWatchKey(prWatch.identifier);
 
@@ -295,6 +317,9 @@ export class PRWatchPool implements vscode.Disposable {
       }
 
       prWatch.lastPolledAt = new Date().toISOString();
+      if (!prWatch.identifier.backoffKey || !failedBackoffKeys.has(prWatch.identifier.backoffKey)) {
+        this.pollingBackoffRegistry.recordSuccess(prWatch.identifier.backoffKey);
+      }
 
       if (snapshot.displayName && snapshot.displayName !== prWatch.identifier.displayName) {
         prWatch.identifier.displayName = snapshot.displayName;
@@ -491,6 +516,28 @@ export class PRWatchPool implements vscode.Disposable {
     return `pr:${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
   }
 
+  private rehydrateRestoredPRIdentifier(identifier: PRIdentifier): PRIdentifier {
+    if (identifier.backoffKey) {
+      return identifier;
+    }
+
+    const watcher = this.prWatcherRegistry.get(identifier.providerId) ?? this.prWatcherRegistry.findWatcherForUrl(identifier.url);
+    if (!watcher) {
+      return identifier;
+    }
+
+    try {
+      const parsed = watcher.parsePRUrl(identifier.url);
+      return {
+        ...identifier,
+        backoffKey: parsed.backoffKey ?? identifier.backoffKey,
+      };
+    } catch (err) {
+      this.logger.warn(`PR URL matched watcher '${watcher.id}' but parsePRUrl failed for ${identifier.url}: ${err}`);
+      return identifier;
+    }
+  }
+
   buildActiveChildRunIndex(): Map<string, Set<string>> {
     const runToPRKeys = new Map<string, Set<string>>();
     for (const [prKey, prWatch] of this.prWatches.entries()) {
@@ -515,6 +562,12 @@ export class PRWatchPool implements vscode.Disposable {
   }
 
   private handlePollFailure(prWatch: WatchedPR, key: string, err: unknown): boolean {
+    const backoff = this.pollingBackoffRegistry.recordFailure(err);
+    if (backoff) {
+      this.logger.warn(`PR poll backoff active for ${prWatch.identifier.displayName} until ${new Date(backoff.cooldownUntilMs).toISOString()}`);
+      return false;
+    }
+
     const failures = (this.consecutiveFailures.get(key) || 0) + 1;
     this.consecutiveFailures.set(key, failures);
 

@@ -46,6 +46,7 @@ describe('AdoPipelineWatcher', () => {
       expect(result.repo).toBe('dnceng/internal');
       expect(result.url).toBe('https://dev.azure.com/dnceng/internal/_build/results?buildId=2955324');
       expect(result.displayName).toBe('Build 2955324');
+      expect(result.backoffKey).toBe('dev.azure.com/dnceng');
     });
 
     it('throws for URL without buildId', () => {
