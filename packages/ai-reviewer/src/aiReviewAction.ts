@@ -409,6 +409,14 @@ ${displayList || '(file list unavailable — use devdocket-getDiff to get the st
         }
 
         if (!hasToolCalls) {
+          if (result.trim() === this.outputHeader.trim()) {
+            this.log.error(`AI Code Review: model returned no review content after ${iterations} iteration(s)`);
+            vscode.window.showWarningMessage(
+              'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+            );
+            return undefined;
+          }
+
           this.log.info(`No tool calls in iteration ${iterations} — analysis complete`);
           break;
         }

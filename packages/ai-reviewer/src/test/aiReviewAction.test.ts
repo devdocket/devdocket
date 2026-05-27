@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mockLogOutputChannel } from 'vscode';
+import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, LanguageModelToolCallPart, mockLogOutputChannel } from 'vscode';
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
 import type { RepoManager } from '../repoManager';
 import type { DevDocketApi } from '../types';
@@ -753,6 +753,35 @@ describe('AiReviewAction', () => {
       expect(result).toBeUndefined();
       expect(mockLogOutputChannel.error).toHaveBeenCalledWith(
         'AI Code Review: model returned no content and no tool calls on the first iteration',
+      );
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
+      );
+    });
+
+    it('returns undefined and warns when tool calls are followed by no review text', async () => {
+      const model = {
+        id: 'mock-model',
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelToolCallPart('call-1', 'devdocket-readFile', { path: 'src/file.ts' });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {})(),
+          }),
+      } as never;
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+
+      const result = await action.analyzeWithTools(
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      expect(result).toBeUndefined();
+      expect(model.sendRequest).toHaveBeenCalledTimes(2);
+      expect(mockLogOutputChannel.error).toHaveBeenCalledWith(
+        'AI Code Review: model returned no review content after 2 iteration(s)',
       );
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         'AI Code Review: The language model returned no content. Try again, switch models, or check whether the PR is too large to review.',
