@@ -61,7 +61,7 @@ export class DevDocketApiImpl implements DevDocketApi {
 
   registerAction(action: DevDocketAction): Disposable {
     const min = action.minContractVersion;
-    if (min) {
+    if (min !== undefined) {
       if (isMalformedMinContractVersion(min, this.contractVersion)) {
         logger.warn(
           `Action "${action.id}" declared minContractVersion="${min}", which is not a valid semver ` +

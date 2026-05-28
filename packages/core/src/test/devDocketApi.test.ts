@@ -325,6 +325,20 @@ describe('DevDocketApiImpl', () => {
       expect(actionRegistry.getAction('bad-min')).toBe(action);
       disposable.dispose();
     });
+
+    it('treats an empty / whitespace-only minContractVersion as malformed', () => {
+      const action: DevDocketAction = {
+        ...createMockAction('empty-min'),
+        minContractVersion: '',
+      };
+      const registerSpy = vi.spyOn(actionRegistry, 'register');
+
+      const disposable = api.registerAction(action);
+
+      expect(registerSpy).toHaveBeenCalledWith(action);
+      expect(actionRegistry.getAction('empty-min')).toBe(action);
+      disposable.dispose();
+    });
   });
 
   describe('registerRunWatcher', () => {
