@@ -144,7 +144,7 @@ api.registerProvider(provider);
 If `api.contractVersion` is lower than `minContractVersion`, `registerProvider` (and `registerAction`) **does not throw** — it logs a warning, skips registration, and returns a no-op `Disposable`. This lets the host extension keep working when paired with an older DevDocket core. If you need to react to incompatibility explicitly, compare versions yourself before calling `register*`:
 
 ```ts
-import { CONTRACT_VERSION, isContractVersionSatisfied } from '@devdocket/shared';
+import { isContractVersionSatisfied } from '@devdocket/shared';
 
 if (!isContractVersionSatisfied(api.contractVersion, '1.2.0')) {
   vscode.window.showWarningMessage(
