@@ -1,6 +1,5 @@
 import { DevDocketApiImpl } from '../api/devDocketApi';
-import { DevDocketProvider, DevDocketAction, ProviderItem } from '../api/types';
-import { CONTRACT_VERSION } from '../api/types';
+import { DevDocketProvider, DevDocketAction, ProviderItem, CONTRACT_VERSION } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
