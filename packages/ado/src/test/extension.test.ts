@@ -27,6 +27,7 @@ describe('extension activation', () => {
     vi.clearAllMocks();
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
+    (workspace as any).workspaceFolders = [{ uri: { fsPath: '/mock/workspace' } }];
 
     (window as any).createOutputChannel = vi.fn(() => ({
       info: vi.fn(),
@@ -86,6 +87,23 @@ describe('extension activation', () => {
   afterEach(() => {
     disposeContextSubscriptions();
     vi.unstubAllGlobals();
+  });
+
+  it('is a no-op when no workspace folder is open', async () => {
+    (workspace as any).workspaceFolders = [];
+
+    await activate(mockContext);
+
+    expect(window.createOutputChannel).not.toHaveBeenCalled();
+    expect(extensions.getExtension).not.toHaveBeenCalled();
+    expect(mockApi.registerProvider).not.toHaveBeenCalled();
+    expect(mockApi.registerRunWatcher).not.toHaveBeenCalled();
+    expect(mockApi.registerPRWatcher).not.toHaveBeenCalled();
+    expect(workspace.onDidChangeConfiguration).not.toHaveBeenCalled();
+    expect(workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledTimes(1);
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(disposables).toHaveLength(1);
   });
 
   it('returns early when core extension is not found', async () => {

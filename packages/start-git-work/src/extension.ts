@@ -5,7 +5,35 @@ import { renderWorkStartedActivityDetail } from './workStartedDetail';
 import { logger, setLogger } from './logger';
 import type { StateTransitionEvent, ActivityType, DevDocketApi } from '@devdocket/shared';
 
+function hasWorkspaceFolder(): boolean {
+  return !!vscode.workspace.workspaceFolders?.length;
+}
+
+function waitForWorkspaceFolder(context: vscode.ExtensionContext): boolean {
+  if (hasWorkspaceFolder()) {
+    return false;
+  }
+
+  let triggered = false;
+  const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
+    if (triggered || !hasWorkspaceFolder()) {
+      return;
+    }
+    triggered = true;
+    disposable.dispose();
+    activate(context).catch((err) => {
+      console.error('[DevDocket Start Git Work] deferred activation failed', err);
+    });
+  });
+  context.subscriptions.push(disposable);
+  return true;
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  if (waitForWorkspaceFolder(context)) {
+    return;
+  }
+
   const log = vscode.window.createOutputChannel('DevDocket Start Git Work', { log: true });
   context.subscriptions.push(log);
   setLogger(log);
