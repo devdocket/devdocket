@@ -480,7 +480,7 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private async saveData(data: AutosaveData): Promise<{ rejected: string[] }> {
+  private async saveData(data: AutosaveData): Promise<{ applied: boolean; rejected: string[] }> {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       throw new Error('Work item no longer exists. Your changes could not be saved.');
@@ -518,17 +518,18 @@ export class WorkItemEditorPanel {
       patch.notes = data.notes?.trim() || undefined;
     }
 
-    if (Object.keys(patch).length === 0) {
-      return { rejected };
+    const applied = Object.keys(patch).length > 0;
+    if (!applied) {
+      return { applied, rejected };
     }
 
     if (this.disposed) {
       await this.workGraph.updateItemDuringShutdown(this.itemId, patch);
-      return { rejected };
+      return { applied, rejected };
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
-    return { rejected };
+    return { applied, rejected };
   }
 
   private update(options: {
@@ -825,7 +826,7 @@ export class WorkItemEditorPanel {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
         const result = await this.saveData(request.data);
-        if (result.rejected.length > 0) {
+        if (!result.applied && result.rejected.length > 0) {
           this.postAutosaveError(request.requestId, result.rejected.join('; '));
         } else {
           this.postAutosaveAck(request.requestId);
