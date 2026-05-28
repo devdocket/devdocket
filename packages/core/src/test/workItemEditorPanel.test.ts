@@ -935,7 +935,7 @@ describe('WorkItemEditorPanel', () => {
     });
   });
 
-  it('posts autosaveAck when at least one field is applied even if another was rejected', async () => {
+  it('persists valid fields but posts autosaveError when another field was rejected', async () => {
     vi.useFakeTimers();
     const item = makeItem({ title: 'Original' });
     const workGraph = createMockWorkGraph(item);
@@ -951,12 +951,12 @@ describe('WorkItemEditorPanel', () => {
 
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'New note' });
     expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
-      type: 'autosaveAck',
+      type: 'autosaveError',
       requestId: 'save-partial',
-      savedAt: expect.any(Number),
+      message: 'Title cannot be empty',
     });
     expect(mock.panel.webview.postMessage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'autosaveError' }),
+      expect.objectContaining({ type: 'autosaveAck', requestId: 'save-partial' }),
     );
   });
 

@@ -826,7 +826,7 @@ export class WorkItemEditorPanel {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
         const result = await this.saveData(request.data);
-        if (!result.applied && result.rejected.length > 0) {
+        if (result.rejected.length > 0) {
           this.postAutosaveError(request.requestId, result.rejected.join('; '));
         } else {
           this.postAutosaveAck(request.requestId);
