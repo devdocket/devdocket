@@ -1,10 +1,11 @@
-import { DevDocketApi, DevDocketProvider, DevDocketAction, DevDocketRunWatcher, DevDocketPRWatcher, Disposable, type ActivityType, type ActivityDetailRenderer, type StateTransitionEvent } from './types';
+import { DevDocketApi, DevDocketProvider, DevDocketAction, DevDocketRunWatcher, DevDocketPRWatcher, Disposable, type ActivityType, type ActivityDetailRenderer, type StateTransitionEvent, type GitWorkResolver } from './types';
 import type { Event } from '@devdocket/shared';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
+import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
 import { WorkGraph } from '../services/workGraph';
 
 export class DevDocketApiImpl implements DevDocketApi {
@@ -17,6 +18,7 @@ export class DevDocketApiImpl implements DevDocketApi {
     private readonly prWatcherRegistry: PRWatcherRegistry,
     private readonly workGraph: WorkGraph,
     private readonly activityDetailRendererRegistry: ActivityDetailRendererRegistry,
+    private readonly gitWorkResolverRegistry: GitWorkResolverRegistry,
   ) {
     this.onDidTransitionState = workGraph.onDidTransitionState;
   }
@@ -47,5 +49,9 @@ export class DevDocketApiImpl implements DevDocketApi {
 
   registerActivityDetailRenderer(type: ActivityType, render: ActivityDetailRenderer): Disposable {
     return this.activityDetailRendererRegistry.register(type, render);
+  }
+
+  registerGitWorkResolver(resolver: GitWorkResolver): Disposable {
+    return this.gitWorkResolverRegistry.register(resolver);
   }
 }

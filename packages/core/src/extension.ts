@@ -13,6 +13,7 @@ import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
 import { ActionRegistry } from './services/actionRegistry';
 import { ActivityDetailRendererRegistry } from './services/activityDetailRendererRegistry';
+import { GitWorkResolverRegistry } from './services/gitWorkResolverRegistry';
 import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
@@ -505,11 +506,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const ar = new ActionRegistry();
   const adrr = new ActivityDetailRendererRegistry();
   adrr.register('updated', renderUpdatedActivityDetail);
+  const gwrr = new GitWorkResolverRegistry();
   const wr = new WatcherRegistry(logger);
   const pwr = new PRWatcherRegistry(logger);
   const watchStore = new WatchStore(createUserIntentStore(useFileBackedStorage, context.globalState, context.globalStorageUri, 'devdocket.watches', 'watches.json'));
   const ws = new WatcherService(wr, pwr, watchStore, logger);
-  const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
+  const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr, gwrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   // Wire window focus state so providers can throttle background refreshes when unfocused.
@@ -559,6 +561,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ss,
     readStateStore,
     ws,
+    gwrr,
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
@@ -572,6 +575,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh('watchedRuns'))),
     ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh('watchedPRs'))),
     readStateStore.onDidChange(safeHandler('mc:readState', () => mainProvider.scheduleRefresh('readState'))),
+    gwrr.onDidChange(safeHandler('mc:gitWorkResolver', () => mainProvider.scheduleRefresh('workGraph'))),
     pr.onDidRefreshProvider(safeHandler('mc:prune', async (providerId) => {
       if (pr.wasLastRefreshTruncated(providerId)) {
         logger.debug(`Skipping prune for provider ${providerId} because the latest refresh was truncated`);
@@ -610,6 +614,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     stateStore: ss,
     watcherService: ws,
     activityDetailRendererRegistry: adrr,
+    gitWorkResolverRegistry: gwrr,
   };
 
   // Panel managers must be first: editor disposal flushes pending saves via
@@ -650,7 +655,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
 
   const commandRegStart = performance.now();
-  registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider, editorPanelDependencies, incomingPreviewPanelManager, () => mainProvider.toggleSearch());
+  registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider, editorPanelDependencies, incomingPreviewPanelManager, () => mainProvider.toggleSearch(), gwrr);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   workGraphForDeactivation = wg;

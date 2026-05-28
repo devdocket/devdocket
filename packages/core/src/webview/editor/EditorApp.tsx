@@ -133,6 +133,7 @@ export function EditorApp() {
         title={title}
         url={url}
         onCopyText={text => postMessage({ type: 'copyToClipboard', text })}
+        onOpenWorktree={item.gitWork?.worktreePath ? () => postMessage({ type: 'openWorktree', itemId: item.id }) : undefined}
         onTitleInput={!item.isProviderManaged && !item.isIncoming ? value => {
           setTitle(value);
           setAutosaveVersion(version => version + 1);

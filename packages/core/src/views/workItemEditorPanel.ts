@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
+import * as fs from 'node:fs';
 import type { ProviderItem, RelatedItemRef } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
+import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
@@ -67,6 +69,7 @@ export interface WorkItemEditorPanelDependencies {
   stateStore: InboxStateStore;
   watcherService?: WatcherService;
   activityDetailRendererRegistry?: ActivityDetailRendererRegistry;
+  gitWorkResolverRegistry?: GitWorkResolverRegistry;
 }
 
 export class WorkItemEditorPanel {
@@ -81,6 +84,7 @@ export class WorkItemEditorPanel {
   private readonly stateStore: InboxStateStore;
   private readonly watcherService?: WatcherService;
   private readonly activityDetailRendererRegistry?: ActivityDetailRendererRegistry;
+  private readonly gitWorkResolverRegistry?: GitWorkResolverRegistry;
   private readonly extensionUri: vscode.Uri;
   private disposed = false;
   private htmlInitialized = false;
@@ -93,6 +97,7 @@ export class WorkItemEditorPanel {
   private readonly providerChangeSub: vscode.Disposable;
   private readonly actionRegistrySub: vscode.Disposable;
   private readonly activityRendererSub?: vscode.Disposable;
+  private readonly gitWorkResolverSub?: vscode.Disposable;
   private readonly watcherSubscriptions: vscode.Disposable[] = [];
   private lastDisplayedTitle: string | undefined;
   private lastDisplayedUrl: string | undefined;
@@ -192,6 +197,7 @@ export class WorkItemEditorPanel {
       dependencies.stateStore,
       dependencies.watcherService,
       dependencies.activityDetailRendererRegistry,
+      dependencies.gitWorkResolverRegistry,
       context.extensionUri,
       providerLabel,
     );
@@ -220,6 +226,7 @@ export class WorkItemEditorPanel {
     stateStore: InboxStateStore,
     watcherService: WatcherService | undefined,
     activityDetailRendererRegistry: ActivityDetailRendererRegistry | undefined,
+    gitWorkResolverRegistry: GitWorkResolverRegistry | undefined,
     extensionUri: vscode.Uri,
     private providerLabel?: string,
   ) {
@@ -232,6 +239,7 @@ export class WorkItemEditorPanel {
     this.stateStore = stateStore;
     this.watcherService = watcherService;
     this.activityDetailRendererRegistry = activityDetailRendererRegistry;
+    this.gitWorkResolverRegistry = gitWorkResolverRegistry;
     this.extensionUri = extensionUri;
 
     this.update();
@@ -257,6 +265,15 @@ export class WorkItemEditorPanel {
       // this covers the case where this editor opened before a provider
       // extension finished activating and registering its renderer.
       this.activityRendererSub = this.activityDetailRendererRegistry.onDidChange(() => {
+        this.update();
+      });
+    }
+
+    if (this.gitWorkResolverRegistry) {
+      // Same late-activation rationale as the activity renderer: refresh the
+      // gitWork section once the Start Git Work extension finishes activating
+      // and installs its resolver.
+      this.gitWorkResolverSub = this.gitWorkResolverRegistry.onDidChange(() => {
         this.update();
       });
     }
@@ -295,6 +312,10 @@ export class WorkItemEditorPanel {
       }
       if (msg?.type === 'openWatches') {
         void vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
+        return;
+      }
+      if (msg?.type === 'openWorktree' && typeof msg.itemId === 'string') {
+        void vscode.commands.executeCommand('devdocket.openWorktreeForItem', { id: msg.itemId });
         return;
       }
       if (msg?.type === 'acceptItem' && typeof msg.providerId === 'string' && typeof msg.externalId === 'string') {
@@ -337,6 +358,7 @@ export class WorkItemEditorPanel {
         this.providerChangeSub.dispose();
         this.actionRegistrySub.dispose();
         this.activityRendererSub?.dispose();
+        this.gitWorkResolverSub?.dispose();
         this.disposeWatcherSubscriptions();
       }
     });
@@ -600,6 +622,7 @@ export class WorkItemEditorPanel {
       })),
       relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph, relatedItemsIndex),
       ciWatch: this.buildCIWatchData(item),
+      gitWork: resolveEditorGitWork(this.gitWorkResolverRegistry, item),
       isIncoming: false,
       providerId: item.providerId,
       externalId: item.externalId,
@@ -1065,4 +1088,37 @@ export function composeEditorBadges(
   if (typeBadge) badges.push(typeBadge);
   badges.push(...buildProviderBadges(providerItem, 'editor'));
   return badges;
+}
+
+/**
+ * Build the editor-side {@link GitWorkData} payload from the registered
+ * resolver, including a synchronous worktree-existence check used by the
+ * editor header to distinguish current vs. stale worktrees.
+ *
+ * Mirrors the logic in {@link resolveGitWorkData} in mainViewProvider —
+ * kept inline (rather than imported) to avoid a sidebar -> editor module
+ * coupling for a single small helper. If this grows we should factor it
+ * into a shared service module.
+ */
+function resolveEditorGitWork(
+  registry: GitWorkResolverRegistry | undefined,
+  item: Readonly<WorkItem>,
+): EditorItemData['gitWork'] {
+  const resolved = registry?.resolve(item);
+  if (!resolved) {
+    return undefined;
+  }
+  let worktreeExists: boolean | undefined;
+  if (resolved.worktreePath) {
+    try {
+      worktreeExists = fs.existsSync(resolved.worktreePath);
+    } catch {
+      worktreeExists = false;
+    }
+  }
+  return {
+    ...(resolved.branch ? { branch: resolved.branch } : {}),
+    ...(resolved.worktreePath ? { worktreePath: resolved.worktreePath } : {}),
+    ...(worktreeExists !== undefined ? { worktreeExists } : {}),
+  };
 }

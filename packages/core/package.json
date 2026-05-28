@@ -234,6 +234,12 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "devdocket.openWorktreeForItem",
+        "title": "Open Worktree",
+        "category": "DevDocket",
+        "icon": "$(folder-opened)"
+      },
+      {
         "command": "devdocket.copyUrl",
         "title": "Copy URL",
         "category": "DevDocket",

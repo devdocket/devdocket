@@ -1,6 +1,6 @@
 import { useRef, useState } from 'preact/hooks';
 import { formatProviderAnnotation } from '../../shared/providerAnnotation';
-import type { ItemCardData } from '../../shared/types';
+import type { GitWorkData, ItemCardData } from '../../shared/types';
 import { BadgePill } from './BadgePill';
 import { HighlightedText } from './HighlightedText';
 
@@ -186,6 +186,7 @@ export function ItemCard({
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
             <span class="item-title"><HighlightedText text={item.title} query={query} /></span>
             {item.hasRelatedItems ? <span class="related-indicator" aria-hidden="true">🔗</span> : null}
+            {item.gitWork ? <GitWorkIndicator gitWork={item.gitWork} /> : null}
           </div>
         </div>
         {annotation ? (
@@ -247,6 +248,7 @@ function buildItemAriaLabel(item: ItemCardData): string {
     parts.push(badge.label);
   }
   if (item.hasRelatedItems) parts.push('has related items');
+  if (item.gitWork) parts.push(buildGitWorkAriaLabel(item.gitWork));
   if (item.isSelected) parts.push('selected');
   return parts.filter((value): value is string => Boolean(value)).join(', ');
 }
@@ -326,4 +328,47 @@ function getTierClassName(tierType: ItemCardData['tierType']): string {
     default:
       return tierType;
   }
+}
+
+function GitWorkIndicator({ gitWork }: { gitWork: GitWorkData }) {
+  const stale = gitWork.worktreeExists === false;
+  const tooltip = buildGitWorkTooltip(gitWork, stale);
+  // Use a unicode branch glyph (U+2387) rather than an emoji so it inherits
+  // the surrounding text color and stays crisp in the sidebar's small font.
+  return (
+    <span
+      class={`git-work-indicator${stale ? ' git-work-indicator--stale' : ''}`}
+      aria-hidden="true"
+      title={tooltip}
+    >
+      ⎇
+    </span>
+  );
+}
+
+function buildGitWorkTooltip(gitWork: GitWorkData, stale: boolean): string {
+  const lines: string[] = [];
+  if (gitWork.branch) {
+    lines.push(`Branch: ${gitWork.branch}`);
+  }
+  if (gitWork.worktreePath) {
+    lines.push(`Worktree: ${gitWork.worktreePath}`);
+  }
+  if (stale) {
+    lines.push('Worktree no longer exists on disk');
+  }
+  return lines.join('\n');
+}
+
+function buildGitWorkAriaLabel(gitWork: GitWorkData): string {
+  const parts: string[] = [];
+  if (gitWork.branch) {
+    parts.push(`branch ${gitWork.branch}`);
+  } else if (gitWork.worktreePath) {
+    parts.push('has worktree');
+  }
+  if (gitWork.worktreeExists === false) {
+    parts.push('worktree missing');
+  }
+  return parts.join(', ');
 }
