@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import * as fs from 'node:fs';
 import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
+import { resolveGitWorkData } from '../services/gitWorkData';
 import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
@@ -22,7 +22,6 @@ import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
   CIBadgeChangeData,
-  GitWorkData,
   ItemCardData,
   SourceGroupData,
   SourceItemData,
@@ -697,7 +696,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         await this.handleMarkSeen(message.providerId, message.externalId);
         break;
       case 'openWorktree':
-        await vscode.commands.executeCommand('devdocket.openWorktreeForItem', { id: message.itemId });
+        if (typeof message.itemId === 'string' && message.itemId.length > 0) {
+          await vscode.commands.executeCommand('devdocket.openWorktreeForItem', { id: message.itemId });
+        }
         break;
     }
   }
@@ -1569,45 +1570,4 @@ function getNonce(): string {
   // is seeded per-process and predictable, which would make CSP a paper
   // shield if any future change introduced user-controlled HTML.
   return crypto.randomBytes(16).toString('hex');
-}
-
-/**
- * Pull the git-work association for {@link item} from the registered
- * resolver (if any) and annotate it with a synchronous stale check.
- *
- * Returns `undefined` when no resolver is registered, the resolver
- * returns nothing, or the resolver yields neither a branch nor a
- * worktree path — the UI uses `undefined` as the signal to hide the
- * branch badge entirely.
- *
- * `worktreeExists` is left undefined when there's no path to test, so
- * branch-only associations (e.g. a checkout flow without a worktree)
- * don't get incorrectly flagged as stale.
- */
-export function resolveGitWorkData(
-  registry: GitWorkResolverRegistry | undefined,
-  item: Readonly<WorkItem>,
-): GitWorkData | undefined {
-  const resolved = registry?.resolve(item);
-  if (!resolved) {
-    return undefined;
-  }
-  const worktreeExists = resolved.worktreePath
-    ? safeExistsSync(resolved.worktreePath)
-    : undefined;
-  return {
-    ...(resolved.branch ? { branch: resolved.branch } : {}),
-    ...(resolved.worktreePath ? { worktreePath: resolved.worktreePath } : {}),
-    ...(worktreeExists !== undefined ? { worktreeExists } : {}),
-  };
-}
-
-function safeExistsSync(path: string): boolean {
-  try {
-    return fs.existsSync(path);
-  } catch {
-    // Permission errors, ENAMETOOLONG, etc. — treat unreadable paths as
-    // "not present" so the UI shows the stale state instead of throwing.
-    return false;
-  }
 }

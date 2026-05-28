@@ -467,6 +467,10 @@
         {
           "command": "devdocket.copyUrl",
           "when": "false"
+        },
+        {
+          "command": "devdocket.openWorktreeForItem",
+          "when": "false"
         }
       ]
     },

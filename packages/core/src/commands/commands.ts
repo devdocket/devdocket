@@ -556,7 +556,7 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
 
 async function handleOpenWorktreeForItem(
   workGraph: WorkGraph,
-  gitWorkResolverRegistry: GitWorkResolverRegistry | undefined,
+  gitWorkResolverRegistry: GitWorkResolverRegistry,
   item?: { id?: string },
 ): Promise<void> {
   if (!item?.id) {
@@ -568,7 +568,7 @@ async function handleOpenWorktreeForItem(
     void vscode.window.showWarningMessage('DevDocket: Work item not found.');
     return;
   }
-  const resolved = gitWorkResolverRegistry?.resolve(workItem);
+  const resolved = gitWorkResolverRegistry.resolve(workItem);
   const worktreePath = resolved?.worktreePath;
   if (!worktreePath) {
     void vscode.window.showWarningMessage('This item has no associated worktree.');
@@ -974,7 +974,7 @@ export function registerCommands(
   editorPanelDependencies: WorkItemEditorPanelDependencies,
   incomingPreviewPanelManager: IncomingPreviewPanelManager,
   toggleMainSearch: () => void,
-  gitWorkResolverRegistry?: GitWorkResolverRegistry,
+  gitWorkResolverRegistry: GitWorkResolverRegistry,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',

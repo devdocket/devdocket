@@ -107,6 +107,12 @@ export function resolveGitWorkForItem(item: Readonly<WorkItem>): GitWorkAssociat
       continue;
     }
 
+    // Intentionally bail (rather than continue scanning older entries)
+    // when the most recent 'work-started' is malformed or decodes to a
+    // payload with neither a branch nor a worktree. Falling back to an
+    // older entry would surface a stale association that no longer
+    // matches what the user most recently started, which is more
+    // misleading than simply hiding the badge.
     const decoded = decodeWorkStartedDetail(entry.detail);
     if (!decoded) {
       return undefined;
