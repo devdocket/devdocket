@@ -1030,6 +1030,51 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
+    it('combines signaled progress with deterministic advance prompts', async () => {
+      const firstModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+      const silentModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis without phase signal.');
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      const result = await handler(
+        createMockRequest('Continue to the next file', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
     it('does not count free-form clarification prompts as advance prompts', async () => {
       const silentModel = {
         sendRequest: vi.fn().mockImplementation(() => ({

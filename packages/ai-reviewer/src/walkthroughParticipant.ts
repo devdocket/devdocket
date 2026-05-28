@@ -458,6 +458,13 @@ export class WalkthroughParticipant {
     }
     if (!progress.presentedFiles.includes(canonicalPath)) {
       progress.presentedFiles.push(canonicalPath);
+      // Reconcile against the unidentified counter: if an earlier turn
+      // credited a presentation without a filePath, treat this newly
+      // identified file as that prior presentation rather than a separate
+      // one, so the two sources of progress don't double-count.
+      if (progress.unidentifiedPresentations > 0) {
+        progress.unidentifiedPresentations--;
+      }
     }
     return true;
   }
@@ -515,11 +522,15 @@ export class WalkthroughParticipant {
     }
     const presented = new Set(progress.presentedFiles);
     const identifiedRemaining = progress.allFiles.filter(file => !presented.has(file)).length;
-    // Prefer model-reported file progress because a single response may present
-    // a group of files. Fall back to deterministic advance prompts only when
-    // the model has not reported any file progress at all.
+    // Combine the two sources of progress and take the more advanced of the
+    // two, bounded by the total file count. This way, a model that signals
+    // once early and then stops still benefits from the deterministic
+    // advance-prompt counter on later turns (and vice versa).
     const signaledPresented = progress.presentedFiles.length + progress.unidentifiedPresentations;
-    const totalPresented = signaledPresented > 0 ? signaledPresented : advanceCount;
+    const totalPresented = Math.min(
+      progress.allFiles.length,
+      Math.max(signaledPresented, advanceCount),
+    );
     // Credit any presentations beyond the identified set toward unidentified files.
     const unidentifiedCredit = Math.max(0, totalPresented - progress.presentedFiles.length);
     return Math.max(0, identifiedRemaining - unidentifiedCredit);
