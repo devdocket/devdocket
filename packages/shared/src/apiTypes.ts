@@ -253,8 +253,16 @@ export interface DevDocketApi {
    *
    * Bumped according to semver: minor for additive changes, major for
    * breaking changes. See `docs/extension-api.md` for the bump policy.
+   *
+   * Optional only at the type level so that adding this member is a
+   * non-breaking change for TypeScript consumers that structurally
+   * implement {@link DevDocketApi} (e.g. test mocks). The DevDocket
+   * core extension always sets it at runtime; an `undefined` value
+   * therefore indicates an older core that predates this field, and
+   * gating helpers in `@devdocket/shared` treat it as
+   * "compatibility unknown" by skipping the gate with a warning.
    */
-  readonly contractVersion: string;
+  readonly contractVersion?: string;
   /**
    * Register a work-item provider.
    *
