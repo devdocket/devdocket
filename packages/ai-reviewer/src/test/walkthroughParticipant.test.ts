@@ -563,8 +563,8 @@ describe('WalkthroughParticipant', () => {
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
 
       const result = await handler(
-        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mockModel),
-        createMockContext(),
+        createMockRequest('Start the walkthrough', mockModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
         createMockResponse(),
         { isCancellationRequested: false },
       );
@@ -661,8 +661,8 @@ describe('WalkthroughParticipant', () => {
       const token = { isCancellationRequested: false };
 
       const firstResult = await handler(
-        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', firstModel),
-        createMockContext(),
+        createMockRequest('Start the walkthrough', firstModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
         createMockResponse(),
         token,
       );
@@ -711,8 +711,8 @@ describe('WalkthroughParticipant', () => {
       const token = { isCancellationRequested: false };
 
       const firstResult = await handler(
-        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mismatchedFirst),
-        createMockContext(),
+        createMockRequest('Start the walkthrough', mismatchedFirst),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
         createMockResponse(),
         token,
       );
@@ -818,8 +818,8 @@ describe('WalkthroughParticipant', () => {
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
 
       const result = await handler(
-        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mockModel),
-        createMockContext(),
+        createMockRequest('Start the walkthrough', mockModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
         createMockResponse(),
         { isCancellationRequested: false },
       );
@@ -827,6 +827,51 @@ describe('WalkthroughParticipant', () => {
       expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
       expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
       expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('does not advance unidentified progress for free-form prompts that mention next-file wording', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+      const clarificationModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Clarifying before moving on.');
+            yield new LanguageModelToolCallPart('phase-clarify', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      const result = await handler(
+        createMockRequest('Can you explain this before we continue to the next file?', clarificationModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 

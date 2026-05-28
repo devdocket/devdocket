@@ -435,7 +435,7 @@ export class WalkthroughParticipant {
   }
 
   private isAdvancePrompt(prompt: string): boolean {
-    return /\b(start(?: the)? walkthrough|continue(?: to the next file)?|next file)\b/i.test(prompt);
+    return WalkthroughParticipant.ADVANCE_PROMPT_PATTERN.test(prompt.trim());
   }
 
   /**
