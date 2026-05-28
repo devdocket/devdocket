@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useId, useRef } from 'preact/hooks';
 
 interface EditableFieldProps {
   label: string;
@@ -25,6 +25,9 @@ export function EditableField({
   labelAccessory,
 }: EditableFieldProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const inputId = useId();
+  const accessoryId = useId();
+  const hintId = useId();
 
   useEffect(() => {
     if (!multiline || !textareaRef.current) {
@@ -36,34 +39,43 @@ export function EditableField({
     element.style.height = `${Math.max(element.scrollHeight, 120)}px`;
   }, [multiline, value]);
 
+  const describedBy = [
+    labelAccessory !== undefined ? accessoryId : undefined,
+    hint ? hintId : undefined,
+  ].filter(Boolean).join(' ') || undefined;
+
   return (
-    <label class="editor-field">
-      <span class="editor-field-label-row">
-        <span class="editor-field-label">{label}</span>
+    <div class="editor-field">
+      <div class="editor-field-label-row">
+        <label class="editor-field-label" for={inputId}>{label}</label>
         {labelAccessory !== undefined ? (
-          <span class="editor-field-label-accessory" role="status" aria-live="polite">{labelAccessory}</span>
+          <span id={accessoryId} class="editor-field-label-accessory" role="status" aria-live="polite">{labelAccessory}</span>
         ) : null}
-      </span>
+      </div>
       {multiline ? (
         <textarea
+          id={inputId}
           ref={textareaRef}
           class="editor-input editor-textarea"
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
+          aria-describedby={describedBy}
           onInput={event => onInput?.(event.currentTarget.value)}
         />
       ) : (
         <input
+          id={inputId}
           class="editor-input"
           type={type}
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
+          aria-describedby={describedBy}
           onInput={event => onInput?.(event.currentTarget.value)}
         />
       )}
-      {hint ? <span class="editor-field-hint">{hint}</span> : null}
-    </label>
+      {hint ? <span id={hintId} class="editor-field-hint">{hint}</span> : null}
+    </div>
   );
 }
