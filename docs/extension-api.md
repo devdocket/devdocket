@@ -150,9 +150,11 @@ If `api.contractVersion` is lower than `minContractVersion`, `registerProvider` 
 ```ts
 import { isContractVersionSatisfied } from '@devdocket/shared';
 
-if (!isContractVersionSatisfied(api.contractVersion, '1.2.0')) {
+// `api.contractVersion` is `string | undefined`: older DevDocket cores
+// predate the field and report `undefined`. Treat that as "too old".
+if (!api.contractVersion || !isContractVersionSatisfied(api.contractVersion, '1.2.0')) {
   vscode.window.showWarningMessage(
-    `My Provider needs DevDocket >= 1.2.0 (found ${api.contractVersion}).`,
+    `My Provider needs DevDocket >= 1.2.0 (found ${api.contractVersion ?? 'unknown'}).`,
   );
   return;
 }
