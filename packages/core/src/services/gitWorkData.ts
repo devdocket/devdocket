@@ -21,9 +21,10 @@ const worktreeExistsCache = new Map<string, { value: boolean; expiresAt: number 
  *
  * The existence check is memoised in-process with a short TTL so
  * a refresh burst (N visible cards, plus the editor panel) doesn't
- * hammer the filesystem with one stat per render. The cache returns
- * stale entries on filesystem errors so a transient ENOENT doesn't
- * permanently mark a worktree as missing.
+ * hammer the filesystem with one stat per render. Filesystem errors
+ * (EACCES, ENAMETOOLONG, etc.) cache `false` for the same TTL window
+ * so a sustained failure doesn't trigger repeated stat attempts;
+ * transient errors recover at the next TTL boundary.
  *
  * Returns `undefined` when:
  *  - no registry is supplied

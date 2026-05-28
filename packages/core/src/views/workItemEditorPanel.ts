@@ -314,7 +314,7 @@ export class WorkItemEditorPanel {
         void vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
         return;
       }
-      if (msg?.type === 'openWorktree' && typeof msg.itemId === 'string') {
+      if (msg?.type === 'openWorktree' && typeof msg.itemId === 'string' && msg.itemId.length > 0) {
         void vscode.commands.executeCommand('devdocket.openWorktreeForItem', { id: msg.itemId });
         return;
       }

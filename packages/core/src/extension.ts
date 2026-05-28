@@ -651,6 +651,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
     { dispose: () => adrr.dispose() },
+    { dispose: () => gwrr.dispose() },
     { dispose: () => stateVersion.dispose() },
   );
 
