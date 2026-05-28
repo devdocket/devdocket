@@ -336,6 +336,28 @@ describe('fetchClosedGitHubItems', () => {
     expect(mockChannel.debug).toHaveBeenCalledWith(expect.stringContaining('REST closed-item check after SSO error'));
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('does not duplicate REST fallback warnings for HTTP errors', async () => {
+    const mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel as any);
+    const mockFetch = vi.fn(async (url: string) => {
+      if (url === 'https://api.github.com/graphql') {
+        throw new Error('temporary failure');
+      }
+      return makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        bodyJson: { message: 'Must have admin rights to Repository.' },
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1'], 'issues')).resolves.toEqual([]);
+    expect(mockChannel.warn).toHaveBeenCalledTimes(1);
+    expect(mockChannel.warn).toHaveBeenCalledWith(expect.stringContaining('GitHub API request failed for GitHub issues owner/repo#1'));
+    expect(mockChannel.debug).toHaveBeenCalledWith(expect.stringContaining('Worker failed during issues REST closed-item check'));
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('retryWithAuth', () => {

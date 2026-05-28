@@ -737,7 +737,7 @@ async function fetchClosedGitHubItemsRest(
         logger.debug(`Skipping ${apiType} ${item.id} REST closed-item check after SSO error: ${error.message}`);
         continue;
       }
-      logger.warn(`Worker failed during ${apiType} REST closed-item check: ${String(error)}`);
+      logger.debug(`Worker failed during ${apiType} REST closed-item check: ${String(error)}`);
     }
   }
   return closedIds;
