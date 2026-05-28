@@ -6,6 +6,7 @@ import { OnboardingEmptyState } from './components/OnboardingEmptyState';
 import { SearchBox } from './components/SearchBox';
 import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
+import { applyCIBadgeChangesToSources, applyCIBadgeChangesToTiers } from './ciBadgeUpdates';
 import { TierSection } from './components/TierSection';
 import { filterProviders, filterTiers } from './filter';
 import {
@@ -118,6 +119,10 @@ export function App() {
         }
         case 'updateSources':
           setSources(msg.providers);
+          break;
+        case 'updateCIBadges':
+          setTiers(current => applyCIBadgeChangesToTiers(current, msg.changes));
+          setSources(current => applyCIBadgeChangesToSources(current, msg.changes));
           break;
         case 'selectItem':
           setSelectedItemId(msg.itemId);

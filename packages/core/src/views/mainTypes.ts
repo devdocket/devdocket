@@ -5,6 +5,7 @@ import type { ResolvedRelatedItem } from './relatedItemTypes';
 export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
   | { type: 'updateSources'; providers: SourceProviderData[] }
+  | { type: 'updateCIBadges'; changes: CIBadgeChangeData[] }
   | { type: 'selectItem'; itemId: string }
   | { type: 'toggleSearch' }
   | { type: 'updateWatches'; watches: WatchData[] }
@@ -64,6 +65,7 @@ export interface ItemCardData {
   id: string;
   title: string;
   badges: BadgeData[];
+  url?: string;
   /** Compact repo/source label rendered as a subtle annotation below the title (e.g. "owner/repo"). */
   repoAnnotation?: string;
   author?: ItemAuthorData;
@@ -81,6 +83,11 @@ export interface BadgeData {
   label: string;
   type: 'provider' | 'type' | 'state' | 'ci' | 'provider-supplied';
   variant: string;
+}
+
+export interface CIBadgeChangeData {
+  url: string;
+  badge: BadgeData | null;
 }
 
 export interface EditorCIWatchData {
@@ -154,6 +161,7 @@ export interface SourceItemData {
   providerId: string;
   title: string;
   badges: BadgeData[];
+  url?: string;
   hasRelatedItems?: boolean;
   isAccepted: boolean;
   isDismissed: boolean;
