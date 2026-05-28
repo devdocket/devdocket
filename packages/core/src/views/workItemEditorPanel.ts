@@ -94,6 +94,7 @@ export class WorkItemEditorPanel {
   private lastDisplayedNotes: string | undefined;
   private lastDisplayedState: WorkItemState | undefined;
   private lastDisplayedGroup: string | undefined;
+  private lastDisplayedActivityLogSignature: string | undefined;
   private lastManagedState: boolean | undefined;
   private lastProviderItemSnapshot: string | undefined;
   private lastRelatedProviderItemSnapshots = new Map<string, string>();
@@ -418,7 +419,8 @@ export class WorkItemEditorPanel {
       || item.description !== this.lastDisplayedDescription
       || item.notes !== this.lastDisplayedNotes
       || item.state !== this.lastDisplayedState
-      || item.group !== this.lastDisplayedGroup;
+      || item.group !== this.lastDisplayedGroup
+      || this.buildActivityLogSignature(item) !== this.lastDisplayedActivityLogSignature;
 
     if (titleChanged && !nonTitleChanges) {
       this.lastDisplayedTitle = item.title;
@@ -486,6 +488,7 @@ export class WorkItemEditorPanel {
       this.lastRelatedProviderItemSnapshots.clear();
       this.lastDisplayedCIWatchSignature = undefined;
       this.lastDisplayedCIWatchRunKeys.clear();
+      this.lastDisplayedActivityLogSignature = undefined;
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
       return;
     }
@@ -499,6 +502,7 @@ export class WorkItemEditorPanel {
     this.lastDisplayedNotes = item.notes;
     this.lastDisplayedState = item.state;
     this.lastDisplayedGroup = item.group;
+    this.lastDisplayedActivityLogSignature = this.buildActivityLogSignature(item);
     this.lastManagedState = editorItem.isProviderManaged;
     this.lastProviderItemSnapshot = this.buildProviderItemSnapshot(item);
     this.lastRelatedProviderItemSnapshots = this.buildRelatedProviderItemSnapshots(item);
@@ -511,6 +515,10 @@ export class WorkItemEditorPanel {
     }
 
     void this.panel.webview.postMessage({ type: 'updateEditorItem', item: editorItem });
+  }
+
+  private buildActivityLogSignature(item: WorkItem): string {
+    return stableStringify(item.activityLog ?? []);
   }
 
   private buildEditorItemData(item: WorkItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {

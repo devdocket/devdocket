@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { EventEmitter, ViewColumn, window } from 'vscode';
 import { PanelManager, WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
 import { WorkItem, WorkItemState } from '../models/workItem';
+import type { ActivityLogEntry, ActivityType } from '../models/activityLog';
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   const now = Date.now();
@@ -53,6 +54,12 @@ function createMockWebviewPanel() {
   };
 }
 
+function appendActivityLogEntry(item: WorkItem, type: ActivityType, detail?: string): WorkItem {
+  const now = Date.now();
+  const entry: ActivityLogEntry = { timestamp: now, type, ...(detail !== undefined ? { detail } : {}) };
+  return { ...item, activityLog: [...(item.activityLog ?? []), entry], updatedAt: now };
+}
+
 function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record<string, WorkItem> = {}) {
   const changeEmitter = new EventEmitter<void>();
   const items = new Map<string, WorkItem>();
@@ -83,7 +90,19 @@ function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record
       if (!current) {
         throw new Error(`Missing item ${id}`);
       }
-      items.set(id, { ...current, state: targetState, updatedAt: Date.now() });
+      items.set(id, appendActivityLogEntry(
+        { ...current, state: targetState },
+        'state-changed',
+        `${current.state} → ${targetState}`,
+      ));
+      changeEmitter.fire();
+    }),
+    addActivity: vi.fn(async (id: string, type: ActivityType, detail?: string) => {
+      const current = items.get(id);
+      if (!current) {
+        throw new Error(`Missing item ${id}`);
+      }
+      items.set(id, appendActivityLogEntry(current, type, detail));
       changeEmitter.fire();
     }),
     createItem: vi.fn(async (input: { title: string; description?: string }, provenance?: { providerId: string; externalId: string; url?: string; group?: string }) => {
@@ -307,6 +326,58 @@ describe('WorkItemEditorPanel', () => {
 
     expect(mock.panel.title).toBe('Edit: Renamed');
     expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'updateTitle', title: 'Renamed' });
+  });
+
+  it('posts updateEditorItem when activity is appended to the open item', async () => {
+    const item = makeItem({ id: 'item-1', activityLog: [] });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    await workGraph.addActivity(item.id, 'action-executed', 'branch created');
+
+    expect(getLastEditorUpdate(mock)).toEqual(expect.objectContaining({
+      type: 'updateEditorItem',
+      item: expect.objectContaining({
+        activityLog: [expect.objectContaining({
+          type: 'action-executed',
+          detail: 'branch created',
+        })],
+      }),
+    }));
+  });
+
+  it('does not update when activity is appended to a different item', async () => {
+    const item = makeItem({ id: 'item-1', activityLog: [] });
+    const other = makeItem({ id: 'item-2', title: 'Other item', activityLog: [] });
+    const workGraph = createMockWorkGraph(item, { 'manual::item-2': other });
+    const { mock } = openPanel(item, workGraph);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    await workGraph.addActivity(other.id, 'action-executed', 'branch created elsewhere');
+
+    expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('posts one consistent update for state transition activity', async () => {
+    const item = makeItem({ id: 'item-1', state: WorkItemState.New, activityLog: [] });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    await workGraph.transitionState(item.id, WorkItemState.InProgress);
+
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledTimes(1);
+    expect(getLastEditorUpdate(mock)).toEqual(expect.objectContaining({
+      type: 'updateEditorItem',
+      item: expect.objectContaining({
+        state: WorkItemState.InProgress,
+        activityLog: [expect.objectContaining({
+          type: 'state-changed',
+          detail: `${WorkItemState.New} → ${WorkItemState.InProgress}`,
+        })],
+      }),
+    }));
   });
 
   it('posts updateEditorItem with synced description, action transitions, and related items when provider data changes', () => {
