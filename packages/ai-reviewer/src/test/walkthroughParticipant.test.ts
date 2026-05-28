@@ -793,6 +793,43 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
+    it('does not advance unidentified progress for phase-only retry iterations', async () => {
+      const mockModel = {
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelToolCallPart('phase-only', 'devdocket-signalPhase', {
+                phase: 'walkthrough',
+              });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('First file analysis after retry.');
+              yield new LanguageModelToolCallPart('phase-text', 'devdocket-signalPhase', {
+                phase: 'walkthrough',
+                filePath: 'src/first.ts',
+              });
+            })(),
+          }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
     it('does not advance unidentified progress for non-advancing follow-ups', async () => {
       const firstFileModel = {
         sendRequest: vi.fn().mockResolvedValue({

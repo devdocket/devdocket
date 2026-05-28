@@ -280,7 +280,12 @@ export class WalkthroughParticipant {
               // Only advance unidentified progress for prompts that move to a
               // new file. Follow-ups like "Go deeper" may re-signal the same
               // phase without presenting the next file.
-              if (unidentifiedCount > 0 && progress.allFiles.length > 0 && this.isAdvancePrompt(request.prompt)) {
+              if (
+                unidentifiedCount > 0
+                && streamedTextThisIteration
+                && progress.allFiles.length > 0
+                && this.isAdvancePrompt(request.prompt)
+              ) {
                 this.addUnidentifiedPresentations(progress, unidentifiedCount);
               }
               phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
