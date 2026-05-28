@@ -1059,6 +1059,91 @@ describe('MainViewProvider', () => {
     expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
   });
 
+  it('posts CI badge patches for watch-only refreshes without full snapshots', async () => {
+    vi.useFakeTimers();
+    const runUrl = 'https://github.com/org/repo/actions/runs/1';
+    const runs: any[] = [];
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'ready-1', title: 'Ready 1', state: WorkItemState.New, providerId: 'github', externalId: 'ready-1', url: runUrl }),
+    ]);
+    const providerRegistry = createProviderRegistry({
+      github: [{ externalId: 'ready-1', title: 'Ready 1', url: runUrl }],
+    });
+    const watcherService = createWatcherService({ runs });
+    const provider = createProvider(workGraph, providerRegistry, createStateStore({ 'github::ready-1': 'accepted' }), watcherService);
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    mockView.webview.postMessage.mockClear();
+
+    runs.push({
+      identifier: { providerId: 'github-actions', runId: '1', displayName: 'CI', url: runUrl },
+      status: { overallState: 'running' },
+    });
+    provider.scheduleRefresh('watchedRuns');
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(mockView.getMessages().map(message => message?.type)).toEqual(['updateCIBadges']);
+    expect(findPostedMessage(mockView, 'updateCIBadges')).toEqual({
+      type: 'updateCIBadges',
+      changes: [{ url: runUrl, badge: { label: 'CI running', type: 'ci', variant: 'ci-running' } }],
+    });
+    expect(findPostedMessage(mockView, 'updateItems')).toBeUndefined();
+    expect(findPostedMessage(mockView, 'updateSources')).toBeUndefined();
+
+    mockView.webview.postMessage.mockClear();
+    runs[0].status = { overallState: 'completed', conclusion: 'success' };
+    provider.scheduleRefresh('watchedRuns');
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(findPostedMessage(mockView, 'updateCIBadges')).toEqual({
+      type: 'updateCIBadges',
+      changes: [{ url: runUrl, badge: { label: 'CI passed', type: 'ci', variant: 'ci-pass' } }],
+    });
+
+    mockView.webview.postMessage.mockClear();
+    runs.splice(0, runs.length);
+    provider.scheduleRefresh('watchedRuns');
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(findPostedMessage(mockView, 'updateCIBadges')).toEqual({
+      type: 'updateCIBadges',
+      changes: [{ url: runUrl, badge: null }],
+    });
+  });
+
+  it('falls back to full snapshots when watch and non-watch refresh reasons are batched together', async () => {
+    vi.useFakeTimers();
+    const runUrl = 'https://github.com/org/repo/actions/runs/2';
+    const runs: any[] = [{
+      identifier: { providerId: 'github-actions', runId: '2', displayName: 'CI', url: runUrl },
+      status: { overallState: 'running' },
+    }];
+    const provider = createProvider(
+      createMockWorkGraph([
+        makeWorkItem({ id: 'ready-2', title: 'Ready 2', state: WorkItemState.New, providerId: 'github', externalId: 'ready-2', url: runUrl }),
+      ]),
+      createProviderRegistry({ github: [{ externalId: 'ready-2', title: 'Ready 2', url: runUrl }] }),
+      createStateStore({ 'github::ready-2': 'accepted' }),
+      createWatcherService({ runs }),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    mockView.webview.postMessage.mockClear();
+
+    runs[0].status = { overallState: 'completed', conclusion: 'success' };
+    provider.scheduleRefresh('watchedRuns');
+    provider.scheduleRefresh('readState');
+    await vi.advanceTimersByTimeAsync(50);
+
+    const messageTypes = mockView.getMessages().map(message => message?.type);
+    expect(messageTypes).toEqual(['updateItems', 'updateSources']);
+    expect(findPostedMessage(mockView, 'updateCIBadges')).toBeUndefined();
+  });
+
   it('skips sources updates for read-state-only refreshes', async () => {
     vi.useFakeTimers();
     const provider = createProvider(

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import type { ProviderItem } from '../api/types';
+import type { ProviderItem, RelatedItemRef } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
@@ -27,6 +27,12 @@ interface EditorCIWatchContext {
   watch: WatchedPR;
   watchKey: string;
   runs: WatchedRun[];
+}
+
+interface RelatedProviderItemSnapshotCriteria {
+  relatedKeys: Set<string>;
+  relatedExternalIds: Set<string>;
+  refsSignature: string;
 }
 
 /**
@@ -94,9 +100,12 @@ export class WorkItemEditorPanel {
   private lastDisplayedNotes: string | undefined;
   private lastDisplayedState: WorkItemState | undefined;
   private lastDisplayedGroup: string | undefined;
+  private lastDisplayedActivityLogSignature: string | undefined;
   private lastManagedState: boolean | undefined;
   private lastProviderItemSnapshot: string | undefined;
   private lastRelatedProviderItemSnapshots = new Map<string, string>();
+  private lastRelatedProviderItemSnapshotCriteria: RelatedProviderItemSnapshotCriteria | undefined;
+  private lastRelatedRefsSignature: string | undefined;
   private lastDisplayedCIWatchSignature: string | undefined;
   private lastDisplayedCIWatchRunKeys = new Set<string>();
 
@@ -341,23 +350,53 @@ export class WorkItemEditorPanel {
     if (this.disposed) { return; }
     const item = this.workGraph.getItem(this.itemId);
     if (!item?.providerId || !item.externalId) { return; }
+
     if (providerId !== undefined && providerId !== item.providerId) {
-      const nextRelatedSnapshot = this.buildRelatedProviderItemSnapshot(item, providerId);
+      const criteria = this.lastRelatedProviderItemSnapshotCriteria;
+      const nextRelatedSnapshot = criteria
+        ? this.buildRelatedProviderItemSnapshot(item, providerId, criteria)
+        : undefined;
       if (nextRelatedSnapshot === this.lastRelatedProviderItemSnapshots.get(providerId)) { return; }
-      this.update();
+      this.update({ relatedProviderItemSnapshots: withProviderSnapshot(this.lastRelatedProviderItemSnapshots, providerId, nextRelatedSnapshot) });
       return;
     }
 
-    const nextSnapshot = this.buildProviderItemSnapshot(item);
-    const nextRelatedSnapshot = this.buildRelatedProviderItemSnapshot(item, item.providerId);
+    const providerItem = this.getProviderItem(item);
+    const nextProviderSnapshot = this.buildProviderItemSnapshotFromProviderItem(providerItem);
+    const nextCriteria = this.buildRelatedProviderItemSnapshotCriteria(item, providerItem);
+
+    if (providerId === item.providerId && nextCriteria?.refsSignature === this.lastRelatedRefsSignature) {
+      const nextRelatedSnapshot = nextCriteria
+        ? this.buildRelatedProviderItemSnapshot(item, providerId, nextCriteria)
+        : undefined;
+      if (
+        nextProviderSnapshot === this.lastProviderItemSnapshot
+        && nextRelatedSnapshot === this.lastRelatedProviderItemSnapshots.get(providerId)
+      ) {
+        return;
+      }
+
+      this.update({
+        providerItemSnapshot: nextProviderSnapshot,
+        relatedProviderItemSnapshots: withProviderSnapshot(this.lastRelatedProviderItemSnapshots, providerId, nextRelatedSnapshot),
+        relatedProviderItemSnapshotCriteria: nextCriteria,
+      });
+      return;
+    }
+
+    const nextRelatedSnapshots = this.buildRelatedProviderItemSnapshots(item, nextCriteria);
     if (
-      nextSnapshot === this.lastProviderItemSnapshot
-      && nextRelatedSnapshot === this.lastRelatedProviderItemSnapshots.get(item.providerId)
+      nextProviderSnapshot === this.lastProviderItemSnapshot
+      && stringMapsEqual(nextRelatedSnapshots, this.lastRelatedProviderItemSnapshots)
     ) {
       return;
     }
 
-    this.update();
+    this.update({
+      providerItemSnapshot: nextProviderSnapshot,
+      relatedProviderItemSnapshots: nextRelatedSnapshots,
+      relatedProviderItemSnapshotCriteria: nextCriteria,
+    });
   }
 
   private refreshForPRWatchChange(): void {
@@ -418,7 +457,8 @@ export class WorkItemEditorPanel {
       || item.description !== this.lastDisplayedDescription
       || item.notes !== this.lastDisplayedNotes
       || item.state !== this.lastDisplayedState
-      || item.group !== this.lastDisplayedGroup;
+      || item.group !== this.lastDisplayedGroup
+      || this.buildActivityLogSignature(item) !== this.lastDisplayedActivityLogSignature;
 
     if (titleChanged && !nonTitleChanges) {
       this.lastDisplayedTitle = item.title;
@@ -478,18 +518,28 @@ export class WorkItemEditorPanel {
     await this.workGraph.updateItem(this.itemId, patch);
   }
 
-  private update(): void {
+  private update(options: {
+    providerItemSnapshot?: string;
+    relatedProviderItemSnapshots?: Map<string, string>;
+    relatedProviderItemSnapshotCriteria?: RelatedProviderItemSnapshotCriteria;
+  } = {}): void {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       this.htmlInitialized = false;
       this.lastProviderItemSnapshot = undefined;
       this.lastRelatedProviderItemSnapshots.clear();
+      this.lastRelatedProviderItemSnapshotCriteria = undefined;
+      this.lastRelatedRefsSignature = undefined;
       this.lastDisplayedCIWatchSignature = undefined;
       this.lastDisplayedCIWatchRunKeys.clear();
+      this.lastDisplayedActivityLogSignature = undefined;
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
       return;
     }
 
+    const providerItem = this.getProviderItem(item);
+    const relatedProviderItemSnapshotCriteria = options.relatedProviderItemSnapshotCriteria
+      ?? this.buildRelatedProviderItemSnapshotCriteria(item, providerItem);
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph);
     const editorItem = this.buildEditorItemData(item, relatedItemsIndex);
     this.rememberDisplayedCIWatchState(item);
@@ -499,9 +549,13 @@ export class WorkItemEditorPanel {
     this.lastDisplayedNotes = item.notes;
     this.lastDisplayedState = item.state;
     this.lastDisplayedGroup = item.group;
+    this.lastDisplayedActivityLogSignature = this.buildActivityLogSignature(item);
     this.lastManagedState = editorItem.isProviderManaged;
-    this.lastProviderItemSnapshot = this.buildProviderItemSnapshot(item);
-    this.lastRelatedProviderItemSnapshots = this.buildRelatedProviderItemSnapshots(item);
+    this.lastProviderItemSnapshot = options.providerItemSnapshot ?? this.buildProviderItemSnapshotFromProviderItem(providerItem);
+    this.lastRelatedProviderItemSnapshotCriteria = relatedProviderItemSnapshotCriteria;
+    this.lastRelatedRefsSignature = relatedProviderItemSnapshotCriteria?.refsSignature;
+    this.lastRelatedProviderItemSnapshots = options.relatedProviderItemSnapshots
+      ?? this.buildRelatedProviderItemSnapshots(item, relatedProviderItemSnapshotCriteria);
     this.panel.title = `Edit: ${item.title}`;
 
     if (!this.htmlInitialized) {
@@ -511,6 +565,10 @@ export class WorkItemEditorPanel {
     }
 
     void this.panel.webview.postMessage({ type: 'updateEditorItem', item: editorItem });
+  }
+
+  private buildActivityLogSignature(item: WorkItem): string {
+    return stableStringify(item.activityLog ?? []);
   }
 
   private buildEditorItemData(item: WorkItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
@@ -572,19 +630,51 @@ export class WorkItemEditorPanel {
   }
 
   private buildProviderItemSnapshot(item: WorkItem): string | undefined {
-    const providerItem = this.getProviderItem(item);
+    return this.buildProviderItemSnapshotFromProviderItem(this.getProviderItem(item));
+  }
+
+  private buildProviderItemSnapshotFromProviderItem(providerItem: ProviderItem | undefined): string | undefined {
     return providerItem ? stableStringify(providerItem) : undefined;
   }
 
-  private buildRelatedProviderItemSnapshots(item: WorkItem): Map<string, string> {
+  private buildRelatedProviderItemSnapshotCriteria(
+    item: WorkItem,
+    providerItem = this.getProviderItem(item),
+  ): RelatedProviderItemSnapshotCriteria | undefined {
+    const relatedRefs = providerItem?.relatedItems;
+    if (!item.providerId || !item.externalId || !relatedRefs?.length) {
+      return undefined;
+    }
+
+    const relatedKeys = new Set<string>();
+    const relatedExternalIds = new Set<string>();
+    for (const ref of relatedRefs) {
+      relatedKeys.add(providerItemSnapshotKey(ref.itemType, ref.externalId));
+      relatedExternalIds.add(ref.externalId);
+    }
+
+    if (relatedKeys.size === 0) {
+      return undefined;
+    }
+
+    return {
+      relatedKeys,
+      relatedExternalIds,
+      refsSignature: buildRelatedRefsSignature(relatedRefs),
+    };
+  }
+
+  private buildRelatedProviderItemSnapshots(
+    item: WorkItem,
+    criteria = this.buildRelatedProviderItemSnapshotCriteria(item),
+  ): Map<string, string> {
     const snapshots = new Map<string, string>();
-    const providerItem = this.getProviderItem(item);
-    if (!providerItem?.relatedItems?.length) {
+    if (!criteria) {
       return snapshots;
     }
 
     for (const providerId of this.providerRegistry.getAllProviderItems().keys()) {
-      const snapshot = this.buildRelatedProviderItemSnapshot(item, providerId, providerItem);
+      const snapshot = this.buildRelatedProviderItemSnapshot(item, providerId, criteria);
       if (snapshot !== undefined) {
         snapshots.set(providerId, snapshot);
       }
@@ -592,17 +682,18 @@ export class WorkItemEditorPanel {
     return snapshots;
   }
 
-  private buildRelatedProviderItemSnapshot(item: WorkItem, providerId: string, providerItem = this.getProviderItem(item)): string | undefined {
-    const relatedRefs = providerItem?.relatedItems;
-    if (!relatedRefs?.length) {
+  private buildRelatedProviderItemSnapshot(
+    _item: WorkItem,
+    providerId: string,
+    criteria = this.lastRelatedProviderItemSnapshotCriteria,
+  ): string | undefined {
+    if (!criteria) {
       return undefined;
     }
 
-    const relatedKeys = new Set(relatedRefs.map(ref => providerItemSnapshotKey(ref.itemType, ref.externalId)));
     const relatedItems = this.providerRegistry.getProviderItems(providerId)
-      .filter(candidate => providerItemMatchesRelatedKeys(candidate, relatedKeys))
-      .sort((left, right) => providerItemSnapshotKey(left.itemType, left.externalId).localeCompare(providerItemSnapshotKey(right.itemType, right.externalId)));
-    return relatedItems.length > 0 ? stableStringify(relatedItems) : undefined;
+      .filter(candidate => criteria.relatedExternalIds.has(candidate.externalId) && providerItemMatchesRelatedKeys(candidate, criteria.relatedKeys));
+    return relatedItems.length > 0 ? buildRelatedProviderItemsDigest(relatedItems) : undefined;
   }
 
   private buildCIWatchData(item: WorkItem): EditorItemData['ciWatch'] {
@@ -852,6 +943,28 @@ function stableStringify(value: object): string {
   return JSON.stringify(toStableJson(value)) ?? '';
 }
 
+function stringMapsEqual(left: Map<string, string>, right: Map<string, string>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function withProviderSnapshot(previous: Map<string, string>, providerId: string, snapshot: string | undefined): Map<string, string> {
+  const next = new Map(previous);
+  if (snapshot === undefined) {
+    next.delete(providerId);
+  } else {
+    next.set(providerId, snapshot);
+  }
+  return next;
+}
+
 function providerItemSnapshotKey(itemType: ProviderItem['itemType'], externalId: string): string {
   return `${itemType ?? ''}\u0000${externalId}`;
 }
@@ -862,6 +975,35 @@ function providerItemMatchesRelatedKeys(item: ProviderItem, relatedKeys: Set<str
   }
   return relatedKeys.has(providerItemSnapshotKey('issue', item.externalId))
     || relatedKeys.has(providerItemSnapshotKey('pr', item.externalId));
+}
+
+function buildRelatedRefsSignature(relatedRefs: readonly RelatedItemRef[]): string {
+  return relatedRefs
+    .map(ref => [providerItemSnapshotKey(ref.itemType, ref.externalId), ref.relation].map(encodeSnapshotToken).join('|'))
+    .sort()
+    .join('\n');
+}
+
+function buildRelatedProviderItemsDigest(relatedItems: ProviderItem[]): string {
+  return relatedItems
+    .map(item => [
+      providerItemSnapshotKey(item.itemType, item.externalId),
+      readProviderItemToken(item, 'updatedAt'),
+      item.version,
+      item.resurfaceVersion,
+      item.title,
+    ].map(encodeSnapshotToken).join('|'))
+    .sort()
+    .join('\n');
+}
+
+function readProviderItemToken(item: ProviderItem, key: string): unknown {
+  return (item as ProviderItem & Record<string, unknown>)[key];
+}
+
+function encodeSnapshotToken(value: unknown): string {
+  const text = value instanceof Date ? value.toISOString() : value === undefined ? '' : String(value);
+  return `${text.length}:${text}`;
 }
 
 function toStableJson(value: unknown): unknown {

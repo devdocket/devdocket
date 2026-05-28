@@ -19,6 +19,7 @@ import { toItemAuthorData } from './itemAuthorData';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
+  CIBadgeChangeData,
   ItemCardData,
   SourceGroupData,
   SourceItemData,
@@ -50,6 +51,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private webviewReadyTimer?: ReturnType<typeof setTimeout>;
   private pendingRefreshReasons = new Set<RefreshReason>();
+  private lastCIBadgesByUrl = new Map<string, BadgeData | undefined>();
   private webviewReady = false;
   private disposed = false;
 
@@ -148,6 +150,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    if (this.isWatchOnlyRefresh(reasons)) {
+      this.postCIBadgeChanges();
+      this.updateBadge();
+      return;
+    }
+
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
     const ciWatchIndex = this.buildCIWatchIndex();
@@ -163,7 +171,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         providers: this.buildSourcesData(allProviderItems, relatedItemsIndex, ciWatchIndex),
       });
     }
+    this.lastCIBadgesByUrl = this.buildCurrentCIBadgeMap(ciWatchIndex);
     this.updateBadge();
+  }
+
+  private isWatchOnlyRefresh(reasons: ReadonlySet<RefreshReason>): boolean {
+    return reasons.size > 0 && Array.from(reasons).every(reason => reason === 'watchedRuns' || reason === 'watchedPRs');
   }
 
   private shouldRefreshSources(reasons: ReadonlySet<RefreshReason>): boolean {
@@ -172,8 +185,45 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       || reasons.has('health')
       || reasons.has('state')
       || reasons.has('workGraph')
-      || reasons.has('watchedRuns')
-      || reasons.has('watchedPRs');
+      || ((reasons.has('watchedRuns') || reasons.has('watchedPRs')) && !this.isWatchOnlyRefresh(reasons));
+  }
+
+  private postCIBadgeChanges(): void {
+    if (!this.view) {
+      return;
+    }
+
+    const currentBadges = this.buildCurrentCIBadgeMap();
+    const urls = new Set([...this.lastCIBadgesByUrl.keys(), ...currentBadges.keys()]);
+    const changes: CIBadgeChangeData[] = [];
+
+    for (const url of urls) {
+      const previous = this.lastCIBadgesByUrl.get(url);
+      const current = currentBadges.get(url);
+      if (!areBadgesEqual(previous, current)) {
+        changes.push({ url, badge: current ?? null });
+      }
+    }
+
+    this.lastCIBadgesByUrl = currentBadges;
+    if (changes.length > 0) {
+      void this.view.webview.postMessage({ type: 'updateCIBadges', changes });
+    }
+  }
+
+  private buildCurrentCIBadgeMap(ciWatchIndex?: CIWatchIndex): Map<string, BadgeData | undefined> {
+    const index = ciWatchIndex ?? this.buildCIWatchIndex();
+    const watchedUrls = new Set<string>(index.keys());
+
+    const urls = new Set([...this.lastCIBadgesByUrl.keys(), ...watchedUrls]);
+    const badgesByUrl = new Map<string, BadgeData | undefined>();
+    for (const url of urls) {
+      const badge = this.buildCIBadge(url, index);
+      if (badge || watchedUrls.has(url)) {
+        badgesByUrl.set(url, badge);
+      }
+    }
+    return badgesByUrl;
   }
 
   /** Update the activity-bar badge with the unread incoming count. */
@@ -193,7 +243,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildTierData(
-    allProviderItems: Map<string, ProviderItem[]>,
+    allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
     ciWatchIndex: CIWatchIndex,
   ): TierData[] {
@@ -263,7 +313,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildSourcesData(
-    allProviderItems: Map<string, ProviderItem[]>,
+    allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
     ciWatchIndex: CIWatchIndex,
   ): SourceProviderData[] {
@@ -280,6 +330,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
             providerId,
             title: item.title,
             badges: this.buildBadges(providerId, item, item.url, ciWatchIndex),
+            url: item.url,
             hasRelatedItems: this.hasResolvedRelatedItems(providerId, item.externalId, relatedItemsIndex),
             isAccepted: state === 'accepted',
             isDismissed: state === 'dismissed',
@@ -350,6 +401,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: existingWorkItem?.id ?? key,
       title: providerItem.title,
       badges: this.buildBadges(providerId, providerItem, providerItem.url, ciWatchIndex),
+      url: providerItem.url,
       repoAnnotation: providerItem.group ?? existingWorkItem?.group,
       author: toItemAuthorData(providerItem),
       authored: providerItem.authored,
@@ -374,6 +426,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: item.id,
       title: item.title,
       badges: this.buildBadges(item.providerId, providerItem, item.url, ciWatchIndex),
+      url: providerItem?.url ?? item.url,
       repoAnnotation: item.group ?? providerItem?.group,
       author: toItemAuthorData(providerItem),
       authored: providerItem?.authored,
@@ -1466,6 +1519,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   return isFailedConclusion(runWatch.status.conclusion);
+}
+
+function areBadgesEqual(a?: BadgeData, b?: BadgeData): boolean {
+  if (!a || !b) {
+    return a === b;
+  }
+  return a.label === b.label && a.type === b.type && a.variant === b.variant;
 }
 
 function normalizeText(value?: string): string {
