@@ -6,9 +6,20 @@ import { gitExec } from './tools/gitUtils';
 
 const PR_URL_PATTERN = /https?:\/\/(?:github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+|dev\.azure\.com\/[^/\s]+\/[^/\s]+\/_git\/[^/\s]+\/pullrequest\/\d+)/;
 
+interface WalkthroughProgress {
+  allFiles: string[];
+  presentedFiles: string[];
+  /**
+   * Count of advancing signalPhase calls with a file-walkthrough phase where
+   * the model did not provide any path that we could match to a file in
+   * `allFiles` (missing, malformed, or paths we couldn't canonicalize).
+   */
+  unidentifiedPresentations: number;
+}
+
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
-  private filesByPrUrl = new Map<string, string[]>();
+  private progressByPrUrl = new Map<string, WalkthroughProgress>();
 
   constructor(
     private readonly repoManager: RepoManager,
@@ -114,7 +125,7 @@ export class WalkthroughParticipant {
       return { metadata: { phase: 'error' } };
     }
 
-    const progress = await this.getOrFetchAllFiles(prUrl, info, context.history.length === 0);
+    const progress = await this.getOrCreateProgress(prUrl, info, context.history.length === 0);
     const advanceCount = this.countAdvancePrompts(request.prompt, context.history);
 
     // Build system prompt
@@ -192,6 +203,15 @@ export class WalkthroughParticipant {
               enum: ['summary', 'walkthrough', 'lastFile', 'wrapup'],
               description: 'Current phase: "summary" after presenting the opening overview, "walkthrough" during file-by-file presentation, "lastFile" when presenting the last file in the reading order, "wrapup" after the final wrap-up.',
             },
+            filePath: {
+              type: 'string' as const,
+              description: 'Relative path of the file just presented. Pass this for walkthrough and lastFile phases using the exact path from the diff.',
+            },
+            filePaths: {
+              type: 'array' as const,
+              items: { type: 'string' as const },
+              description: 'Relative paths for every file in the group just presented. Use exact paths from the diff.',
+            },
           },
           required: ['phase'],
         },
@@ -241,12 +261,33 @@ export class WalkthroughParticipant {
 
           // Handle phase signals locally; only loop again for them if no text was streamed.
           if (part.name === 'devdocket-signalPhase') {
-            const input = part.input as { phase?: string };
-            this.log.debug(`Phase signal: ${input.phase}`);
+            const input = part.input as { phase?: string; filePath?: unknown; filePaths?: unknown };
+            const signaledPaths = this.getSignaledFilePaths(input);
+            this.log.debug(`Phase signal: ${input.phase}${signaledPaths.length > 0 ? ` for ${signaledPaths.join(', ')}` : ''}`);
             if (input.phase) {
               phase = input.phase;
             }
             if (this.isFileWalkthroughPhase(phase)) {
+              let identifiedCount = 0;
+              for (const filePath of signaledPaths) {
+                if (this.recordPresentedFile(progress, filePath)) {
+                  identifiedCount++;
+                }
+              }
+              const unidentifiedCount = signaledPaths.length === 0
+                ? 1
+                : Math.max(0, signaledPaths.length - identifiedCount);
+              // Only advance unidentified progress for prompts that move to a
+              // new file. Follow-ups like "Go deeper" may re-signal the same
+              // phase without presenting the next file.
+              if (
+                unidentifiedCount > 0
+                && streamedTextThisIteration
+                && progress.allFiles.length > 0
+                && this.isAdvancePrompt(request.prompt)
+              ) {
+                this.addUnidentifiedPresentations(progress, unidentifiedCount);
+              }
               phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
             }
             toolResults.push({
@@ -324,37 +365,45 @@ export class WalkthroughParticipant {
     }
     // Final safety net: re-derive the phase from observable progress regardless of
     // whether signalPhase fired this turn. If the model said 'walkthrough' but every
-    // file has been accounted for via the per-session advance counter, the correct
-    // follow-up set is the lastFile one.
+    // file has been presented (or accounted for via the per-turn advance counter),
+    // the correct follow-up set is the lastFile one.
     if (this.isFileWalkthroughPhase(phase)) {
       phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
     }
     const remainingFiles = this.getRemainingFiles(progress, advanceCount);
     this.log.info(
       `handleRequest complete — final phase: ${phase}, total iterations: ${iterations}, ` +
-      `allFiles=${progress.length}, advanceCount=${advanceCount}, remaining=${remainingFiles}`,
+      `allFiles=${progress.allFiles.length}, presented=${progress.presentedFiles.length}, ` +
+      `unidentified=${progress.unidentifiedPresentations}, advanceCount=${advanceCount}, ` +
+      `remaining=${remainingFiles}`,
     );
     return {
       metadata: {
         phase,
-        files: [...progress],
+        files: [...progress.allFiles],
+        presentedFiles: [...progress.presentedFiles],
         remainingFiles,
       },
     };
   }
 
-  private async getOrFetchAllFiles(
+  private async getOrCreateProgress(
     prUrl: string,
     info: WorktreeInfo,
     resetExisting: boolean,
-  ): Promise<string[]> {
-    const existing = this.filesByPrUrl.get(prUrl);
+  ): Promise<WalkthroughProgress> {
+    const existing = this.progressByPrUrl.get(prUrl);
     if (existing && !resetExisting) {
       return existing;
     }
-    const allFiles = await this.getChangedFiles(info);
-    this.filesByPrUrl.set(prUrl, allFiles);
-    return allFiles;
+
+    const progress: WalkthroughProgress = {
+      allFiles: await this.getChangedFiles(info),
+      presentedFiles: [],
+      unidentifiedPresentations: 0,
+    };
+    this.progressByPrUrl.set(prUrl, progress);
+    return progress;
   }
 
   private async getChangedFiles(info: WorktreeInfo): Promise<string[]> {
@@ -365,7 +414,7 @@ export class WalkthroughParticipant {
       );
       return output
         .split(/\r?\n/)
-        .map(file => file.trim().replace(/\\/g, '/'))
+        .map(file => this.normalizePresentedFilePath(file))
         .filter(Boolean);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -378,25 +427,111 @@ export class WalkthroughParticipant {
     return phase === 'walkthrough' || phase === 'lastFile';
   }
 
+  private getSignaledFilePaths(input: { filePath?: unknown; filePaths?: unknown }): string[] {
+    return [
+      ...(typeof input.filePath === 'string' ? [input.filePath] : []),
+      ...(Array.isArray(input.filePaths) ? input.filePaths.filter((filePath): filePath is string => typeof filePath === 'string') : []),
+    ];
+  }
+
+  private isAdvancePrompt(prompt: string): boolean {
+    return /\b(start(?: the)? walkthrough|continue(?: to the next file)?|next file)\b/i.test(prompt);
+  }
+
+  /**
+   * Record a file the model claims to have just presented. Returns true if the
+   * path could be matched to an entry in `progress.allFiles`, false otherwise
+   * (so callers can fall back to an "unidentified presentation" counter).
+   * Only canonical paths that exist in `allFiles` are pushed onto
+   * `presentedFiles` — keeping that array a strict subset of `allFiles`.
+   */
+  private recordPresentedFile(progress: WalkthroughProgress, filePath: string): boolean {
+    const normalizedPath = this.normalizePresentedFilePath(filePath);
+    if (!normalizedPath) {
+      return false;
+    }
+
+    const canonicalPath = this.findCanonicalFilePath(progress.allFiles, normalizedPath);
+    if (!canonicalPath) {
+      this.log.debug(`Presented walkthrough file is not in the changed-file list: ${filePath}`);
+      return false;
+    }
+    if (!progress.presentedFiles.includes(canonicalPath)) {
+      progress.presentedFiles.push(canonicalPath);
+    }
+    return true;
+  }
+
+  private normalizePresentedFilePath(filePath: string): string {
+    return filePath
+      .trim()
+      .replace(/^[`'"]+|[`'"]+$/g, '')
+      .replace(/\\/g, '/')
+      .replace(/^\.\//, '');
+  }
+
+  private findCanonicalFilePath(allFiles: string[], filePath: string): string | undefined {
+    if (allFiles.includes(filePath)) {
+      return filePath;
+    }
+    const withoutDiffPrefix = filePath.replace(/^[ab]\//, '');
+    if (allFiles.includes(withoutDiffPrefix)) {
+      return withoutDiffPrefix;
+    }
+    // Suffix match: handles cases where the model passed a partial path or
+    // bare basename (e.g. "walkthroughParticipant.ts" for
+    // "packages/ai-reviewer/src/walkthroughParticipant.ts"). Only accept when
+    // exactly one file in allFiles ends with this suffix, to avoid ambiguous
+    // basename collisions ("index.ts", "package.json", etc.).
+    const suffixMatches = allFiles.filter(
+      file => file === withoutDiffPrefix || file.endsWith('/' + withoutDiffPrefix),
+    );
+    return suffixMatches.length === 1 ? suffixMatches[0] : undefined;
+  }
+
+  private addUnidentifiedPresentations(progress: WalkthroughProgress, count: number): void {
+    const presented = new Set(progress.presentedFiles);
+    const unaccountedFiles = progress.allFiles.filter(file => !presented.has(file)).length - progress.unidentifiedPresentations;
+    progress.unidentifiedPresentations += Math.max(0, Math.min(count, unaccountedFiles));
+  }
+
   private deriveFileWalkthroughPhase(
     phase: string,
-    allFiles: string[],
+    progress: WalkthroughProgress,
     advanceCount: number,
   ): string {
     if (phase === 'lastFile') {
       return phase;
     }
-    if (phase !== 'walkthrough' || allFiles.length === 0) {
+    if (phase !== 'walkthrough' || progress.allFiles.length === 0) {
       return phase;
     }
-    return this.getRemainingFiles(allFiles, advanceCount) === 0 ? 'lastFile' : phase;
+    return this.getRemainingFiles(progress, advanceCount) === 0 ? 'lastFile' : phase;
   }
 
-  private getRemainingFiles(allFiles: string[], advanceCount: number): number | undefined {
-    if (allFiles.length === 0) {
+  private getRemainingFiles(progress: WalkthroughProgress, advanceCount: number): number | undefined {
+    if (progress.allFiles.length === 0) {
       return undefined;
     }
-    return Math.max(0, allFiles.length - advanceCount);
+    const presented = new Set(progress.presentedFiles);
+    const identifiedRemaining = progress.allFiles.filter(file => !presented.has(file)).length;
+    // Estimate total presentations from the strongest available signal:
+    //   - `presented.size + unidentifiedPresentations` — model-driven (signalPhase paths
+    //     plus unmatched signalPhase calls); only useful when the model actually calls
+    //     signalPhase.
+    //   - `advanceCount` — user-driven: counts the user prompts that advance the
+    //     walkthrough (button clicks like "Start the walkthrough" / "Continue to the
+    //     next file", plus any custom user text that isn't a recognised non-advance
+    //     action). This signal is independent of model behavior, so it still works
+    //     when the model ignores signalPhase entirely.
+    // Take the max so the strongest evidence wins.
+    const totalPresented = Math.max(
+      progress.presentedFiles.length + progress.unidentifiedPresentations,
+      advanceCount,
+    );
+    // Credit any presentations beyond the identified set toward unidentified files.
+    const unidentifiedCredit = Math.max(0, totalPresented - progress.presentedFiles.length);
+    return Math.max(0, identifiedRemaining - unidentifiedCredit);
   }
 
   /**
@@ -408,7 +543,7 @@ export class WalkthroughParticipant {
    * request shouldn't count.
    */
   private static readonly NON_ADVANCE_PROMPT_PATTERN =
-    /^(Adjust the reading order|Go deeper|Skip to the wrap-up summary|Wrap up|Walk me through)/i;
+    /^(Adjust the reading order|Go deeper|Skip to the wrap-up summary|Walk me through)/i;
 
   /**
    * Count how many user prompts (including the current one) are file-advance signals
@@ -416,8 +551,8 @@ export class WalkthroughParticipant {
    * next file", or any free-form user prompt that isn't a recognised non-advance
    * action.
    *
-   * This is the deterministic, user-driven signal we use to derive walkthrough
-   * progress. It's robust to models that ignore the signalPhase tool entirely
+   * This is the user-driven lower bound on "how many files have been presented in
+   * this session". It's robust to models that ignore the signalPhase tool entirely
    * (which Claude Opus 4.7 does, per observed behaviour) because the button prompts
    * we emit are deterministic.
    *

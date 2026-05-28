@@ -447,49 +447,484 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
     });
 
-    it('resets the cached file list when a fresh chat starts for the same PR', async () => {
-      const silentModel = {
-        sendRequest: vi.fn().mockImplementation(() => ({
+    it('overrides walkthrough phase to lastFile when signalPhase reports the final file', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
           stream: (async function* () {
-            yield new LanguageModelTextPart('Walking through a file.');
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: '"./src/first.ts"',
+            });
           })(),
-        })),
+        }),
+      };
+      const lastFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['`b\\src\\second.ts`'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const mockParticipant = vi.mocked(chat.createChatParticipant).mock.results[0].value;
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const provider = mockParticipant.followupProvider as {
+        provideFollowups: (
+          result: { metadata?: Record<string, unknown> },
+          context: unknown,
+          token: unknown,
+        ) => { prompt: string; label: string }[];
+      };
+      const token = { isCancellationRequested: false };
+
+      const firstResult = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      const firstFollowups = provider.provideFollowups(
+        firstResult as { metadata?: Record<string, unknown> },
+        { history: [] },
+        token,
+      );
+
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+      expect(firstFollowups.map(followup => followup.label).join(' ')).toContain('Next file');
+
+      const lastResult = await handler(
+        createMockRequest('Continue', lastFileModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+      const lastFollowups = provider.provideFollowups(
+        lastResult as { metadata?: Record<string, unknown> },
+        { history: [] },
+        token,
+      );
+
+      expect((lastResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((lastResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+      expect(lastFollowups).toHaveLength(2);
+      expect(lastFollowups[0].label).toContain('Go deeper');
+      expect(lastFollowups[1].label).toContain('Wrap up');
+      expect(lastFollowups.map(followup => followup.label).join(' ')).not.toContain('Next file');
+    });
+
+    it('overrides walkthrough phase to lastFile when signalPhase reports the final file group', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Grouped final file analysis.');
+            yield new LanguageModelToolCallPart('phase-group', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['src/first.ts', 'src/second.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('accounts for unmatched paths in partially matched final file groups', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Grouped final file analysis with a malformed path.');
+            yield new LanguageModelToolCallPart('phase-partial-group', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['src/first.ts', 'not-in-diff.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('does not record file paths from summary phase signals', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Summary with reading order.');
+            yield new LanguageModelToolCallPart('phase-summary', 'devdocket-signalPhase', {
+              phase: 'summary',
+              filePaths: ['src/first.ts', 'src/second.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('summary');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(2);
+    });
+
+    it('ignores non-string file path values in signalPhase input', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Malformed phase input should not abort.');
+            yield new LanguageModelToolCallPart('phase-malformed', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: null,
+              filePaths: ['src/first.ts', null, 42],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('advances remaining-file count when signalPhase omits filePath entirely', async () => {
+      // Two walkthrough phase signals with no filePath/filePaths at all.
+      // Each should still count as one presentation so the second turn
+      // reaches remainingFiles=0 and the phase derives to lastFile.
+      const firstModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+      const secondModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
       };
 
       participant.register();
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
       const token = { isCancellationRequested: false };
 
-      vi.mocked(gitExec).mockResolvedValueOnce('src/a.ts\nsrc/b.ts\n');
-      await handler(
-        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', silentModel),
+      const firstResult = await handler(
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', firstModel),
         createMockContext(),
         createMockResponse(),
         token,
       );
-      // Cached list (2 files); same chat continues — gitExec must not be re-invoked.
-      await handler(
-        createMockRequest('Continue', silentModel),
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+
+      const secondResult = await handler(
+        createMockRequest('Continue', secondModel),
         createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
         createMockResponse(),
         token,
       );
-      expect(vi.mocked(gitExec)).toHaveBeenCalledTimes(1);
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
 
-      // Fresh chat (empty history) for the same PR — file list should be re-fetched
-      // so a changed PR head is picked up.
-      vi.mocked(gitExec).mockResolvedValueOnce('src/x.ts\nsrc/y.ts\nsrc/z.ts\n');
-      const freshResult = await handler(
-        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', silentModel),
+    it('advances remaining-file count when signalPhase paths cannot be matched to allFiles', async () => {
+      // Model passes paths that don't normalize to anything in allFiles
+      // (e.g. absolute paths or fabricated names). Each unmatched walkthrough
+      // signal should still count as a presentation so the loop converges.
+      const mismatchedFirst = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Mismatched path file 1.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: '/abs/path/not/in/diff.ts',
+            });
+          })(),
+        }),
+      };
+      const mismatchedSecond = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Mismatched path file 2.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['totally-unknown.ts', 'also-unknown.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      const firstResult = await handler(
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mismatchedFirst),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      // Path didn't match allFiles, so presentedFiles stays empty, but the
+      // unidentified-presentations counter advances the remaining count.
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+
+      const secondResult = await handler(
+        createMockRequest('Continue', mismatchedSecond),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('canonicalizes a bare basename in signalPhase to a uniquely matching file', async () => {
+      // Model passes just the basename, not the full path. As long as the
+      // basename is unique within allFiles it should be matched and counted
+      // as an identified presentation.
+      const model = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Bare basename presentation.');
+            yield new LanguageModelToolCallPart('phase-basename', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'second.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', model),
+        createMockContext([new ChatRequestTurn('previous turn')]),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/second.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('does not match ambiguous basenames in signalPhase', async () => {
+      // Two files share the same basename — basename-only signal must be
+      // treated as unidentified (not matched to either candidate).
+      vi.mocked(gitExec).mockResolvedValueOnce('src/a/index.ts\nsrc/b/index.ts\n');
+      const model = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Ambiguous basename presentation.');
+            yield new LanguageModelToolCallPart('phase-ambig', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'index.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Continue to the next file', model),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      // Not added to presentedFiles (would be wrong to pick one arbitrarily),
+      // but counted as an unidentified presentation so progress still advances.
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('does not advance unidentified progress for phase-only retry iterations', async () => {
+      const mockModel = {
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelToolCallPart('phase-only', 'devdocket-signalPhase', {
+                phase: 'walkthrough',
+              });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('First file analysis after retry.');
+              yield new LanguageModelToolCallPart('phase-text', 'devdocket-signalPhase', {
+                phase: 'walkthrough',
+                filePath: 'src/first.ts',
+              });
+            })(),
+          }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('does not advance unidentified progress for non-advancing follow-ups', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+      const deeperModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('More detail about the first file.');
+            yield new LanguageModelToolCallPart('phase-deeper', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
         createMockContext(),
         createMockResponse(),
         token,
       );
 
-      expect(vi.mocked(gitExec)).toHaveBeenCalledTimes(2);
-      // Fresh chat: only the URL prompt seen — that's a non-advance prompt, so
-      // advanceCount=0 and remaining equals the full 3-file list.
-      expect((freshResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(3);
+      const deeperResult = await handler(
+        createMockRequest('Go deeper — show callers and related code', deeperModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('resets file progress when a fresh chat starts for the same PR', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        })),
+      };
+      const lastFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/second.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      await handler(
+        createMockRequest('Continue', lastFileModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      const freshResult = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      expect((freshResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((freshResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
     it('derives lastFile from advance-prompt count when the model never calls signalPhase (3-file PR, real-world Claude Opus 4.7 trace)', async () => {
@@ -602,6 +1037,7 @@ describe('WalkthroughParticipant', () => {
             yield new LanguageModelTextPart('Model says this is the final file.');
             yield new LanguageModelToolCallPart('phase-last', 'devdocket-signalPhase', {
               phase: 'lastFile',
+              filePath: 'src/first.ts',
             });
           })(),
         }),
@@ -629,6 +1065,7 @@ describe('WalkthroughParticipant', () => {
             yield new LanguageModelTextPart('A file analysis.');
             yield new LanguageModelToolCallPart('phase-unknown', 'devdocket-signalPhase', {
               phase: 'walkthrough',
+              filePath: 'src/only.ts',
             });
           })(),
         }),
