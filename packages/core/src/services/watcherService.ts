@@ -77,7 +77,7 @@ export class WatcherService implements vscode.Disposable {
   private readonly persistence: WatchPersistence;
   private readonly poolSubscriptions: vscode.Disposable[];
 
-  private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
+  private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<readonly WatchedRun[]>();
   readonly onDidChangeWatchedRuns = this._onDidChangeWatchedRuns.event;
 
   private readonly _onDidDetectJobFailure = new vscode.EventEmitter<{ run: WatchedRun; job: JobStatus }>();
@@ -296,7 +296,7 @@ export class WatcherService implements vscode.Disposable {
   /**
    * Get all active watches (not dismissed).
    */
-  getActiveWatches(): WatchedRun[] {
+  getActiveWatches(): readonly WatchedRun[] {
     return this.runPool.getActiveWatches();
   }
 
@@ -332,7 +332,7 @@ export class WatcherService implements vscode.Disposable {
   /**
    * Get all active PR watches (not dismissed).
    */
-  getActivePRWatches(): WatchedPR[] {
+  getActivePRWatches(): readonly WatchedPR[] {
     return this.prPool.getActivePRWatches();
   }
 

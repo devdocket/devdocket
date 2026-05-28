@@ -59,6 +59,7 @@ export interface DismissPRWatchResult {
 export class PRWatchPool implements vscode.Disposable {
   private prWatches = new Map<string, WatchedPR>();
   private consecutiveFailures = new Map<string, number>();
+  private activePRWatchesCache: readonly WatchedPR[] | undefined;
 
   private readonly _onDidCompletePR = new vscode.EventEmitter<WatchedPR>();
   readonly onDidCompletePR = this._onDidCompletePR.event;
@@ -84,6 +85,9 @@ export class PRWatchPool implements vscode.Disposable {
       this.prWatches.set(key, pr);
       restored++;
     }
+    if (restored > 0) {
+      this.invalidateActivePRWatchesCache();
+    }
     return restored;
   }
 
@@ -97,11 +101,13 @@ export class PRWatchPool implements vscode.Disposable {
       }
       this.consecutiveFailures.delete(key);
       this.prWatches.delete(key);
+      this.invalidateActivePRWatchesCache();
     } else if (existing && !existing.dismissed) {
       return { watch: existing, changed: false };
     } else if (existing) {
       this.consecutiveFailures.delete(key);
       this.prWatches.delete(key);
+      this.invalidateActivePRWatchesCache();
     }
 
     const prWatcher = this.prWatcherRegistry.get(identifier.providerId);
@@ -136,6 +142,7 @@ export class PRWatchPool implements vscode.Disposable {
     }
 
     this.prWatches.set(key, watchedPR);
+    this.invalidateActivePRWatchesCache();
     this.rememberPRWatchKey(key);
     this.consecutiveFailures.delete(key);
     this.logger.info(`Started watching PR: ${identifier.displayName} (${identifier.providerId})`);
@@ -152,6 +159,7 @@ export class PRWatchPool implements vscode.Disposable {
         if (this.prWatches.get(key) === watchedPR) {
           this.consecutiveFailures.delete(key);
           this.prWatches.delete(key);
+          this.invalidateActivePRWatchesCache();
         }
         return { watch: watchedPR, changed: false };
       }
@@ -175,6 +183,7 @@ export class PRWatchPool implements vscode.Disposable {
     }
 
     prWatch.dismissed = true;
+    this.invalidateActivePRWatchesCache();
     this.consecutiveFailures.delete(key);
     let childRunChanged = false;
     for (const childKey of prWatch.childRunKeys) {
@@ -190,6 +199,7 @@ export class PRWatchPool implements vscode.Disposable {
       if ((prWatch.prState === 'merged' || prWatch.prState === 'closed') && !prWatch.dismissed) {
         const key = this.getPRWatchKey(prWatch.identifier);
         prWatch.dismissed = true;
+        this.invalidateActivePRWatchesCache();
         this.consecutiveFailures.delete(key);
         for (const childKey of prWatch.childRunKeys) {
           if (this.runControl.dismissOwnedChildRun(childKey, key)) {
@@ -423,6 +433,7 @@ export class PRWatchPool implements vscode.Disposable {
       if (this.getActiveChildRunKeys(prKey).length > 0) continue;
 
       prWatch.dismissed = true;
+      this.invalidateActivePRWatchesCache();
       this.consecutiveFailures.delete(prKey);
       dismissedCount++;
       this.logger.info(`Dismissed childless PR watch: ${prWatch.identifier.displayName}`);
@@ -485,17 +496,24 @@ export class PRWatchPool implements vscode.Disposable {
     return prLinkedKeys;
   }
 
-  getActivePRWatches(): WatchedPR[] {
-    return Array.from(this.prWatches.values()).filter(pr => !pr.dismissed);
+  getActivePRWatches(): readonly WatchedPR[] {
+    if (!this.activePRWatchesCache) {
+      this.activePRWatchesCache = Array.from(this.prWatches.values()).filter(pr => !pr.dismissed);
+    }
+    return this.activePRWatchesCache;
   }
 
   getAllPRWatches(): WatchedPR[] {
     return Array.from(this.prWatches.values());
   }
 
+  private invalidateActivePRWatchesCache(): void {
+    this.activePRWatchesCache = undefined;
+  }
+
   findPRWatchByExternalId(repo: string, prId: string): WatchedPR | undefined {
-    return Array.from(this.prWatches.values()).find(
-      pr => !pr.dismissed && pr.identifier.repo === repo && pr.identifier.prId === prId,
+    return this.getActivePRWatches().find(
+      pr => pr.identifier.repo === repo && pr.identifier.prId === prId,
     );
   }
 
@@ -597,6 +615,7 @@ export class PRWatchPool implements vscode.Disposable {
   dispose(): void {
     this._onDidCompletePR.dispose();
     this.prWatches.clear();
+    this.invalidateActivePRWatchesCache();
     this.consecutiveFailures.clear();
   }
 }

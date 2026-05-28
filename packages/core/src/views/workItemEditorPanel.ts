@@ -409,7 +409,7 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private refreshForWatchedRunsChange(changedRuns: WatchedRun[]): void {
+  private refreshForWatchedRunsChange(changedRuns: readonly WatchedRun[]): void {
     if (this.disposed) { return; }
     const item = this.workGraph.getItem(this.itemId);
     if (!isPRWorkItem(item)) { return; }
