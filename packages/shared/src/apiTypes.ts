@@ -258,9 +258,11 @@ export interface DevDocketApi {
    * non-breaking change for TypeScript consumers that structurally
    * implement {@link DevDocketApi} (e.g. test mocks). The DevDocket
    * core extension always sets it at runtime; an `undefined` value
-   * therefore indicates an older core that predates this field, and
-   * gating helpers in `@devdocket/shared` treat it as
-   * "compatibility unknown" by skipping the gate with a warning.
+   * therefore indicates an older core that predates this field.
+   * Consumers calling the contract-version helpers in
+   * `@devdocket/shared` (e.g. {@link isContractVersionSatisfied})
+   * must guard against `undefined` themselves before passing the
+   * value through — the helpers accept `string`, not `string | undefined`.
    */
   readonly contractVersion?: string;
   /**
