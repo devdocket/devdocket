@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { authentication, env } from 'vscode';
 import { isRecoverableError, PollingBackoffError } from '@devdocket/shared';
-import { GitHubSsoError, filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
+import { GitHubSsoError, fetchClosedGitHubItems, filterMergedGitHubPrs, isMergedGitHubPr, throwApiError, looksLikeRateLimited403, retryWithAuth, type GitHubIssue } from '../githubApiHelpers';
 import { setLogger } from '../logger';
 import { makeErrorResponse } from './responseMocks';
 
@@ -165,6 +165,154 @@ describe('filterMergedGitHubPrs', () => {
       'https://api.github.com/repos/owner/repo/pulls/2',
       'https://api.github.com/repos/owner/repo/pulls/3',
     ]);
+  });
+});
+
+describe('fetchClosedGitHubItems', () => {
+  beforeEach(() => {
+    vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'closed-token' } as never);
+  });
+
+  it('fetches a single closed issue through GraphQL', async () => {
+    const mockFetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: { repository: { i0: { state: 'CLOSED' }, pr0: null } },
+      }),
+    }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1'], 'issues')).resolves.toEqual(['owner/repo#1']);
+
+    expect(mockFetch).toHaveBeenCalledOnce();
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://api.github.com/graphql');
+    const body = JSON.parse(String(init?.body));
+    expect(init?.headers).toEqual(expect.objectContaining({
+      Authorization: 'Bearer closed-token',
+      'User-Agent': 'DevDocket-VSCode',
+      'Content-Type': 'application/json',
+    }));
+    expect(body.variables).toEqual({ owner: 'owner', name: 'repo' });
+    expect(body.query).toContain('i0: issue(number: 1)');
+    expect(body.query).toContain('pr0: pullRequest(number: 1)');
+  });
+
+  it('batches multiple repositories and treats merged PRs as closed', async () => {
+    const mockFetch = vi.fn(async (_url: string, init?: { body?: string }) => {
+      const body = JSON.parse(String(init?.body));
+      if (body.variables.owner === 'owner' && body.variables.name === 'repo') {
+        return {
+          ok: true,
+          json: async () => ({
+            data: { repository: { pr0: { state: 'CLOSED' }, pr1: { state: 'OPEN' } } },
+          }),
+        };
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          data: { repository: { pr0: { state: 'MERGED' } } },
+        }),
+      };
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    const result = await fetchClosedGitHubItems([
+      'owner/repo#1',
+      'owner/repo#2',
+      'other/project#3',
+    ], 'pulls');
+
+    expect(result).toEqual(['owner/repo#1', 'other/project#3']);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    for (const [, init] of mockFetch.mock.calls) {
+      const body = JSON.parse(String(init?.body));
+      expect(body.query).not.toContain('issue(number:');
+    }
+  });
+
+  it('keeps successful repo results when another repo query and fallback fail', async () => {
+    const mockFetch = vi.fn(async (url: string, init?: { body?: string }) => {
+      if (url === 'https://api.github.com/graphql') {
+        const body = JSON.parse(String(init?.body));
+        if (body.variables.owner === 'owner') {
+          return {
+            ok: true,
+            json: async () => ({ data: { repository: { i0: { state: 'CLOSED' }, pr0: null } } }),
+          };
+        }
+        return makeErrorResponse({ status: 500, statusText: 'Internal Server Error', bodyJson: { message: 'temporary failure' } });
+      }
+      return makeErrorResponse({ status: 404, statusText: 'Not Found' });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1', 'broken/repo#2'], 'issues'))
+      .resolves.toEqual(['owner/repo#1']);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('ignores missing GraphQL items', async () => {
+    const mockFetch = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: { repository: { i0: null, pr0: null } },
+      }),
+    }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#99'], 'issues')).resolves.toEqual([]);
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('throws PollingBackoffError for GraphQL secondary rate limits', async () => {
+    const mockFetch = vi.fn(async () => makeErrorResponse({
+      status: 403,
+      statusText: 'Forbidden',
+      headers: { 'retry-after': '30' },
+      bodyJson: { message: 'You have exceeded a secondary rate limit.' },
+    }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1'], 'pulls'))
+      .rejects.toBeInstanceOf(PollingBackoffError);
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('throws PollingBackoffError for 200 OK GraphQL rate-limit errors', async () => {
+    const mockFetch = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: (name: string) => name.toLowerCase() === 'x-ratelimit-reset' ? String(Math.floor(Date.now() / 1000) + 60) : null },
+      json: async () => ({
+        errors: [{ type: 'RATE_LIMITED', message: 'API rate limit exceeded for GraphQL.' }],
+      }),
+    }));
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1'], 'issues'))
+      .rejects.toMatchObject({ name: 'PollingBackoffError', statusCode: 200 });
+    expect(mockFetch).toHaveBeenCalledOnce();
+  });
+
+  it('throws PollingBackoffError when REST fallback hits a secondary rate limit', async () => {
+    const mockFetch = vi.fn(async (url: string) => {
+      if (url === 'https://api.github.com/graphql') {
+        return makeErrorResponse({ status: 500, statusText: 'Internal Server Error', bodyJson: { message: 'temporary failure' } });
+      }
+      return makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        headers: { 'retry-after': '30' },
+        bodyJson: { message: 'You have exceeded a secondary rate limit.' },
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1'], 'issues'))
+      .rejects.toBeInstanceOf(PollingBackoffError);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
 

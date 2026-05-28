@@ -510,15 +510,38 @@ export function parseCanonicalRepo(htmlUrl: string, fallbackOwner: string, fallb
   return match ? `${match[1]}/${match[2]}` : `${fallbackOwner}/${fallbackRepo}`;
 }
 
+interface ParsedClosedGitHubItem {
+  id: string;
+  owner: string;
+  repoName: string;
+  number: number;
+}
+
+interface ClosedGitHubGraphQLError {
+  message?: string;
+  path?: unknown[];
+  type?: string;
+  extensions?: { code?: unknown };
+}
+
+interface ClosedGitHubGraphQLPayload {
+  data?: {
+    repository?: Record<string, { state?: string | null } | null | undefined> | null;
+  };
+  errors?: ClosedGitHubGraphQLError[];
+}
+
+const CLOSED_ITEM_GRAPHQL_ALIAS_LIMIT = 50;
+
 /**
  * Shared implementation for getClosedItems across GitHub providers.
  * Parses external IDs ("owner/repo#number"), validates repo slugs, and
- * checks item state via the specified API endpoint using a worker pool.
+ * batches item state checks through GitHub GraphQL with REST fallback.
  *
  * @param externalIds - External IDs in "owner/repo#number" format.
- * @param apiType - GitHub API path segment: `'issues'` or `'pulls'`.
+ * @param apiType - GitHub item type: `'issues'` checks issue-like IDs, `'pulls'` checks PRs.
  * @param signal - Optional abort signal for cancellation.
- * @returns External IDs whose GitHub state is `'closed'`.
+ * @returns External IDs whose GitHub state is closed or merged.
  */
 export async function fetchClosedGitHubItems(
   externalIds: string[],
@@ -534,61 +557,286 @@ export async function fetchClosedGitHubItems(
     logger.debug(`No GitHub auth session for getClosedItems (${apiType})`);
   }
   if (!session) { return []; }
-  const token = session.accessToken;
 
-  const parsed = externalIds.map(id => {
-    const hashIdx = id.lastIndexOf('#');
-    if (hashIdx === -1) { return null; }
-    const rawRepo = id.substring(0, hashIdx);
-    const rawNumber = id.substring(hashIdx + 1);
-    if (!/^\d+$/.test(rawNumber) || !isValidGitHubRepo(rawRepo)) { return null; }
-    const num = Number(rawNumber);
-    const [owner, repoName] = rawRepo.split('/');
-    return { id, owner, repoName, number: num };
-  }).filter((p): p is NonNullable<typeof p> => p !== null);
-
+  const parsed = parseClosedGitHubExternalIds(externalIds);
   if (parsed.length === 0) { return []; }
 
+  const chunks = createClosedGitHubGraphQLChunks(parsed, apiType);
   const results = await runWorkerPoolSettled(
-    parsed,
-    async (item) => {
-      if (signal?.aborted) {
-        throw createAbortError();
-      }
-      const response = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/${apiType}/${item.number}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'User-Agent': 'DevDocket-VSCode',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-          signal,
-        },
-      );
-      if (!response.ok) {
-        logger.debug(`Failed to check ${apiType} ${item.id}: ${response.status}`);
-        return null;
-      }
-      const data = await response.json() as { state?: string };
-      return data.state === 'closed' ? item.id : null;
-    },
-    5, // maxConcurrency
+    chunks,
+    chunk => fetchClosedGitHubItemsGraphQLWithRestFallback(session!.accessToken, chunk, apiType, signal),
+    5,
   );
 
-  // Log rejected results so fetch/json failures aren't silently swallowed
-  for (const r of results) {
-    if (r.status === 'rejected') {
-      logger.warn(`Worker failed during ${apiType} closed-item check: ${r.reason}`);
+  const closedIds: string[] = [];
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      closedIds.push(...result.value);
+      continue;
     }
+    if (isAbortError(result.reason) || result.reason instanceof PollingBackoffError) {
+      throw result.reason;
+    }
+    logger.warn(`Failed during ${apiType} closed-item batch check: ${String(result.reason)}`);
   }
 
-  // Filter out nulls and errors, keep only the closed IDs
-  const isFulfilledNonNull = (
-    r: PromiseSettledResult<string | null>,
-  ): r is PromiseFulfilledResult<string> =>
-    r.status === 'fulfilled' && r.value !== null;
+  return closedIds;
+}
 
-  return results.filter(isFulfilledNonNull).map(r => r.value);
+function parseClosedGitHubExternalIds(externalIds: string[]): ParsedClosedGitHubItem[] {
+  const seen = new Set<string>();
+  const parsed: ParsedClosedGitHubItem[] = [];
+
+  for (const id of externalIds) {
+    if (seen.has(id)) { continue; }
+    const hashIdx = id.lastIndexOf('#');
+    if (hashIdx === -1) { continue; }
+    const rawRepo = id.substring(0, hashIdx);
+    const rawNumber = id.substring(hashIdx + 1);
+    if (!/^\d+$/.test(rawNumber) || !isValidGitHubRepo(rawRepo)) { continue; }
+    const number = Number(rawNumber);
+    const [owner, repoName] = rawRepo.split('/');
+    seen.add(id);
+    parsed.push({ id, owner, repoName, number });
+  }
+
+  return parsed;
+}
+
+function createClosedGitHubGraphQLChunks(
+  items: ParsedClosedGitHubItem[],
+  apiType: 'issues' | 'pulls',
+): ParsedClosedGitHubItem[][] {
+  const byRepo = new Map<string, ParsedClosedGitHubItem[]>();
+  for (const item of items) {
+    const repoKey = `${item.owner}/${item.repoName}`;
+    const repoItems = byRepo.get(repoKey) ?? [];
+    repoItems.push(item);
+    byRepo.set(repoKey, repoItems);
+  }
+
+  const fieldsPerItem = apiType === 'issues' ? 2 : 1;
+  const maxItemsPerQuery = Math.max(1, Math.floor(CLOSED_ITEM_GRAPHQL_ALIAS_LIMIT / fieldsPerItem));
+  const chunks: ParsedClosedGitHubItem[][] = [];
+  for (const repoItems of byRepo.values()) {
+    for (let i = 0; i < repoItems.length; i += maxItemsPerQuery) {
+      chunks.push(repoItems.slice(i, i + maxItemsPerQuery));
+    }
+  }
+  return chunks;
+}
+
+async function fetchClosedGitHubItemsGraphQLWithRestFallback(
+  token: string,
+  items: ParsedClosedGitHubItem[],
+  apiType: 'issues' | 'pulls',
+  signal?: AbortSignal,
+): Promise<string[]> {
+  try {
+    return await fetchClosedGitHubItemsGraphQLChunk(token, items, apiType, signal);
+  } catch (error) {
+    if (isAbortError(error) || error instanceof PollingBackoffError) { throw error; }
+    if (error instanceof GitHubSsoError) {
+      logger.debug(`Skipping ${apiType} closed-item GraphQL chunk after SSO error: ${error.message}`);
+      return [];
+    }
+    logger.debug(`GraphQL ${apiType} closed-item check failed; falling back to REST: ${String(error)}`);
+    return fetchClosedGitHubItemsRest(token, items, apiType, signal);
+  }
+}
+
+async function fetchClosedGitHubItemsGraphQLChunk(
+  token: string,
+  items: ParsedClosedGitHubItem[],
+  apiType: 'issues' | 'pulls',
+  signal?: AbortSignal,
+): Promise<string[]> {
+  if (signal?.aborted) { throw createAbortError(); }
+  const request = buildClosedGitHubItemsGraphQLRequest(items, apiType);
+  const response = await fetch('https://api.github.com/graphql', {
+    method: 'POST',
+    headers: {
+      ...getGitHubAuthHeaders(token),
+      'Content-Type': 'application/json',
+      'User-Agent': 'DevDocket-VSCode',
+    },
+    body: JSON.stringify(request),
+    signal: combineSignals(signal, 30_000),
+  });
+
+  if (!response.ok) {
+    await throwApiError(response, `${apiType} closed-item GraphQL batch`);
+  }
+
+  const payload = await response.json() as ClosedGitHubGraphQLPayload;
+  if (payload.errors?.length) {
+    throwClosedGitHubGraphQLBackoffErrorIfNeeded(payload.errors, response, `${apiType} closed-item GraphQL batch`);
+  }
+  if (payload.errors?.length && !payload.data) {
+    throw new Error(`GitHub GraphQL closed-item batch failed: ${formatGraphQLErrorMessages(payload.errors)}`);
+  }
+  if (payload.errors?.length) {
+    logger.warn(`GitHub GraphQL closed-item batch returned partial errors: ${formatGraphQLErrorMessages(payload.errors)}`);
+  }
+
+  const repository = payload.data?.repository;
+  if (!repository) { return []; }
+
+  const closedIds: string[] = [];
+  items.forEach((item, index) => {
+    if (apiType === 'pulls') {
+      if (isClosedGraphQLState(repository[getPullRequestAlias(index)]?.state)) {
+        closedIds.push(item.id);
+      }
+      return;
+    }
+
+    const issueState = repository[getIssueAlias(index)]?.state;
+    const pullRequestState = repository[getPullRequestAlias(index)]?.state;
+    if (isClosedGraphQLState(issueState) || isClosedGraphQLState(pullRequestState)) {
+      closedIds.push(item.id);
+    }
+  });
+
+  return closedIds;
+}
+
+function buildClosedGitHubItemsGraphQLRequest(
+  items: ParsedClosedGitHubItem[],
+  apiType: 'issues' | 'pulls',
+): { query: string; variables: { owner: string; name: string } } {
+  const [first] = items;
+  const selections: string[] = [];
+  items.forEach((item, index) => {
+    if (apiType === 'issues') {
+      selections.push(`${getIssueAlias(index)}: issue(number: ${item.number}) { state }`);
+    }
+    selections.push(`${getPullRequestAlias(index)}: pullRequest(number: ${item.number}) { state }`);
+  });
+
+  return {
+    query: `query ClosedGitHubItems($owner: String!, $name: String!) {\n  repository(owner: $owner, name: $name) {\n    ${selections.join('\n    ')}\n  }\n}`,
+    variables: { owner: first.owner, name: first.repoName },
+  };
+}
+
+async function fetchClosedGitHubItemsRest(
+  token: string,
+  items: ParsedClosedGitHubItem[],
+  apiType: 'issues' | 'pulls',
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const closedIds: string[] = [];
+  for (const item of items) {
+    try {
+      const closedId = await fetchClosedGitHubItemRest(token, item, apiType, signal);
+      if (closedId) { closedIds.push(closedId); }
+    } catch (error) {
+      if (isAbortError(error) || error instanceof PollingBackoffError) { throw error; }
+      logger.warn(`Worker failed during ${apiType} REST closed-item check: ${String(error)}`);
+    }
+  }
+  return closedIds;
+}
+
+async function fetchClosedGitHubItemRest(
+  token: string,
+  item: ParsedClosedGitHubItem,
+  apiType: 'issues' | 'pulls',
+  signal?: AbortSignal,
+): Promise<string | null> {
+  if (signal?.aborted) { throw createAbortError(); }
+  const response = await fetch(
+    `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/${apiType}/${item.number}`,
+    {
+      headers: {
+        ...getGitHubAuthHeaders(token),
+        'User-Agent': 'DevDocket-VSCode',
+      },
+      signal: combineSignals(signal, 30_000),
+    },
+  );
+  if (!response.ok) {
+    if (response.status === 403 || response.status === 429 || response.status === 503) {
+      await throwApiError(response, `GitHub ${apiType} ${item.id}`);
+    }
+    logger.debug(`Failed to check ${apiType} ${item.id}: ${response.status}`);
+    return null;
+  }
+  const data = await response.json() as { state?: string };
+  return data.state?.toLowerCase() === 'closed' ? item.id : null;
+}
+
+function throwClosedGitHubGraphQLBackoffErrorIfNeeded(
+  errors: ClosedGitHubGraphQLError[],
+  response: Response,
+  label: string,
+): void {
+  const sso = response.headers?.get?.('x-github-sso') ?? null;
+  if (sso && errors.some(isGraphQLForbiddenError)) {
+    const { ssoUrl, orgName } = parseGitHubSsoInfo(sso);
+    throw new GitHubSsoError({ ssoUrl, orgName });
+  }
+
+  const rateLimitError = errors.find(isGraphQLRateLimitError);
+  if (!rateLimitError) { return; }
+
+  const retryAfter = response.headers?.get?.('retry-after') ?? null;
+  const reset = response.headers?.get?.('x-ratelimit-reset') ?? null;
+  const retryAfterMs = parseRetryAfterHeader(retryAfter);
+  const rateLimitResetAtMs = parseRateLimitResetHeader(reset);
+  const resetDelayMs = rateLimitResetAtMs !== undefined
+    ? Math.max(0, rateLimitResetAtMs - Date.now())
+    : undefined;
+  const enforcedRetryAfterMs = Math.max(retryAfterMs ?? 0, resetDelayMs ?? 0) || undefined;
+  const wait = formatRetryAfter(retryAfter) ?? formatRateLimitReset(reset);
+  const message = rateLimitError.message ?? '';
+  const isSecondary = /secondary rate limit/i.test(message);
+
+  throw new PollingBackoffError({
+    message: isSecondary
+      ? `GitHub secondary rate limit hit for ${label}.${wait ? ` ${wait}` : ''}`
+      : `GitHub GraphQL rate limit exceeded for ${label}.${wait ? ` ${wait}` : ''}`,
+    backoffKey: GITHUB_API_BACKOFF_KEY,
+    statusCode: 200,
+    retryAfterMs: enforcedRetryAfterMs,
+  });
+}
+
+function isGraphQLForbiddenError(error: ClosedGitHubGraphQLError): boolean {
+  const type = error.type?.toUpperCase();
+  const code = typeof error.extensions?.code === 'string' ? error.extensions.code.toUpperCase() : undefined;
+  const message = error.message ?? '';
+  return type === 'FORBIDDEN' || code === 'FORBIDDEN' || /saml|sso|resource protected/i.test(message);
+}
+
+function isGraphQLRateLimitError(error: ClosedGitHubGraphQLError): boolean {
+  const type = error.type?.toUpperCase();
+  const code = typeof error.extensions?.code === 'string' ? error.extensions.code.toUpperCase() : undefined;
+  const message = error.message ?? '';
+  return type === 'RATE_LIMITED'
+    || code === 'RATE_LIMITED'
+    || code === 'RATE_LIMIT'
+    || /rate limit/i.test(message);
+}
+
+function getIssueAlias(index: number): string {
+  return `i${index}`;
+}
+
+function getPullRequestAlias(index: number): string {
+  return `pr${index}`;
+}
+
+function isClosedGraphQLState(state: string | null | undefined): boolean {
+  const normalized = state?.toUpperCase();
+  return normalized === 'CLOSED' || normalized === 'MERGED';
+}
+
+function formatGraphQLErrorMessages(errors: ClosedGitHubGraphQLError[]): string {
+  return errors.map(error => error.message).filter(Boolean).join('; ') || 'Unknown GraphQL error';
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === 'AbortError';
 }
