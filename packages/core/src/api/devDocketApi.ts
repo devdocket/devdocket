@@ -1,5 +1,5 @@
 import { DevDocketApi, DevDocketProvider, DevDocketAction, DevDocketRunWatcher, DevDocketPRWatcher, Disposable, type ActivityType, type ActivityDetailRenderer, type StateTransitionEvent } from './types';
-import { CONTRACT_VERSION, isContractVersionSatisfied } from './types';
+import { CONTRACT_VERSION, compareContractVersions, isContractVersionSatisfied } from './types';
 import type { Event } from '@devdocket/shared';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
@@ -10,6 +10,13 @@ import { WorkGraph } from '../services/workGraph';
 import { logger } from '../services/logger';
 
 const NOOP_DISPOSABLE: Disposable = { dispose: () => { /* no-op */ } };
+
+function isMalformedMinContractVersion(value: string, current: string): boolean {
+  // compareContractVersions returns NaN when either input is unparseable.
+  // The core's `current` is always valid (it's our own constant), so a NaN
+  // result here unambiguously means `value` failed to parse.
+  return Number.isNaN(compareContractVersions(current, value));
+}
 
 export class DevDocketApiImpl implements DevDocketApi {
   readonly contractVersion: string = CONTRACT_VERSION;
@@ -27,25 +34,43 @@ export class DevDocketApiImpl implements DevDocketApi {
   }
 
   registerProvider(provider: DevDocketProvider): Disposable {
-    if (provider.minContractVersion && !isContractVersionSatisfied(this.contractVersion, provider.minContractVersion)) {
-      logger.warn(
-        `Provider "${provider.id}" requires DevDocket API contract version >= ${provider.minContractVersion}, ` +
-        `but core implements ${this.contractVersion}. Skipping registration; ` +
-        `update the DevDocket core extension to enable this provider.`,
-      );
-      return NOOP_DISPOSABLE;
+    const min = provider.minContractVersion;
+    if (min) {
+      if (isMalformedMinContractVersion(min, this.contractVersion)) {
+        logger.warn(
+          `Provider "${provider.id}" declared minContractVersion="${min}", which is not a valid semver ` +
+          `major.minor.patch string. Ignoring the compatibility gate and proceeding with registration; ` +
+          `fix the provider's minContractVersion declaration.`,
+        );
+      } else if (!isContractVersionSatisfied(this.contractVersion, min)) {
+        logger.warn(
+          `Provider "${provider.id}" requires DevDocket API contract version >= ${min}, ` +
+          `but core implements ${this.contractVersion}. Skipping registration; ` +
+          `update the DevDocket core extension to enable this provider.`,
+        );
+        return NOOP_DISPOSABLE;
+      }
     }
     return this.providerRegistry.register(provider);
   }
 
   registerAction(action: DevDocketAction): Disposable {
-    if (action.minContractVersion && !isContractVersionSatisfied(this.contractVersion, action.minContractVersion)) {
-      logger.warn(
-        `Action "${action.id}" requires DevDocket API contract version >= ${action.minContractVersion}, ` +
-        `but core implements ${this.contractVersion}. Skipping registration; ` +
-        `update the DevDocket core extension to enable this action.`,
-      );
-      return NOOP_DISPOSABLE;
+    const min = action.minContractVersion;
+    if (min) {
+      if (isMalformedMinContractVersion(min, this.contractVersion)) {
+        logger.warn(
+          `Action "${action.id}" declared minContractVersion="${min}", which is not a valid semver ` +
+          `major.minor.patch string. Ignoring the compatibility gate and proceeding with registration; ` +
+          `fix the action's minContractVersion declaration.`,
+        );
+      } else if (!isContractVersionSatisfied(this.contractVersion, min)) {
+        logger.warn(
+          `Action "${action.id}" requires DevDocket API contract version >= ${min}, ` +
+          `but core implements ${this.contractVersion}. Skipping registration; ` +
+          `update the DevDocket core extension to enable this action.`,
+        );
+        return NOOP_DISPOSABLE;
+      }
     }
     return this.actionRegistry.register(action);
   }

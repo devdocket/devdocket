@@ -222,6 +222,13 @@ export interface DevDocketAction {
  * `vscode.extensions.getExtension('devdocket.devdocket')`, then activating it
  * with `await extension.activate()` (or reading `extension.exports` after activation).
  *
+ * > **Implementation note**: this interface is *implemented* only by the
+ * > DevDocket core extension. Provider/action extensions and other
+ * > third-party consumers should hold and call a `DevDocketApi` reference
+ * > but must not implement the interface themselves. New required members
+ * > may therefore be added in additive `minor` releases of `@devdocket/shared`
+ * > without being considered a consumer-visible breaking change.
+ *
  * @example
  * ```ts
  * const ext = vscode.extensions.getExtension<DevDocketApi>('devdocket.devdocket');

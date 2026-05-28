@@ -160,6 +160,20 @@ describe('DevDocketApiImpl', () => {
       expect(providerRegistry.getProvider('future')).toBeUndefined();
       expect(() => disposable.dispose()).not.toThrow();
     });
+
+    it('ignores the gate and registers when minContractVersion is malformed', () => {
+      const provider: DevDocketProvider = {
+        ...createMockProvider('bad-min'),
+        minContractVersion: '1.0', // not major.minor.patch
+      };
+      const registerSpy = vi.spyOn(providerRegistry, 'register');
+
+      const disposable = api.registerProvider(provider);
+
+      expect(registerSpy).toHaveBeenCalledWith(provider);
+      expect(providerRegistry.getProvider('bad-min')).toBe(provider);
+      disposable.dispose();
+    });
   });
 
   describe('contractVersion', () => {
@@ -251,6 +265,14 @@ describe('DevDocketApiImpl', () => {
       expect(() => api.registerAction(a2)).toThrow('Action already registered: dup');
     });
 
+    it('registers when no minContractVersion is declared', () => {
+      const action = createMockAction('no-min-action');
+      const disposable = api.registerAction(action);
+
+      expect(actionRegistry.getAction('no-min-action')).toBe(action);
+      disposable.dispose();
+    });
+
     it('registers when minContractVersion <= core contractVersion', () => {
       const action: DevDocketAction = {
         ...createMockAction('ok'),
@@ -274,6 +296,20 @@ describe('DevDocketApiImpl', () => {
       expect(registerSpy).not.toHaveBeenCalled();
       expect(actionRegistry.getAction('future')).toBeUndefined();
       expect(() => disposable.dispose()).not.toThrow();
+    });
+
+    it('ignores the gate and registers when minContractVersion is malformed', () => {
+      const action: DevDocketAction = {
+        ...createMockAction('bad-min'),
+        minContractVersion: 'latest',
+      };
+      const registerSpy = vi.spyOn(actionRegistry, 'register');
+
+      const disposable = api.registerAction(action);
+
+      expect(registerSpy).toHaveBeenCalledWith(action);
+      expect(actionRegistry.getAction('bad-min')).toBe(action);
+      disposable.dispose();
     });
   });
 
