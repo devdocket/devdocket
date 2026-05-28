@@ -944,42 +944,38 @@ describe('GitHubPrReviewProvider', () => {
 
   describe('getClosedItems', () => {
     it('returns closed/merged PR IDs', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ state: 'closed' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ state: 'closed' }),
-        });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { repository: { pr0: { state: 'CLOSED' }, pr1: { state: 'MERGED' } } },
+        }),
+      });
 
       const result = await provider.getClosedItems!(['owner/repo#10', 'owner/repo#20']);
 
       expect(result).toEqual(['owner/repo#10', 'owner/repo#20']);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/owner/repo/pulls/10',
+        'https://api.github.com/graphql',
         expect.objectContaining({
+          method: 'POST',
           headers: expect.objectContaining({
             Authorization: 'Bearer test-token',
+            'Content-Type': 'application/json',
           }),
         }),
       );
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/owner/repo/pulls/20',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-token',
-          }),
-        }),
-      );
+      const body = JSON.parse(String(mockFetch.mock.calls[0][1].body));
+      expect(body.variables).toEqual({ owner: 'owner', name: 'repo' });
+      expect(body.query).toContain('pr0: pullRequest(number: 10)');
+      expect(body.query).toContain('pr1: pullRequest(number: 20)');
+      expect(body.query).not.toContain('issue(number:');
     });
 
     it('excludes open PRs', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ state: 'open' }),
+        json: async () => ({ data: { repository: { pr0: { state: 'OPEN' } } } }),
       });
 
       const result = await provider.getClosedItems!(['owner/repo#5']);

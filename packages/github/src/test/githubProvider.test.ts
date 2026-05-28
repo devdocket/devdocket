@@ -654,36 +654,31 @@ describe('GitHubIssueProvider', () => {
 
   describe('getClosedItems', () => {
     it('returns closed issue IDs', async () => {
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ state: 'closed' }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ state: 'open' }),
-        });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { repository: { i0: { state: 'CLOSED' }, pr0: null, i1: { state: 'OPEN' }, pr1: null } },
+        }),
+      });
 
       const result = await provider.getClosedItems!(['owner/repo#1', 'owner/repo#2']);
 
       expect(result).toEqual(['owner/repo#1']);
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/owner/repo/issues/1',
+        'https://api.github.com/graphql',
         expect.objectContaining({
+          method: 'POST',
           headers: expect.objectContaining({
             Authorization: 'Bearer test-token',
+            'Content-Type': 'application/json',
           }),
         }),
       );
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/repos/owner/repo/issues/2',
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: 'Bearer test-token',
-          }),
-        }),
-      );
+      const body = JSON.parse(String(mockFetch.mock.calls[0][1].body));
+      expect(body.variables).toEqual({ owner: 'owner', name: 'repo' });
+      expect(body.query).toContain('i0: issue(number: 1)');
+      expect(body.query).toContain('i1: issue(number: 2)');
     });
 
     it('returns empty array when no auth session', async () => {
