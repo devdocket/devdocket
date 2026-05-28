@@ -245,6 +245,7 @@ export class WalkthroughParticipant {
 
       let hasToolCalls = false;
       let streamedTextThisIteration = false;
+      let pendingUnidentifiedCount = 0;
       const assistantParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
       const toolResults: Array<{ callId: string; content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] }> = [];
 
@@ -281,13 +282,12 @@ export class WalkthroughParticipant {
               // Only advance unidentified progress for prompts that move to a
               // new file. Follow-ups like "Go deeper" may re-signal the same
               // phase without presenting the next file.
-              if (
-                unidentifiedCount > 0
-                && streamedTextThisIteration
-                && progress.allFiles.length > 0
-                && isAdvance
-              ) {
-                this.addUnidentifiedPresentations(progress, unidentifiedCount);
+              if (unidentifiedCount > 0 && progress.allFiles.length > 0 && isAdvance) {
+                if (streamedTextThisIteration) {
+                  this.addUnidentifiedPresentations(progress, unidentifiedCount);
+                } else {
+                  pendingUnidentifiedCount += unidentifiedCount;
+                }
               }
               phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
             }
@@ -325,6 +325,10 @@ export class WalkthroughParticipant {
             });
           }
         }
+      }
+
+      if (pendingUnidentifiedCount > 0 && streamedTextThisIteration) {
+        this.addUnidentifiedPresentations(progress, pendingUnidentifiedCount);
       }
 
       this.log.debug(`Iteration ${iterations} complete — ${assistantParts.length} parts, ${toolResults.length} tool results, hasToolCalls: ${hasToolCalls}`);
