@@ -253,6 +253,14 @@ async function main() {
           issues: "write",
           pull_requests: "write",
           metadata: "read",
+          // `workflows: write` is required for `git push` to accept commits
+          // that touch any file under `.github/workflows/`. Without it,
+          // GitHub's pre-receive hook rejects the push with
+          // `refusing to allow a GitHub App to create or update workflow
+          // .github/workflows/<file>.yml without "workflows" permission` —
+          // even when the App definition already grants the permission, the
+          // installation token must explicitly request it for it to apply.
+          workflows: "write",
         },
       },
     },
