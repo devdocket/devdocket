@@ -93,8 +93,12 @@ The API surface is intentionally small:
 import * as vscode from 'vscode';
 
 interface DevDocketApi {
-  /** Semver version of the implemented API contract (e.g. `"1.0.0"`). */
-  readonly contractVersion: string;
+  /**
+   * Semver version of the implemented API contract (e.g. `"1.0.0"`).
+   * Optional at the type level: older DevDocket cores predate this
+   * field and report `undefined` here. The current core always sets it.
+   */
+  readonly contractVersion?: string;
 
   registerProvider(provider: DevDocketProvider): vscode.Disposable;
   registerAction(action: DevDocketAction): vscode.Disposable;
