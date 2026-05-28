@@ -197,6 +197,33 @@ describe('activate()', () => {
     expect(openSpy).toHaveBeenCalled();
   });
 
+  it('refreshes the watch panel when watcher service run events fire', async () => {
+    const api = await activate(context);
+    const watchPanelProvider = context.subscriptions.find(subscription => subscription instanceof WatchPanelProvider);
+    expect(watchPanelProvider).toBeInstanceOf(WatchPanelProvider);
+    const refreshSpy = vi.spyOn(watchPanelProvider as WatchPanelProvider, 'refresh').mockImplementation(() => undefined);
+    const url = 'https://example.com/runs/watch-panel-refresh';
+
+    api.registerRunWatcher({
+      id: 'test-runs',
+      label: 'Test Runs',
+      canWatch: (candidate: string) => candidate === url,
+      parseRunUrl: () => ({
+        providerId: 'test-runs',
+        runId: 'watch-panel-refresh',
+        displayName: 'Watch Panel Refresh',
+        url,
+      }),
+      getRunStatus: vi.fn(async () => ({ overallState: 'running' as const, jobs: [] })),
+    });
+    (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue(url);
+
+    await getCommandHandler('devdocket.watchUrl')();
+    await flushMicrotasks();
+
+    expect(refreshSpy).toHaveBeenCalled();
+  });
+
   it('announces partial-success run completions as succeeded with issues', async () => {
     vi.useFakeTimers();
     const api = await activate(context);

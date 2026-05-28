@@ -282,7 +282,7 @@ describe('webview panel serializers', () => {
       vscode.Uri.file('C:\\repo\\packages\\core') as any,
       createMockWatcherService() as any,
       createMockWorkGraph() as any,
-      createMockProviderRegistry() as any,
+      { getAllProviderItems: () => new Map() } as any,
     );
     const mockPanel = createMockWebviewPanel();
 

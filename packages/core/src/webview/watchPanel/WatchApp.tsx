@@ -237,9 +237,8 @@ function WatchCard({
       postMessage({ type: 'openWatchUrl', url });
     }
   };
-  const hasLinkedSource = Boolean(linkedSourceProviderId && linkedSourceExternalId);
-  const hasLinkedTarget = Boolean(linkedItemId || hasLinkedSource);
-  const hasActions = hasLinkedTarget || dismissible;
+  const hasLinkedItem = Boolean(linkedItemId || (linkedSourceProviderId && linkedSourceExternalId));
+  const hasActions = hasLinkedItem || dismissible;
   const hasDetails = Boolean(onToggleExpanded && children);
   const openLinkedItem = () => {
     if (linkedItemId) {
@@ -307,7 +306,7 @@ function WatchCard({
         </div>
         {hasActions ? (
           <div class="item-actions" role="group" aria-label={`${title} actions`}>
-            {hasLinkedTarget ? (
+            {hasLinkedItem ? (
               <button
                 type="button"
                 class="item-action-btn"
