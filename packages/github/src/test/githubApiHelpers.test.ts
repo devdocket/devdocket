@@ -314,6 +314,28 @@ describe('fetchClosedGitHubItems', () => {
       .rejects.toBeInstanceOf(PollingBackoffError);
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
+
+  it('skips REST fallback items that require SSO without warning', async () => {
+    const mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel as any);
+    const mockFetch = vi.fn(async (url: string) => {
+      if (url === 'https://api.github.com/graphql') {
+        throw new Error('temporary failure');
+      }
+      return makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso' },
+        bodyJson: { message: 'Resource protected by organization SAML enforcement.' },
+      });
+    });
+    vi.stubGlobal('fetch', mockFetch);
+
+    await expect(fetchClosedGitHubItems(['owner/repo#1'], 'issues')).resolves.toEqual([]);
+    expect(mockChannel.warn).not.toHaveBeenCalled();
+    expect(mockChannel.debug).toHaveBeenCalledWith(expect.stringContaining('REST closed-item check after SSO error'));
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('retryWithAuth', () => {

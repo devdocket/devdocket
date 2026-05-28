@@ -733,6 +733,10 @@ async function fetchClosedGitHubItemsRest(
       if (closedId) { closedIds.push(closedId); }
     } catch (error) {
       if (isAbortError(error) || error instanceof PollingBackoffError) { throw error; }
+      if (error instanceof GitHubSsoError) {
+        logger.debug(`Skipping ${apiType} ${item.id} REST closed-item check after SSO error: ${error.message}`);
+        continue;
+      }
       logger.warn(`Worker failed during ${apiType} REST closed-item check: ${String(error)}`);
     }
   }
@@ -757,6 +761,11 @@ async function fetchClosedGitHubItemRest(
     },
   );
   if (!response.ok) {
+    const sso = response.headers?.get?.('x-github-sso') ?? null;
+    if (response.status === 403 && sso) {
+      const { ssoUrl, orgName } = parseGitHubSsoInfo(sso);
+      throw new GitHubSsoError({ ssoUrl, orgName });
+    }
     if (response.status === 403 || response.status === 429 || response.status === 503) {
       await throwApiError(response, `GitHub ${apiType} ${item.id}`);
     }
