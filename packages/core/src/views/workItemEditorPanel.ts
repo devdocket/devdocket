@@ -23,6 +23,11 @@ interface AutosaveData {
   url?: string;
 }
 
+interface AutosaveRequest {
+  requestId?: string;
+  data: AutosaveData;
+}
+
 interface EditorCIWatchContext {
   watch: WatchedPR;
   watchKey: string;
@@ -85,7 +90,7 @@ export class WorkItemEditorPanel {
   private disposed = false;
   private htmlInitialized = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  private pendingData: AutosaveData | undefined;
+  private pendingAutosave: AutosaveRequest | undefined;
   private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
   private readonly workGraphSub: vscode.Disposable;
@@ -306,18 +311,21 @@ export class WorkItemEditorPanel {
         return;
       }
       if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
-        this.pendingData = msg.data as AutosaveData;
+        this.pendingAutosave = {
+          requestId: typeof msg.requestId === 'string' ? msg.requestId : undefined,
+          data: msg.data as AutosaveData,
+        };
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
         }
         this.debounceTimer = setTimeout(() => {
           this.debounceTimer = undefined;
-          const data = this.pendingData;
-          this.pendingData = undefined;
-          if (!data) {
+          const request = this.pendingAutosave;
+          this.pendingAutosave = undefined;
+          if (!request) {
             return;
           }
-          this.enqueueSave(data);
+          this.enqueueSave(request);
         }, 300);
       }
     });
@@ -801,22 +809,40 @@ export class WorkItemEditorPanel {
   }
 
   private flushPendingData(): void {
-    const data = this.pendingData;
-    this.pendingData = undefined;
-    if (data) {
-      this.enqueueSave(data);
+    const request = this.pendingAutosave;
+    this.pendingAutosave = undefined;
+    if (request) {
+      this.enqueueSave(request);
     }
   }
 
-  private enqueueSave(data: AutosaveData): void {
+  private enqueueSave(request: AutosaveRequest): void {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await this.saveData(data);
+        await this.saveData(request.data);
+        this.postAutosaveAck(request.requestId);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        this.postAutosaveError(request.requestId, message);
         vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }
     });
+  }
+
+  private postAutosaveAck(requestId: string | undefined): void {
+    if (!requestId || this.disposed) {
+      return;
+    }
+
+    void this.panel.webview.postMessage({ type: 'autosaveAck', requestId, savedAt: Date.now() });
+  }
+
+  private postAutosaveError(requestId: string | undefined, message: string): void {
+    if (!requestId || this.disposed) {
+      return;
+    }
+
+    void this.panel.webview.postMessage({ type: 'autosaveError', requestId, message });
   }
 
   private async handleTransitionState(itemId: string, targetState: string): Promise<void> {

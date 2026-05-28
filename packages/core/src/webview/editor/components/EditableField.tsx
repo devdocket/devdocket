@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { useEffect, useRef } from 'preact/hooks';
 
 interface EditableFieldProps {
@@ -9,6 +10,7 @@ interface EditableFieldProps {
   multiline?: boolean;
   type?: 'text' | 'url';
   hint?: string;
+  labelAccessory?: ComponentChildren;
 }
 
 export function EditableField({
@@ -20,6 +22,7 @@ export function EditableField({
   multiline,
   type = 'text',
   hint,
+  labelAccessory,
 }: EditableFieldProps) {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
@@ -35,7 +38,12 @@ export function EditableField({
 
   return (
     <label class="editor-field">
-      <span class="editor-field-label">{label}</span>
+      <span class="editor-field-label-row">
+        <span class="editor-field-label">{label}</span>
+        {labelAccessory !== undefined ? (
+          <span class="editor-field-label-accessory" role="status" aria-live="polite">{labelAccessory}</span>
+        ) : null}
+      </span>
       {multiline ? (
         <textarea
           ref={textareaRef}
@@ -43,7 +51,7 @@ export function EditableField({
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
-          onInput={event => onInput?.((event.currentTarget as HTMLTextAreaElement).value)}
+          onInput={event => onInput?.((event.target as HTMLTextAreaElement).value)}
         />
       ) : (
         <input
@@ -52,7 +60,7 @@ export function EditableField({
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
-          onInput={event => onInput?.((event.currentTarget as HTMLInputElement).value)}
+          onInput={event => onInput?.((event.target as HTMLInputElement).value)}
         />
       )}
       {hint ? <span class="editor-field-hint">{hint}</span> : null}

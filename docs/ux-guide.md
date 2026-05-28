@@ -70,7 +70,7 @@ Clicking a non-incoming work item opens the editor in a tab. It contains:
 - A **Notes** section (auto-saving textarea) for your own notes — hidden when previewing an unaccepted incoming item.
 - A collapsible **Activity Log** that records every state transition, action invocation, version change, etc.
 
-The editor auto-saves as you type — there is no save button.
+The editor auto-saves as you type and shows Notes save state inline: pending edits, Saving…, Saved with a relative timestamp, or an inline error with Retry. Press Ctrl/Cmd+S while editing to flush any pending autosave immediately — there is no separate save button.
 
 ### Incoming preview panel
 

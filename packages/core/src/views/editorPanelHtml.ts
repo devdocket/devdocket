@@ -389,7 +389,8 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
     }
 
-    .editor-field {
+    .editor-field,
+    .editor-notes-field {
       display: flex;
       flex-direction: column;
       gap: 6px;
@@ -399,8 +400,50 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       grid-column: 1 / -1;
     }
 
+    .editor-field-label-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
     .editor-field-label {
       font-weight: 600;
+    }
+
+    .editor-field-label-accessory {
+      margin-left: auto;
+    }
+
+    .editor-autosave-indicator {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      font-weight: 400;
+      white-space: nowrap;
+    }
+
+    .editor-autosave-indicator--error {
+      color: var(--vscode-errorForeground, #f14c4c);
+    }
+
+    .editor-autosave-error {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 10px;
+      border: 1px solid rgba(241, 76, 76, 0.35);
+      border-radius: 6px;
+      background: var(--vscode-inputValidation-errorBackground, rgba(241, 76, 76, 0.10));
+      color: var(--vscode-inputValidation-errorForeground, var(--vscode-errorForeground, #f14c4c));
+      font-size: 12px;
+    }
+
+    .editor-autosave-retry {
+      min-height: 28px;
+      padding: 0 10px;
+      flex: none;
     }
 
     .editor-input {

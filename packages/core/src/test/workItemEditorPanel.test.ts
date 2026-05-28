@@ -779,14 +779,15 @@ describe('WorkItemEditorPanel', () => {
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.showWatchesQuickPick');
   });
 
-  it('debounces autosave and saves manual fields', async () => {
-    vi.useFakeTimers();
+  it('debounces autosave, saves manual fields, and acknowledges the request', async () => {
+    vi.useFakeTimers({ now: 1234 });
     const item = makeItem({ title: 'Original' });
     const workGraph = createMockWorkGraph(item);
     const { mock } = openPanel(item, workGraph);
 
     mock.simulateMessage({
       type: 'autosave',
+      requestId: 'save-1',
       data: {
         title: ' Updated title ',
         notes: ' Some notes ',
@@ -800,6 +801,11 @@ describe('WorkItemEditorPanel', () => {
       title: 'Updated title',
       notes: 'Some notes',
       url: 'https://example.com/items/1',
+    });
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveAck',
+      requestId: 'save-1',
+      savedAt: expect.any(Number),
     });
   });
 
@@ -841,6 +847,29 @@ describe('WorkItemEditorPanel', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Draft note' });
+  });
+
+  it('posts autosaveError when saving fails', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    workGraph.updateItem.mockRejectedValueOnce(new Error('disk full'));
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      requestId: 'save-error',
+      data: { notes: ' Draft note ' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveError',
+      requestId: 'save-error',
+      message: 'disk full',
+    });
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to save work item: disk full');
   });
 
   it('only saves notes for provider-managed items', async () => {

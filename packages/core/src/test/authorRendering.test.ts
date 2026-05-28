@@ -235,7 +235,7 @@ describe('EditorApp author annotation', () => {
       await vi.advanceTimersByTimeAsync(500);
     });
 
-    expect(postMessage).toHaveBeenLastCalledWith({ type: 'autosave', data: { notes: 'Draft note' } });
+    expect(postMessage).toHaveBeenLastCalledWith({ type: 'autosave', requestId: 'autosave-1', data: { notes: 'Draft note' } });
   });
 
   it('posts acceptAndRunAction for incoming preview inline actions', async () => {
