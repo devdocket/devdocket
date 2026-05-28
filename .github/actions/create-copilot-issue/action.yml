@@ -30,8 +30,13 @@ inputs:
     required: true
   copilot-assign-token:
     description: >
-      Token with permissions for the agent_assignment API.
-      Falls back to github-token if not provided.
+      Token with permissions for the agent_assignment API. Must be a user PAT
+      or OAuth token — GitHub App installation tokens are rejected by both the
+      agent_assignment API and the plain assignees endpoint with
+      "Assigning agents is not supported with GitHub App installation tokens".
+      Falls back to github-token if not provided, but the fallback will fail
+      the assignment step (and trigger the manual-assignment comment) if
+      github-token is an App installation token.
     required: false
     default: ''
   github-token:
