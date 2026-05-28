@@ -42,6 +42,13 @@ export function App() {
   const announcementFrameRef = useRef<number | undefined>(undefined);
   const myWorkFilterActiveRef = useRef(false);
   const lastNoResultsAnnouncementRef = useRef<TabQueries>(emptyQueries);
+  // Declared up-front (not next to its sibling refs below) because the
+  // window-level keydown handler installed in the mount effect references
+  // `multiSelectionRef.current` to read the latest selection without
+  // re-installing the listener. Keeping the declaration here avoids TS's
+  // "used before its declaration" diagnostic on the closure capture.
+  const multiSelectionRef = useRef(multiSelection);
+  multiSelectionRef.current = multiSelection;
   // Re-render on VS Code theme changes so badge / tier colors update live.
   useThemeChangeCounter();
 
@@ -232,8 +239,6 @@ export function App() {
   activeTabRef.current = activeTab;
   const searchBoxVisibleRef = useRef(searchBoxVisible);
   searchBoxVisibleRef.current = searchBoxVisible;
-  const multiSelectionRef = useRef(multiSelection);
-  multiSelectionRef.current = multiSelection;
   const queriesRef = useRef(queries);
   queriesRef.current = queries;
   const appliedQueriesRef = useRef(appliedQueries);
