@@ -33,6 +33,16 @@ interface ItemCardProps {
    * selection drives `aria-current`.
    */
   isInMultiSelection?: boolean;
+  /**
+   * True when this card lives in a listbox that supports multi-selection
+   * (i.e. one of the My Work tiers). Used to drive `aria-selected` semantics:
+   * in a multi-select listbox `aria-selected` reflects the listbox's
+   * selection state (multi-selection), not the editor/preview selection
+   * (which is exposed via `aria-current`). In a single-select listbox we
+   * keep the legacy behavior of mirroring `item.isSelected` so non-bulk
+   * tiers still announce a selected option.
+   */
+  isMultiSelectListbox?: boolean;
 }
 
 export interface ClickModifiers {
@@ -67,6 +77,7 @@ export function ItemCard({
   disableDragReorder = false,
   query,
   isInMultiSelection = false,
+  isMultiSelectListbox = false,
 }: ItemCardProps) {
   const actions = getItemActions(item, onAccept, onAcceptToFocus, onDismiss, onTransition);
   const isDraggable = !disableDragReorder && (item.tierType === 'readyToStart' || item.tierType === 'inProgress');
@@ -186,7 +197,7 @@ export function ItemCard({
       tabIndex={tabIndex}
       draggable={isDraggable}
       aria-label={buildItemAriaLabel(item, isInMultiSelection)}
-      aria-selected={isInMultiSelection || (item.isSelected ?? false)}
+      aria-selected={isMultiSelectListbox ? isInMultiSelection : (item.isSelected ?? false)}
       aria-current={item.isSelected ? 'true' : undefined}
       onClick={(event) => onClick({ shift: event.shiftKey, toggle: event.ctrlKey || event.metaKey })}
       onKeyDown={handleKeyDown}

@@ -373,6 +373,7 @@ export function TierSection({
                 onMoveTierFocus={focusTierHeader}
                 onClick={(modifiers) => onItemClick(item.id, modifiers)}
                 isInMultiSelection={multiSelectionIds?.has(item.id) ?? false}
+                isMultiSelectListbox={isMultiSelectTier(tier.id)}
                 onAccept={onAcceptItem}
                 onAcceptToFocus={onAcceptToFocus}
                 onDismiss={onDismissItem}
