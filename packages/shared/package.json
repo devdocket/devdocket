@@ -1,6 +1,6 @@
 {
   "name": "@devdocket/shared",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Shared types, base classes, and utilities for DevDocket extensions",
   "license": "MIT",
   "repository": {
