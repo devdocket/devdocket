@@ -862,6 +862,109 @@ describe('WalkthroughParticipant', () => {
       expect((freshResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
+    it('derives lastFile from advance-prompt count when the model never calls signalPhase (3-file PR, real-world Claude Opus 4.7 trace)', async () => {
+      // Reproduces the user-reported bug: 3-file PR, model writes walkthrough
+      // prose for each file but never invokes devdocket-signalPhase. We rely on
+      // counting deterministic followup-button prompts ("Start the walkthrough",
+      // "Continue to the next file") to estimate how many files have been
+      // presented, independently of whether the model cooperates.
+      vi.mocked(gitExec).mockResolvedValue('src/a.ts\nsrc/b.ts\nsrc/c.ts\n');
+      const silentModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Walking through a file. No phase signal.');
+          })(),
+        })),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      // Turn 1: initial summary request.
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', silentModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      // Turn 2: user clicks "Start the walkthrough" → file 1 of 3.
+      const turn2 = await handler(
+        createMockRequest('Start the walkthrough', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+      expect((turn2 as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((turn2 as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(2);
+
+      // Turn 3: "Continue to the next file" → file 2 of 3.
+      const turn3 = await handler(
+        createMockRequest('Continue to the next file', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+      expect((turn3 as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((turn3 as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+
+      // Turn 4: "Continue to the next file" → file 3 of 3 → should derive lastFile
+      // and surface the "Wrap up" follow-ups instead of yet another "Next file".
+      const turn4 = await handler(
+        createMockRequest('Continue to the next file', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+          new ChatRequestTurn('Continue to the next file'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+      expect((turn4 as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((turn4 as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('does not count "Go deeper" or "Adjust the reading order" as advance prompts', async () => {
+      // Non-advance prompts must not bump the advance counter, otherwise we'd
+      // race past the actual last file. allFiles = 2, only 1 real advance
+      // ("Start the walkthrough") → remaining must stay at 1, not collapse to 0.
+      const silentModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Some commentary.');
+          })(),
+        })),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      // Pre-build context as if the user has already started the walkthrough
+      // (turn 1: PR URL, turn 2: Start) and now clicks "Go deeper".
+      const result = await handler(
+        createMockRequest('Go deeper — show callers and related code', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+
+      // Advance prompts seen: only "Start the walkthrough" (counted) — the
+      // current "Go deeper" prompt is non-advance and the URL prompt is also
+      // non-advance. So advanceCount = 1, remaining = 2 - 1 = 1.
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
     it('does not downgrade a model-reported lastFile phase when files appear to remain', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({

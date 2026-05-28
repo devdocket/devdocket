@@ -126,6 +126,7 @@ export class WalkthroughParticipant {
     }
 
     const progress = await this.getOrCreateProgress(prUrl, info, context.history.length === 0);
+    const advanceCount = this.countAdvancePrompts(request.prompt, context.history);
 
     // Build system prompt
     const systemPrompt = buildWalkthroughPrompt(info);
@@ -279,7 +280,7 @@ export class WalkthroughParticipant {
               if (identifiedCount === 0 && progress.allFiles.length > 0 && this.isAdvancePrompt(request.prompt)) {
                 progress.unidentifiedPresentations++;
               }
-              phase = this.deriveFileWalkthroughPhase(phase, progress);
+              phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
             }
             toolResults.push({
               callId: part.callId,
@@ -356,13 +357,18 @@ export class WalkthroughParticipant {
     }
     // Final safety net: re-derive the phase from observable progress regardless of
     // whether signalPhase fired this turn. If the model said 'walkthrough' but every
-    // file has been presented (or accounted for via unidentified presentations), the
-    // correct follow-up set is the lastFile one.
+    // file has been presented (or accounted for via the per-turn advance counter),
+    // the correct follow-up set is the lastFile one.
     if (this.isFileWalkthroughPhase(phase)) {
-      phase = this.deriveFileWalkthroughPhase(phase, progress);
+      phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
     }
-    const remainingFiles = this.getRemainingFiles(progress);
-    this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
+    const remainingFiles = this.getRemainingFiles(progress, advanceCount);
+    this.log.info(
+      `handleRequest complete — final phase: ${phase}, total iterations: ${iterations}, ` +
+      `allFiles=${progress.allFiles.length}, presented=${progress.presentedFiles.length}, ` +
+      `unidentified=${progress.unidentifiedPresentations}, advanceCount=${advanceCount}, ` +
+      `remaining=${remainingFiles}`,
+    );
     return {
       metadata: {
         phase,
@@ -475,25 +481,89 @@ export class WalkthroughParticipant {
     return suffixMatches.length === 1 ? suffixMatches[0] : undefined;
   }
 
-  private deriveFileWalkthroughPhase(phase: string, progress: WalkthroughProgress): string {
+  private deriveFileWalkthroughPhase(
+    phase: string,
+    progress: WalkthroughProgress,
+    advanceCount: number,
+  ): string {
     if (phase === 'lastFile') {
       return phase;
     }
     if (phase !== 'walkthrough' || progress.allFiles.length === 0) {
       return phase;
     }
-    return this.getRemainingFiles(progress) === 0 ? 'lastFile' : phase;
+    return this.getRemainingFiles(progress, advanceCount) === 0 ? 'lastFile' : phase;
   }
 
-  private getRemainingFiles(progress: WalkthroughProgress): number | undefined {
+  private getRemainingFiles(progress: WalkthroughProgress, advanceCount: number): number | undefined {
     if (progress.allFiles.length === 0) {
       return undefined;
     }
     const presented = new Set(progress.presentedFiles);
     const identifiedRemaining = progress.allFiles.filter(file => !presented.has(file)).length;
-    // Subtract unidentified presentations as a coarse credit toward "we did
-    // present something this turn, we just couldn't pin down which file."
-    return Math.max(0, identifiedRemaining - progress.unidentifiedPresentations);
+    // Estimate total presentations from the strongest available signal:
+    //   - `presented.size + unidentifiedPresentations` — model-driven (signalPhase paths
+    //     plus unmatched signalPhase calls); only useful when the model actually calls
+    //     signalPhase.
+    //   - `advanceCount` — user-driven: counts the user prompts that advance the
+    //     walkthrough (button clicks like "Start the walkthrough" / "Continue to the
+    //     next file", plus any custom user text that isn't a recognised non-advance
+    //     action). This signal is independent of model behavior, so it still works
+    //     when the model ignores signalPhase entirely.
+    // Take the max so the strongest evidence wins.
+    const totalPresented = Math.max(
+      progress.presentedFiles.length + progress.unidentifiedPresentations,
+      advanceCount,
+    );
+    // Credit any presentations beyond the identified set toward unidentified files.
+    const unidentifiedCredit = Math.max(0, totalPresented - progress.presentedFiles.length);
+    return Math.max(0, identifiedRemaining - unidentifiedCredit);
+  }
+
+  /**
+   * Pattern matching prompts that do NOT advance the file walkthrough by one file.
+   * Anchored to the start so user free-form text after the prefix (e.g. "Walk me
+   * through https://...") is still matched.
+   *
+   * The PR-URL pattern is also treated as non-advance because a brand-new walkthrough
+   * request shouldn't count.
+   */
+  private static readonly NON_ADVANCE_PROMPT_PATTERN =
+    /^(Adjust the reading order|Go deeper|Skip to the wrap-up summary|Walk me through)/i;
+
+  /**
+   * Count how many user prompts (including the current one) are file-advance signals
+   * — i.e. prompts triggered by clicking "Start the walkthrough" or "Continue to the
+   * next file", or any free-form user prompt that isn't a recognised non-advance
+   * action.
+   *
+   * This is the user-driven lower bound on "how many files have been presented in
+   * this session". It's robust to models that ignore the signalPhase tool entirely
+   * (which Claude Opus 4.7 does, per observed behaviour) because the button prompts
+   * we emit are deterministic.
+   *
+   * Over-counting (e.g. when a user types a clarifying question instead of clicking
+   * a button) is the safe direction: it surfaces wrap-up buttons earlier rather than
+   * the bug of "Next file" persisting on the actual last file.
+   */
+  private countAdvancePrompts(currentPrompt: string, history: readonly unknown[]): number {
+    const prompts: string[] = [];
+    for (const turn of history) {
+      if (turn instanceof vscode.ChatRequestTurn) {
+        prompts.push(turn.prompt);
+      }
+    }
+    prompts.push(currentPrompt);
+
+    let count = 0;
+    for (const raw of prompts) {
+      const trimmed = (raw ?? '').trim();
+      if (!trimmed) continue;
+      if (WalkthroughParticipant.NON_ADVANCE_PROMPT_PATTERN.test(trimmed)) continue;
+      if (PR_URL_PATTERN.test(trimmed)) continue;
+      count++;
+    }
+    return count;
   }
 
   private extractPrUrl(
