@@ -133,7 +133,7 @@ import { CONTRACT_VERSION } from '@devdocket/shared';
 const provider: DevDocketProvider = {
   id: 'my-provider',
   label: 'My Provider',
-  minContractVersion: '1.2.0', // requires DevDocket core >= 1.2.0
+  minContractVersion: CONTRACT_VERSION, // requires DevDocket core >= the version this build targets
   onDidDiscoverItems: emitter.event,
   async refresh() { /* … */ },
 };
