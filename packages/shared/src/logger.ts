@@ -121,3 +121,38 @@ export function createLoggerService(): LoggerService {
 
   return { logger, initLogger, setLogLevel };
 }
+
+/**
+ * Creates a module-level logger pair: a {@link Logger} that delegates to a
+ * swappable active logger, and a `setLogger` function to swap it.
+ *
+ * Intended for use in provider/action packages that need a module-level
+ * logger singleton wired up during extension activation. The logger starts
+ * as a no-op and forwards all calls once `setLogger` is called.
+ *
+ * @returns `{ logger, setLogger }` — call `setLogger(log)` during activation
+ * to attach a VS Code output channel or any other {@link Logger} implementation.
+ */
+export function createModuleLogger(): { logger: Logger; setLogger: (log: Logger) => void } {
+  const noopLogger: Logger = {
+    debug: () => undefined,
+    info: () => undefined,
+    warn: () => undefined,
+    error: () => undefined,
+  };
+
+  let activeLogger: Logger = noopLogger;
+
+  const logger: Logger = {
+    debug: (message: string, ...args: unknown[]) => activeLogger.debug(message, ...args),
+    info: (message: string, ...args: unknown[]) => activeLogger.info(message, ...args),
+    warn: (message: string, ...args: unknown[]) => activeLogger.warn(message, ...args),
+    error: (message: string, ...args: unknown[]) => activeLogger.error(message, ...args),
+  };
+
+  function setLogger(log: Logger): void {
+    activeLogger = log;
+  }
+
+  return { logger, setLogger };
+}
