@@ -15,7 +15,7 @@ Once an item is in the In Progress tier, hover it for these actions:
 - **⏸ Pause** — temporarily set it aside (e.g. waiting for feedback); the item moves to the **Paused** tier
 - **✓ Complete** — mark it done; the item moves to the **Done** tier
 
-Items in the **Paused** tier expose a **▶ Resume** hover action that returns them to In Progress.
+Items in the **Paused** tier expose a **▶ Resume** hover action that returns them to their previous tier — In Progress if they were paused from there, or Ready to Start if they were paused from the queue.
 
 You can drag items within the In Progress tier (and Ready to Start tier) to reorder by importance.
 
