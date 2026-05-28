@@ -19,6 +19,40 @@ function statusToBadge(status: string): ProviderBadge | undefined {
   }
 }
 
+/** Builds a {@link ProviderItem} for a single GitHub PR. */
+function buildPrItem(
+  pr: GitHubIssue,
+  repoName: string,
+  status: string,
+  relatedItems: RelatedItemRef[] | undefined,
+  authored: boolean,
+): ProviderItem {
+  const statusBadge = statusToBadge(status);
+  return {
+    externalId: `${repoName}#${pr.number}`,
+    title: `#${pr.number}: ${pr.title}`,
+    description: pr.body ?? undefined,
+    url: pr.html_url,
+    ...(pr.user?.login ? {
+      author: {
+        displayName: pr.user.login,
+        handle: pr.user.login,
+        avatarUrl: pr.user.avatar_url,
+        profileUrl: pr.user.html_url,
+      },
+    } : {}),
+    ...(authored ? { authored: true } : {}),
+    group: repoName,
+    reason: authored ? 'You authored this PR' : 'You are assigned to this PR',
+    state: status,
+    canonicalId: `github:pull:${repoName}#${pr.number}`,
+    itemType: 'pr',
+    capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
+    ...(relatedItems ? { relatedItems } : {}),
+    ...(statusBadge ? { badges: [statusBadge] } : {}),
+  };
+}
+
 export interface PrDetail extends GitHubPrMergeFields {
   draft?: boolean;
   head?: { sha?: string };
@@ -127,62 +161,15 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const items: ProviderItem[] = [];
     for (const pr of filteredAuthored) {
       const repoName = repoNameMap.get(pr.html_url)!;
-      const externalId = `${repoName}#${pr.number}`;
       const status = statusMap.get(pr.html_url) ?? 'Open';
-      const statusBadge = statusToBadge(status);
-      const relatedItems = relatedItemsMap.get(externalId);
-      items.push({
-        externalId,
-        title: `#${pr.number}: ${pr.title}`,
-        description: pr.body ?? undefined,
-        url: pr.html_url,
-        ...(pr.user?.login ? {
-          author: {
-            displayName: pr.user.login,
-            handle: pr.user.login,
-            avatarUrl: pr.user.avatar_url,
-            profileUrl: pr.user.html_url,
-          },
-        } : {}),
-        authored: true,
-        group: repoName,
-        reason: 'You authored this PR',
-        state: status,
-        canonicalId: `github:pull:${repoName}#${pr.number}`,
-        itemType: 'pr',
-        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
-        ...(relatedItems ? { relatedItems } : {}),
-        ...(statusBadge ? { badges: [statusBadge] } : {}),
-      });
+      const relatedItems = relatedItemsMap.get(`${repoName}#${pr.number}`);
+      items.push(buildPrItem(pr, repoName, status, relatedItems, true));
     }
     for (const pr of filteredAssigned) {
       const repoName = repoNameMap.get(pr.html_url)!;
-      const externalId = `${repoName}#${pr.number}`;
       const status = statusMap.get(pr.html_url) ?? 'Open';
-      const statusBadge = statusToBadge(status);
-      const relatedItems = relatedItemsMap.get(externalId);
-      items.push({
-        externalId,
-        title: `#${pr.number}: ${pr.title}`,
-        description: pr.body ?? undefined,
-        url: pr.html_url,
-        ...(pr.user?.login ? {
-          author: {
-            displayName: pr.user.login,
-            handle: pr.user.login,
-            avatarUrl: pr.user.avatar_url,
-            profileUrl: pr.user.html_url,
-          },
-        } : {}),
-        group: repoName,
-        reason: 'You are assigned to this PR',
-        state: status,
-        canonicalId: `github:pull:${repoName}#${pr.number}`,
-        itemType: 'pr',
-        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
-        ...(relatedItems ? { relatedItems } : {}),
-        ...(statusBadge ? { badges: [statusBadge] } : {}),
-      });
+      const relatedItems = relatedItemsMap.get(`${repoName}#${pr.number}`);
+      items.push(buildPrItem(pr, repoName, status, relatedItems, false));
     }
 
     this.publishProviderItems(items, patterns);

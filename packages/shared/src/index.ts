@@ -2,7 +2,7 @@
  * Shared types and utilities used across all DevDocket packages.
  * @module @devdocket/shared
  */
-export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './logger';
+export { createLoggerService, createModuleLogger, LogLevel, resolveLogLevel, serializeArg } from './logger';
 export type { Logger, LogOutput, LoggerService } from './logger';
 export { BaseProvider } from './baseProvider';
 export type { ProviderItem, ProviderItemAuthor, ProviderItemCapabilities, Disposable, Event, EventEmitterLike, GitWorkInfo, ProviderBadge, RelatedItemRef, ResolvedUrlResult, WindowStateProvider } from './baseProvider';
