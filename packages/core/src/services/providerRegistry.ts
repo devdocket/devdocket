@@ -63,7 +63,7 @@ export class ProviderRegistry {
   private readonly providerItems = new Map<string, ProviderItem[]>();
   private readonly mergedProviderItems = new Map<string, ProviderItem[]>();
   private readonly syntheticProviderItems = new Map<string, Map<string, ProviderItem>>();
-  private allProviderItemsCache: Map<string, ProviderItem[]> | undefined;
+  private allProviderItemsCache: ReadonlyMap<string, readonly ProviderItem[]> | undefined;
   private readonly rehydratedImportedItems = new Map<string, Set<string>>();
   private readonly _onDidChangeProviderItems = new vscode.EventEmitter<string | undefined>();
   /** Fired whenever any provider's provider items change, with the provider ID when known. */
@@ -437,11 +437,11 @@ export class ProviderRegistry {
    *
    * @returns A map keyed by provider ID, with each value being the provider's provider items.
    */
-  getAllProviderItems(): Map<string, ProviderItem[]> {
+  getAllProviderItems(): ReadonlyMap<string, readonly ProviderItem[]> {
     if (!this.allProviderItemsCache) {
       this.allProviderItemsCache = new Map(Array.from(this.providers.keys(), providerId => [providerId, this.getProviderItems(providerId)]));
     }
-    return new Map(this.allProviderItemsCache);
+    return this.allProviderItemsCache;
   }
 
   /**

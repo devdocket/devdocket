@@ -852,6 +852,35 @@ describe('ProviderRegistry', () => {
     expect(all.get('jira')).toHaveLength(1);
   });
 
+  it('returns the same all-provider-items map on consecutive cache hits', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([{ externalId: '1', title: 'GH item' }]);
+
+    const first = registry.getAllProviderItems();
+    const second = registry.getAllProviderItems();
+
+    expect(second).toBe(first);
+  });
+
+  it('invalidates the all-provider-items map cache after provider items update', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([{ externalId: '1', title: 'GH item' }]);
+    await vi.waitFor(() => expect(registry.getAllProviderItems().get('gh')).toEqual([
+      expect.objectContaining({ externalId: '1' }),
+    ]));
+    const first = registry.getAllProviderItems();
+
+    provider.fireItems([{ externalId: '2', title: 'Updated GH item' }]);
+    await vi.waitFor(() => expect(registry.getAllProviderItems().get('gh')).toEqual([
+      expect.objectContaining({ externalId: '2' }),
+    ]));
+    const second = registry.getAllProviderItems();
+
+    expect(second).not.toBe(first);
+  });
+
   it('fires onDidAddNewUnseenItems with count of newly unseen items', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);

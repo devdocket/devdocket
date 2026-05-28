@@ -67,13 +67,13 @@ export function resolveRelatedItemsFor(
 export function buildRelatedItemsIndex(
   registry: ProviderRegistry,
   workGraph: WorkGraph,
-  providerItems: Map<string, ProviderItem[]> = registry.getAllProviderItems(),
+  providerItems?: ReadonlyMap<string, readonly ProviderItem[]>,
 ): RelatedItemsIndex {
-  return buildRelatedItemsIndexForDiscovered(providerItems, workGraph);
+  return buildRelatedItemsIndexForDiscovered(providerItems ?? registry.getAllProviderItems(), workGraph);
 }
 
 function buildRelatedItemsIndexForDiscovered(
-  providerItems: Map<string, ProviderItem[]>,
+  providerItems: ReadonlyMap<string, readonly ProviderItem[]>,
   workGraph: WorkGraph,
 ): RelatedItemsIndex {
   const signature = getRelatedItemsIndexSignature(providerItems, workGraph);
@@ -158,7 +158,7 @@ export function clearRelatedItemsIndexCacheForTests(): void {
   relatedItemsIndexCache = new WeakMap<WorkGraph, RelatedItemsIndexCacheEntry>();
 }
 
-function getRelatedItemsIndexSignature(providerItems: Map<string, ProviderItem[]>, workGraph: WorkGraph): RelatedItemsIndexSignature {
+function getRelatedItemsIndexSignature(providerItems: ReadonlyMap<string, readonly ProviderItem[]>, workGraph: WorkGraph): RelatedItemsIndexSignature {
   let hash = 2166136261;
   let itemCount = 0;
   let refCount = 0;
@@ -233,7 +233,7 @@ function resolveReverseRefsForUndiscovered(
   providerId: string,
   externalId: string,
   itemType: RelatedItemRef['itemType'],
-  providerItems: Map<string, ProviderItem[]>,
+  providerItems: ReadonlyMap<string, readonly ProviderItem[]>,
   workGraph: WorkGraph,
 ): ResolvedRelatedItem[] {
   const resolved = new Map<string, ResolvedRelatedItemWithSort>();
@@ -269,7 +269,7 @@ function resolveReverseRefsForUndiscovered(
   return toPublicResolvedItems(resolved);
 }
 
-function buildProviderItemsByRef(providerItems: Map<string, ProviderItem[]>, workGraph: WorkGraph): Map<string, ProviderItemMatch[]> {
+function buildProviderItemsByRef(providerItems: ReadonlyMap<string, readonly ProviderItem[]>, workGraph: WorkGraph): Map<string, ProviderItemMatch[]> {
   const providerItemsByRef = new Map<string, ProviderItemMatch[]>();
   const discoveredProvenance = new Set<string>();
   for (const [providerId, items] of providerItems) {
@@ -334,7 +334,7 @@ function getOrCreateResolvedSet(
 }
 
 function findProviderItem(
-  providerItems: Map<string, ProviderItem[]>,
+  providerItems: ReadonlyMap<string, readonly ProviderItem[]>,
   providerId: string,
   externalId: string,
 ): ProviderItem | undefined {
