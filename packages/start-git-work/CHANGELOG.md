@@ -1,5 +1,24 @@
 # DevDocket Start Git Work
 
+## 0.2.0
+
+### Minor Changes
+
+- [#673 Surface Start Git Work earlier in the work item flow](https://github.com/devdocket/devdocket/pull/673) [`c52f74c`](https://github.com/devdocket/devdocket/commit/c52f74c02f096099f3e82ce651a5e72f45e11f50) - Show Start Git Work earlier in the DevDocket flow by surfacing it for Ready to Start items and directly in Incoming previews.
+
+### Patch Changes
+
+- [#659 Make Start Git Work cancellation-aware](https://github.com/devdocket/devdocket/pull/659) [`f03b402`](https://github.com/devdocket/devdocket/commit/f03b40203818b95cc3a33379af328814ed04892c) - Add a shared `abortFromToken` helper and let Start Git Work flows be cancelled while surfacing cleanup guidance for partially created worktrees.
+
+- [#686 Include licenses in extension packages](https://github.com/devdocket/devdocket/pull/686) [`ed9d196`](https://github.com/devdocket/devdocket/commit/ed9d1965c766ccb2f7d9b67288ce709efce3d06b) - Generate each extension VSIX's LICENSE from the repository root license at package time so shipped artifacts carry the license without committing duplicate copies.
+
+- [#661 Unify URL-resolve results with ProviderItem metadata](https://github.com/devdocket/devdocket/pull/661) [`22e4496`](https://github.com/devdocket/devdocket/commit/22e4496d38f1f027e71f1665a1995491c7ef2fd9) - Unify provider URL resolution with ProviderItem so imported items keep provider capabilities and metadata, enable Start Git Work for GitHub URL-imported issues and pull requests, and replace `ResolvedItem` / `ProviderResolvedItem` with `ResolvedUrlResult` for the registry-level pairing of `providerId` plus resolved item. Provider `resolveUrl` implementations now return `ProviderItem` directly, while `ProviderRegistry.resolveUrl` returns `ResolvedUrlResult`. Also fixes Azure DevOps pull requests imported by URL so Start Git Work can use provider-supplied git metadata across reloads, and accepts valid Azure DevOps HTTPS clone URLs during PR checkout.
+
+Migration notes: remove `ResolvedItem` and `ProviderResolvedItem` imports, update provider `resolveUrl` implementations to return `Promise<ProviderItem | undefined>`, and if you consume registry-level URL resolution use the new exported `ResolvedUrlResult` shape: `{ providerId, item }`. Ensure your resolved `ProviderItem` still sets `url` so imported work items link back to the source. Notes seeding for URL-created work items now comes from `item.description` in the core URL-import flow instead of a dedicated type field, so providers can no longer return a distinct notes seed separate from `description`.
+
+- Updated dependencies [[`f03b402`](https://github.com/devdocket/devdocket/commit/f03b40203818b95cc3a33379af328814ed04892c), [`1ec2cab`](https://github.com/devdocket/devdocket/commit/1ec2caba27ca7bbfc31de5e4dbe23b8443762540), [`b7b0c5e`](https://github.com/devdocket/devdocket/commit/b7b0c5ec5e5c7e315d6bcc3796d18b6b43030831), [`614a27a`](https://github.com/devdocket/devdocket/commit/614a27a63cf4fd88a4dac2c7649e74a03cdbf28a), [`7187dc7`](https://github.com/devdocket/devdocket/commit/7187dc7dede610ebc9bd4fae1ac95060550add47), [`c52f74c`](https://github.com/devdocket/devdocket/commit/c52f74c02f096099f3e82ce651a5e72f45e11f50), [`22e4496`](https://github.com/devdocket/devdocket/commit/22e4496d38f1f027e71f1665a1995491c7ef2fd9)]:
+  - @devdocket/shared@0.3.0
+
 ## 0.1.2
 
 ### Patch Changes
