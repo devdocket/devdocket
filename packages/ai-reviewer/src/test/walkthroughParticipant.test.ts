@@ -885,7 +885,7 @@ describe('WalkthroughParticipant', () => {
       vi.mocked(gitExec).mockResolvedValue('src/first.ts\nsrc/second.ts\nsrc/third.ts');
 
       const signalingFirstModel = {
-        sendRequest: vi.fn().mockResolvedValue({
+        sendRequest: vi.fn().mockImplementation(() => ({
           stream: (async function* () {
             yield new LanguageModelTextPart('First file analysis.');
             yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
@@ -893,14 +893,14 @@ describe('WalkthroughParticipant', () => {
               filePath: 'src/first.ts',
             });
           })(),
-        }),
+        })),
       };
       const silentModel = {
-        sendRequest: vi.fn().mockResolvedValue({
+        sendRequest: vi.fn().mockImplementation(() => ({
           stream: (async function* () {
             yield new LanguageModelTextPart('Next file analysis (model does not call signalPhase).');
           })(),
-        }),
+        })),
       };
 
       participant.register();
