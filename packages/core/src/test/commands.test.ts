@@ -77,20 +77,60 @@ function selectErrorAction(label: string): void {
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'acceptManyFromInbox' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
-  return {
+  const graph = {
     transitionState: vi.fn(),
     getItem: vi.fn(),
     createItem: vi.fn(async () => createWorkItem()),
     findItemByProvenance: vi.fn(),
+    acceptManyFromInbox: vi.fn(),
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
     clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
     addActivity: vi.fn(),
   };
+  graph.acceptManyFromInbox.mockImplementation(async (items: InboxItem[]) => {
+    const accepted: Array<{ input: InboxItem; item: WorkItem; created: boolean; reopenedFrom?: WorkItemState }> = [];
+    const failures: Array<{ input: InboxItem; error: unknown }> = [];
+    const createdItemIds: string[] = [];
+    const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
+
+    for (const item of items) {
+      const existing = graph.findItemByProvenance(item.providerId, item.externalId);
+      if (existing) {
+        if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+          const originalState = existing.state;
+          try {
+            await graph.transitionState(existing.id, WorkItemState.New);
+            reopenedItems.push({ id: existing.id, originalState });
+            accepted.push({ input: item, item: { ...existing, state: WorkItemState.New }, created: false, reopenedFrom: originalState });
+          } catch (error: unknown) {
+            failures.push({ input: item, error });
+          }
+          continue;
+        }
+        accepted.push({ input: item, item: existing, created: false });
+        continue;
+      }
+
+      try {
+        const created = await graph.createItem(
+          { title: item.title, description: item.description },
+          { providerId: item.providerId, externalId: item.externalId, itemType: item.itemType, url: item.url, group: item.group?.trim() || undefined },
+        );
+        createdItemIds.push(created.id);
+        accepted.push({ input: item, item: created, created: true });
+      } catch (error: unknown) {
+        failures.push({ input: item, error });
+      }
+    }
+
+    return { accepted, failures, createdItemIds, reopenedItems };
+  });
+  return graph;
 }
 
 type UsedActionRegistryMethods = Pick<ActionRegistry, 'getActionsFor' | 'getAction'>;
@@ -1696,6 +1736,30 @@ describe('registerCommands', () => {
         { modal: true },
         'Accept All to Ready to Start',
       );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+    });
+
+    it('accepts an explicit item array without a second confirmation and returns successes', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      const result = await invoke('devdocket.acceptAllFromInbox', items);
+
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalledWith(
+        expect.stringContaining('Accept 2 items'),
+        { modal: true },
+        'Accept All to Ready to Start',
+      );
+      expect(result).toEqual(items);
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
         { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
