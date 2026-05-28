@@ -603,6 +603,168 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
+    it('advances remaining-file count when signalPhase omits filePath entirely', async () => {
+      // Two walkthrough phase signals with no filePath/filePaths at all.
+      // Each should still count as one presentation so the second turn
+      // reaches remainingFiles=0 and the phase derives to lastFile.
+      const firstModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+      const secondModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Second file analysis.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      const firstResult = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+
+      const secondResult = await handler(
+        createMockRequest('Continue', secondModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('advances remaining-file count when signalPhase paths cannot be matched to allFiles', async () => {
+      // Model passes paths that don't normalize to anything in allFiles
+      // (e.g. absolute paths or fabricated names). Each unmatched walkthrough
+      // signal should still count as a presentation so the loop converges.
+      const mismatchedFirst = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Mismatched path file 1.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: '/abs/path/not/in/diff.ts',
+            });
+          })(),
+        }),
+      };
+      const mismatchedSecond = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Mismatched path file 2.');
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['totally-unknown.ts', 'also-unknown.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      const firstResult = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mismatchedFirst),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+      // Path didn't match allFiles, so presentedFiles stays empty, but the
+      // unidentified-presentations counter advances the remaining count.
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
+      expect((firstResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+
+      const secondResult = await handler(
+        createMockRequest('Continue', mismatchedSecond),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((secondResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('canonicalizes a bare basename in signalPhase to a uniquely matching file', async () => {
+      // Model passes just the basename, not the full path. As long as the
+      // basename is unique within allFiles it should be matched and counted
+      // as an identified presentation.
+      const model = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Bare basename presentation.');
+            yield new LanguageModelToolCallPart('phase-basename', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'second.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', model),
+        createMockContext([new ChatRequestTurn('previous turn')]),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/second.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('does not match ambiguous basenames in signalPhase', async () => {
+      // Two files share the same basename — basename-only signal must be
+      // treated as unidentified (not matched to either candidate).
+      vi.mocked(gitExec).mockResolvedValueOnce('src/a/index.ts\nsrc/b/index.ts\n');
+      const model = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Ambiguous basename presentation.');
+            yield new LanguageModelToolCallPart('phase-ambig', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'index.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', model),
+        createMockContext([new ChatRequestTurn('previous turn')]),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      // Not added to presentedFiles (would be wrong to pick one arbitrarily),
+      // but counted as an unidentified presentation so progress still advances.
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
     it('resets file progress when a fresh chat starts for the same PR', async () => {
       const firstFileModel = {
         sendRequest: vi.fn().mockImplementation(() => ({

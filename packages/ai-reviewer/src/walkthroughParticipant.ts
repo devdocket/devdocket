@@ -9,6 +9,14 @@ const PR_URL_PATTERN = /https?:\/\/(?:github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+|d
 interface WalkthroughProgress {
   allFiles: string[];
   presentedFiles: string[];
+  /**
+   * Count of signalPhase calls with a file-walkthrough phase where the model
+   * did not provide any path that we could match to a file in `allFiles`
+   * (missing, malformed, or paths we couldn't canonicalize). Each such call
+   * is treated as one presentation of some unspecified remaining file so
+   * the derived `remainingFiles` count still progresses toward zero.
+   */
+  unidentifiedPresentations: number;
 }
 
 export class WalkthroughParticipant {
@@ -261,12 +269,22 @@ export class WalkthroughParticipant {
               phase = input.phase;
             }
             if (this.isFileWalkthroughPhase(phase)) {
+              let identifiedCount = 0;
               for (const filePath of signaledPaths) {
-                this.recordPresentedFile(progress, filePath);
+                if (this.recordPresentedFile(progress, filePath)) {
+                  identifiedCount++;
+                }
               }
-              if (signaledPaths.length > 0) {
-                phase = this.deriveFileWalkthroughPhase(phase, progress);
+              // The model signaled a file-presentation phase but we couldn't
+              // identify any matching file (missing or mangled paths). Treat
+              // it as one unaccounted presentation so progress still advances.
+              // This is safe: the worst case is over-counting toward `lastFile`,
+              // which surfaces the correct follow-ups slightly earlier rather
+              // than the buggy state of "Next file" lingering forever.
+              if (identifiedCount === 0 && progress.allFiles.length > 0) {
+                progress.unidentifiedPresentations++;
               }
+              phase = this.deriveFileWalkthroughPhase(phase, progress);
             }
             toolResults.push({
               callId: part.callId,
@@ -341,6 +359,13 @@ export class WalkthroughParticipant {
     if (!streamedAnyText && !token.isCancellationRequested) {
       response.markdown('⚠️ The model did not produce walkthrough text. Please try again.');
     }
+    // Final safety net: re-derive the phase from observable progress regardless of
+    // whether signalPhase fired this turn. If the model said 'walkthrough' but every
+    // file has been presented (or accounted for via unidentified presentations), the
+    // correct follow-up set is the lastFile one.
+    if (this.isFileWalkthroughPhase(phase)) {
+      phase = this.deriveFileWalkthroughPhase(phase, progress);
+    }
     const remainingFiles = this.getRemainingFiles(progress);
     this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
     return {
@@ -366,6 +391,7 @@ export class WalkthroughParticipant {
     const progress: WalkthroughProgress = {
       allFiles: await this.getChangedFiles(info),
       presentedFiles: [],
+      unidentifiedPresentations: 0,
     };
     this.progressByPrUrl.set(prUrl, progress);
     return progress;
@@ -399,19 +425,28 @@ export class WalkthroughParticipant {
     ];
   }
 
-  private recordPresentedFile(progress: WalkthroughProgress, filePath: string): void {
+  /**
+   * Record a file the model claims to have just presented. Returns true if the
+   * path could be matched to an entry in `progress.allFiles`, false otherwise
+   * (so callers can fall back to an "unidentified presentation" counter).
+   * Only canonical paths that exist in `allFiles` are pushed onto
+   * `presentedFiles` — keeping that array a strict subset of `allFiles`.
+   */
+  private recordPresentedFile(progress: WalkthroughProgress, filePath: string): boolean {
     const normalizedPath = this.normalizePresentedFilePath(filePath);
     if (!normalizedPath) {
-      return;
+      return false;
     }
 
-    const canonicalPath = this.findCanonicalFilePath(progress.allFiles, normalizedPath) ?? normalizedPath;
-    if (!progress.allFiles.includes(canonicalPath)) {
+    const canonicalPath = this.findCanonicalFilePath(progress.allFiles, normalizedPath);
+    if (!canonicalPath) {
       this.log.debug(`Presented walkthrough file is not in the changed-file list: ${filePath}`);
+      return false;
     }
     if (!progress.presentedFiles.includes(canonicalPath)) {
       progress.presentedFiles.push(canonicalPath);
     }
+    return true;
   }
 
   private normalizePresentedFilePath(filePath: string): string {
@@ -427,7 +462,18 @@ export class WalkthroughParticipant {
       return filePath;
     }
     const withoutDiffPrefix = filePath.replace(/^[ab]\//, '');
-    return allFiles.includes(withoutDiffPrefix) ? withoutDiffPrefix : undefined;
+    if (allFiles.includes(withoutDiffPrefix)) {
+      return withoutDiffPrefix;
+    }
+    // Suffix match: handles cases where the model passed a partial path or
+    // bare basename (e.g. "walkthroughParticipant.ts" for
+    // "packages/ai-reviewer/src/walkthroughParticipant.ts"). Only accept when
+    // exactly one file in allFiles ends with this suffix, to avoid ambiguous
+    // basename collisions ("index.ts", "package.json", etc.).
+    const suffixMatches = allFiles.filter(
+      file => file === withoutDiffPrefix || file.endsWith('/' + withoutDiffPrefix),
+    );
+    return suffixMatches.length === 1 ? suffixMatches[0] : undefined;
   }
 
   private deriveFileWalkthroughPhase(phase: string, progress: WalkthroughProgress): string {
@@ -445,7 +491,10 @@ export class WalkthroughParticipant {
       return undefined;
     }
     const presented = new Set(progress.presentedFiles);
-    return progress.allFiles.filter(file => !presented.has(file)).length;
+    const identifiedRemaining = progress.allFiles.filter(file => !presented.has(file)).length;
+    // Subtract unidentified presentations as a coarse credit toward "we did
+    // present something this turn, we just couldn't pin down which file."
+    return Math.max(0, identifiedRemaining - progress.unidentifiedPresentations);
   }
 
   private extractPrUrl(
