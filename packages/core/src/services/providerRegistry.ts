@@ -74,6 +74,9 @@ export class ProviderRegistry {
   private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
   /** Fired when new unseen items are added to the inbox, with the count of new items. */
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
+  private readonly _onDidDiscoverFirstProviderItem = new vscode.EventEmitter<string>();
+  /** Fired once per provider when it first emits at least one live provider item. */
+  readonly onDidDiscoverFirstProviderItem = this._onDidDiscoverFirstProviderItem.event;
   private readonly _onDidChangeProviderHealth = new vscode.EventEmitter<string>();
   /** Fired when a provider's health info changes (status, lastError, or lastRefreshTime), with the provider ID. */
   readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
@@ -93,6 +96,7 @@ export class ProviderRegistry {
   /** Tracks whether each provider's most recent refresh was truncated. */
   private readonly lastRefreshTruncated = new Map<string, boolean>();
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
+  private readonly providersWithDiscoveredItems = new Set<string>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
   private readonly initialRefreshProducedItems = new Set<string>();
@@ -243,6 +247,7 @@ export class ProviderRegistry {
       this.previousDiscoveredIds.delete(provider.id);
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
+      this.providersWithDiscoveredItems.delete(provider.id);
       this._loadingProviders.delete(provider.id);
       this.initialRefreshProducedItems.delete(provider.id);
       this._handleQueues.delete(provider.id);
@@ -703,6 +708,10 @@ export class ProviderRegistry {
     this.lastRefreshTruncated.set(providerId, wasTruncated);
     this.providerItems.set(providerId, Object.freeze(items) as ProviderItem[]);
     this.invalidateProviderItemCaches(providerId);
+    const discoveredFirstProviderItem = items.length > 0 && !this.providersWithDiscoveredItems.has(providerId);
+    if (discoveredFirstProviderItem) {
+      this.providersWithDiscoveredItems.add(providerId);
+    }
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
@@ -799,6 +808,9 @@ export class ProviderRegistry {
       }
     }
     if (!this._disposed) {
+      if (discoveredFirstProviderItem) {
+        this._onDidDiscoverFirstProviderItem.fire(providerId);
+      }
       this._onDidChangeProviderItems.fire(providerId);
       this._onDidRefreshProvider.fire(providerId);
       const provider = this.providers.get(providerId);
@@ -830,6 +842,7 @@ export class ProviderRegistry {
     this._onDidChangeProviderItems.dispose();
     this._onDidRegisterProvider.dispose();
     this._onDidAddNewUnseenItems.dispose();
+    this._onDidDiscoverFirstProviderItem.dispose();
     this._onDidChangeProviderHealth.dispose();
     this._onDidChangeProviderRefreshState.dispose();
     this._onDidRefreshProvider.dispose();

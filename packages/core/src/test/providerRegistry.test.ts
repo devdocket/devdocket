@@ -562,6 +562,24 @@ describe('ProviderRegistry', () => {
     expect(items[1].title).toBe('Feature');
   });
 
+  it('fires the first provider item event only after a provider emits live items', async () => {
+    const provider = createMockProvider('gh');
+    const discoveredProviderIds: string[] = [];
+    registry.onDidDiscoverFirstProviderItem(providerId => discoveredProviderIds.push(providerId));
+    registry.register(provider);
+
+    provider.fireItems([]);
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')).toHaveLength(0));
+    expect(discoveredProviderIds).toEqual([]);
+
+    provider.fireItems([{ externalId: 'issue-1', title: 'Bug fix' }]);
+    await vi.waitFor(() => expect(discoveredProviderIds).toEqual(['gh']));
+
+    provider.fireItems([{ externalId: 'issue-2', title: 'Another bug' }]);
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')[0]?.externalId).toBe('issue-2'));
+    expect(discoveredProviderIds).toEqual(['gh']);
+  });
+
   it('replaces discovered items on re-discovery', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
