@@ -187,7 +187,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildTierData(
-    allProviderItems: Map<string, ProviderItem[]>,
+    allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
   ): TierData[] {
     const hiddenCanonicalKeys = buildCanonicalHiddenSet(
@@ -255,7 +255,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildSourcesData(
-    allProviderItems: Map<string, ProviderItem[]>,
+    allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
   ): SourceProviderData[] {
     return Array.from(allProviderItems)
