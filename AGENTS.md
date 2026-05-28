@@ -346,25 +346,34 @@ eval "$(node scripts/start-bot-session.mjs --shell=bash)"
 node scripts/start-bot-session.mjs --shell=powershell | Invoke-Expression
 ```
 
-The script requires two environment variables, which must be exported before running it:
+The script requires the GitHub App ID and the private key. The private key can be provided either inline as PEM contents or as a path to a `.pem` file on disk — pick one:
 
 - `DEVDOCKET_BOT_APP_ID` — the numeric GitHub App ID.
-- `DEVDOCKET_BOT_APP_PRIVATE_KEY` — the GitHub App private key (PEM contents, including the `-----BEGIN/END PRIVATE KEY-----` markers).
+- `DEVDOCKET_BOT_APP_PRIVATE_KEY` — the GitHub App private key (PEM contents, including the `-----BEGIN/END PRIVATE KEY-----` markers). _Or:_
+- `DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH` — filesystem path to the `.pem` file. The script reads it on every invocation; the file is never copied or cached.
 
-These match the names of the GitHub Actions repository secrets used by the bot's GitHub Actions workflows, so the same values can be reused locally. The script does not read or write any on-disk key material. After running the helper, the working tree's `user.name` / `user.email` and `GH_TOKEN` / `GITHUB_TOKEN` point at the bot for the lifetime of that shell; opening a new shell reverts to the developer's normal identity.
+The inline `DEVDOCKET_BOT_APP_PRIVATE_KEY` matches the name of the GitHub Actions repository secret used by the bot's workflows, so the same value can be reused locally. `DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH` is more convenient when you already keep the key on disk. After running the helper, the working tree's `user.name` / `user.email` and `GH_TOKEN` / `GITHUB_TOKEN` point at the bot for the lifetime of that shell; opening a new shell reverts to the developer's normal identity.
 
-Recommended export idioms for the (multi-line) PEM:
+Recommended export idioms:
 
 ```bash
-# bash / zsh
+# bash / zsh — inline PEM
 export DEVDOCKET_BOT_APP_ID=123456
 export DEVDOCKET_BOT_APP_PRIVATE_KEY="$(cat path/to/devdocket-bot.pem)"
+
+# bash / zsh — path to PEM file
+export DEVDOCKET_BOT_APP_ID=123456
+export DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH=path/to/devdocket-bot.pem
 ```
 
 ```powershell
-# PowerShell
+# PowerShell — inline PEM
 $env:DEVDOCKET_BOT_APP_ID = '123456'
 $env:DEVDOCKET_BOT_APP_PRIVATE_KEY = Get-Content -Raw path\to\devdocket-bot.pem
+
+# PowerShell — path to PEM file
+$env:DEVDOCKET_BOT_APP_ID = '123456'
+$env:DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH = 'path\to\devdocket-bot.pem'
 ```
 
 If your secret store delivers the PEM as a single line with literal `\n` escapes (common with 1Password / Vault / CI UI copy-paste), the helper auto-normalizes them to real newlines.
@@ -381,7 +390,7 @@ If either check fails (e.g., still shows the developer's identity), the bot sess
 
 > **Note:** an installation token returns 403 on `GET /user` ("Resource not accessible by integration"), so do NOT use `gh api user` to verify. Use a repo-scoped call like the one above instead. A 403 from `gh api user` after starting a bot session is expected, not a failure.
 
-**If the bot session cannot be started** (helper prints "App ID not found", "Private key not found", expired key, etc.): STOP. Do not fall back to the developer's identity. Report the failure to the user and ask how to proceed — typically the user needs to export `DEVDOCKET_BOT_APP_ID` and `DEVDOCKET_BOT_APP_PRIVATE_KEY` in their environment.
+**If the bot session cannot be started** (helper prints "App ID not found", "Private key not found", expired key, etc.): STOP. Do not fall back to the developer's identity. Report the failure to the user and ask how to proceed — typically the user needs to export `DEVDOCKET_BOT_APP_ID` and either `DEVDOCKET_BOT_APP_PRIVATE_KEY` or `DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH` in their environment.
 
 **⚠️ Bot session env vars do NOT persist across sync shell invocations.** Many Copilot CLI shell tools (e.g., `powershell` in sync mode) create a fresh shell per call and discard `$env:GH_TOKEN` / `$env:GITHUB_TOKEN` set by a previous call. The `git config` changes made by the helper are persistent in the worktree (they live in `.git/config`), so commits stay bot-authored — but `gh` calls in a fresh shell will use the developer's cached `gh auth` credential and create PRs/comments/issues under the developer's account.
 

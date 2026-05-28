@@ -15,14 +15,18 @@
 // If --shell is omitted, the script picks bash on POSIX and powershell on Windows.
 //
 // Required environment variables (none of which are committed):
-//   DEVDOCKET_BOT_APP_ID           Numeric GitHub App ID.
-//   DEVDOCKET_BOT_APP_PRIVATE_KEY  GitHub App private key contents (PEM, RS256).
+//   DEVDOCKET_BOT_APP_ID                Numeric GitHub App ID.
+//   DEVDOCKET_BOT_APP_PRIVATE_KEY       GitHub App private key contents (PEM, RS256).
+//   DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH  Alternative to the above: filesystem path to the PEM file.
 //
-// These match the names of the GitHub Actions repository secrets used by the
+// Exactly one of `DEVDOCKET_BOT_APP_PRIVATE_KEY` or
+// `DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH` must be set. The PEM contents form
+// matches the names of the GitHub Actions repository secrets used by the
 // changesets / weekly-review workflows, so the same values can be reused.
-// Developers must export both env vars before running the helper; the script
-// no longer reads or writes any on-disk key material.
+// The PATH form is more convenient for local developers who keep the .pem on
+// disk and don't want to load its contents into a shell env var.
 
+import { readFileSync } from "node:fs";
 import { createSign } from "node:crypto";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -114,22 +118,41 @@ function loadAppId() {
 }
 
 function loadPrivateKey() {
-  let raw = process.env.DEVDOCKET_BOT_APP_PRIVATE_KEY ?? "";
-  if (!raw.trim()) {
+  const inline = process.env.DEVDOCKET_BOT_APP_PRIVATE_KEY ?? "";
+  const path = (process.env.DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH ?? "").trim();
+  if (inline.trim() && path) {
     fail(
-      "Private key not found. Export DEVDOCKET_BOT_APP_PRIVATE_KEY with the GitHub App private key (PEM contents).",
+      "Both DEVDOCKET_BOT_APP_PRIVATE_KEY and DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH are set. Unset one.",
     );
+  }
+  let raw = inline;
+  let source = "DEVDOCKET_BOT_APP_PRIVATE_KEY";
+  if (!raw.trim()) {
+    if (!path) {
+      fail(
+        "Private key not found. Export DEVDOCKET_BOT_APP_PRIVATE_KEY with the PEM contents, or DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH with a filesystem path to the PEM file.",
+      );
+    }
+    try {
+      raw = readFileSync(path, "utf8");
+    } catch (err) {
+      fail(
+        `Failed to read DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH (${path}): ${err?.message ?? err}`,
+      );
+    }
+    source = `DEVDOCKET_BOT_APP_PRIVATE_KEY_PATH (${path})`;
   }
   // Some secret stores (1Password, Vault, CI UIs) deliver multi-line PEMs as a
   // single line with literal two-character `\n` escapes. createSign().sign()
   // would then throw an opaque DECODER error. Normalize to real newlines so the
-  // common copy/paste path "just works".
+  // common copy/paste path "just works". (Not applicable to the file-path
+  // branch in practice, but harmless.)
   if (raw.includes("\\n") && !raw.includes("\n")) {
     raw = raw.replace(/\\n/g, "\n");
   }
   if (!raw.includes("-----BEGIN") || !raw.includes("PRIVATE KEY-----")) {
     fail(
-      "DEVDOCKET_BOT_APP_PRIVATE_KEY does not look like a PEM-encoded private key (missing BEGIN/END markers).",
+      `${source} does not look like a PEM-encoded private key (missing BEGIN/END markers).`,
     );
   }
   return raw;
