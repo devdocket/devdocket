@@ -279,11 +279,8 @@ export function EditorApp() {
     };
 
     if (!currentItem.isProviderManaged) {
-      const nextTitle = titleRef.current.trim();
-      if (nextTitle) {
-        data.title = nextTitle;
-        data.url = urlRef.current.trim();
-      }
+      data.title = titleRef.current.trim();
+      data.url = urlRef.current.trim();
     }
 
     const requestId = `autosave-${++autosaveRequestCounterRef.current}`;
