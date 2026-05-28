@@ -82,7 +82,7 @@ export function clearSelection(): SelectionState {
 }
 
 /**
- * Re-conciles a selection state against the latest tier membership. Items
+ * Reconciles a selection state against the latest tier membership. Items
  * that have been removed from the tier (e.g. transitioned away after a bulk
  * action) are dropped from the selection. If the anchor was removed, the
  * remaining first selected item becomes the new anchor. If nothing remains
