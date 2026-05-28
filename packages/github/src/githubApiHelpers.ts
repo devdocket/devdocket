@@ -634,7 +634,8 @@ async function fetchClosedGitHubItemsGraphQLWithRestFallback(
   try {
     return await fetchClosedGitHubItemsGraphQLChunk(token, items, apiType, signal);
   } catch (error) {
-    if (isAbortError(error) || error instanceof PollingBackoffError) { throw error; }
+    if (isAbortError(error) && signal?.aborted) { throw error; }
+    if (error instanceof PollingBackoffError) { throw error; }
     if (error instanceof GitHubSsoError) {
       logger.debug(`Skipping ${apiType} closed-item GraphQL chunk after SSO error: ${error.message}`);
       return [];
