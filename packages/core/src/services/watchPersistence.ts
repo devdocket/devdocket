@@ -19,30 +19,12 @@ function clonePersistedSnapshot(runs: WatchedRun[], prs: WatchedPR[]): WatchSnap
   return JSON.parse(JSON.stringify({ runs, prs })) as WatchSnapshot;
 }
 
-function omitLastPolledAt(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map(omitLastPolledAt);
-  }
-
-  if (typeof value !== 'object' || value === null) {
-    return value;
-  }
-
-  const result: Record<string, unknown> = {};
-  for (const [key, childValue] of Object.entries(value)) {
-    if (key !== 'lastPolledAt') {
-      result[key] = omitLastPolledAt(childValue);
-    }
-  }
-  return result;
+function omitLastPolledAtReplacer(key: string, value: unknown): unknown {
+  return key === 'lastPolledAt' ? undefined : value;
 }
 
-function snapshotsEqualIgnoringLastPolledAt(left: WatchSnapshot | undefined, right: WatchSnapshot): boolean {
-  if (!left) {
-    return false;
-  }
-
-  return JSON.stringify(omitLastPolledAt(left)) === JSON.stringify(omitLastPolledAt(right));
+function serializePersistedSnapshot(snapshot: WatchSnapshot): string {
+  return JSON.stringify(snapshot, omitLastPolledAtReplacer);
 }
 
 type WatcherLogger = {
@@ -60,7 +42,8 @@ export class WatchPersistence {
   private persistFailureNotified = false;
   private pendingSave: Promise<void> = Promise.resolve();
   private pendingSnapshot: WatchSnapshot | undefined;
-  private lastPersistedSnapshot: WatchSnapshot | undefined;
+  private lastPersistedSerialized: string | undefined;
+  private queuedPersistCount = 0;
   private debounceTimer: NodeJS.Timeout | undefined;
 
   constructor(
@@ -77,7 +60,7 @@ export class WatchPersistence {
       ...data.prs.map(getPRWatchKey),
     ]);
     this.pendingPRWatchKeys.clear();
-    this.lastPersistedSnapshot = clonePersistedSnapshot(data.runs, data.prs);
+    this.lastPersistedSerialized = serializePersistedSnapshot(data);
     return data;
   }
 
@@ -117,16 +100,22 @@ export class WatchPersistence {
     this.clearDebounceTimer();
 
     while (true) {
-      const snapshot = this.pendingSnapshot
-        ? clonePersistedSnapshot(this.pendingSnapshot.runs, this.pendingSnapshot.prs)
-        : undefined;
+      const pendingSnapshot = this.pendingSnapshot;
       this.pendingSnapshot = undefined;
 
-      if (snapshot) {
-        this.pendingSave = this.pendingSave
-          .catch(() => undefined)
-          .then(() => this.persistSnapshot(snapshot))
-          .catch(() => undefined);
+      if (pendingSnapshot) {
+        const serialized = serializePersistedSnapshot(pendingSnapshot);
+        if (serialized !== this.lastPersistedSerialized || this.queuedPersistCount > 0) {
+          const snapshot = clonePersistedSnapshot(pendingSnapshot.runs, pendingSnapshot.prs);
+          this.queuedPersistCount += 1;
+          this.pendingSave = this.pendingSave
+            .catch(() => undefined)
+            .then(() => this.persistSnapshot(snapshot, serialized))
+            .catch(() => undefined)
+            .finally(() => {
+              this.queuedPersistCount -= 1;
+            });
+        }
       }
 
       const pendingSave = this.pendingSave;
@@ -157,14 +146,14 @@ export class WatchPersistence {
     }
   }
 
-  private async persistSnapshot(snapshot: WatchSnapshot): Promise<void> {
-    if (snapshotsEqualIgnoringLastPolledAt(this.lastPersistedSnapshot, snapshot)) {
+  private async persistSnapshot(snapshot: WatchSnapshot, serialized: string): Promise<void> {
+    if (serialized === this.lastPersistedSerialized) {
       return;
     }
 
     try {
       await this.watchStore.saveAll(snapshot.runs, snapshot.prs);
-      this.lastPersistedSnapshot = snapshot;
+      this.lastPersistedSerialized = serialized;
       if (this.persistFailureNotified) {
         this.persistFailureNotified = false;
         this.logger.info('Watch persistence recovered.');
