@@ -108,6 +108,37 @@ describe('WorkGraph', () => {
     expect(updated?.title).toBe('Updated');
   });
 
+  it('increments related-items version only for title and membership changes', async () => {
+    const initialVersion = graph.getRelatedItemsVersion();
+
+    const first = await graph.createItem({ title: 'Original', notes: 'Notes' });
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 1);
+
+    await graph.updateItem(first.id, { notes: 'Updated notes' });
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 1);
+
+    await graph.updateItem(first.id, { description: 'Updated description' });
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 1);
+
+    await graph.updateItem(first.id, { url: 'https://example.com/updated' });
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 1);
+
+    await graph.transitionState(first.id, WorkItemState.InProgress);
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 1);
+
+    await graph.updateItem(first.id, { title: 'Updated title' });
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 2);
+
+    const second = await graph.createItem({ title: 'Second' });
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 3);
+
+    await graph.moveToTop(second.id);
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 3);
+
+    await graph.deleteItem(second.id);
+    expect(graph.getRelatedItemsVersion()).toBe(initialVersion + 4);
+  });
+
   it('serializes concurrent mutations so state and field updates both survive', async () => {
     useMockFileSystem();
     const fileUri = vscode.Uri.file('C:\\test\\workgraph-items.json');
