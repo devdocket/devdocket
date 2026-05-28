@@ -680,7 +680,12 @@ async function fetchClosedGitHubItemsGraphQLChunk(
   }
 
   const repository = payload.data?.repository;
-  if (!repository) { return []; }
+  if (!repository) {
+    if (payload.errors?.length) {
+      throw new Error(`GitHub GraphQL closed-item batch returned errors with no repository data: ${formatGraphQLErrorMessages(payload.errors)}`);
+    }
+    return [];
+  }
 
   const closedIds: string[] = [];
   items.forEach((item, index) => {
