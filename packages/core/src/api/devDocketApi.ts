@@ -1,4 +1,5 @@
 import { DevDocketApi, DevDocketProvider, DevDocketAction, DevDocketRunWatcher, DevDocketPRWatcher, Disposable, type ActivityType, type ActivityDetailRenderer, type StateTransitionEvent } from './types';
+import { CONTRACT_VERSION, isContractVersionSatisfied } from './types';
 import type { Event } from '@devdocket/shared';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
@@ -6,8 +7,12 @@ import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
 import { WorkGraph } from '../services/workGraph';
+import { logger } from '../services/logger';
+
+const NOOP_DISPOSABLE: Disposable = { dispose: () => { /* no-op */ } };
 
 export class DevDocketApiImpl implements DevDocketApi {
+  readonly contractVersion: string = CONTRACT_VERSION;
   readonly onDidTransitionState: Event<StateTransitionEvent>;
 
   constructor(
@@ -22,10 +27,26 @@ export class DevDocketApiImpl implements DevDocketApi {
   }
 
   registerProvider(provider: DevDocketProvider): Disposable {
+    if (provider.minContractVersion && !isContractVersionSatisfied(this.contractVersion, provider.minContractVersion)) {
+      logger.warn(
+        `Provider "${provider.id}" requires DevDocket API contract version >= ${provider.minContractVersion}, ` +
+        `but core implements ${this.contractVersion}. Skipping registration; ` +
+        `update the DevDocket core extension to enable this provider.`,
+      );
+      return NOOP_DISPOSABLE;
+    }
     return this.providerRegistry.register(provider);
   }
 
   registerAction(action: DevDocketAction): Disposable {
+    if (action.minContractVersion && !isContractVersionSatisfied(this.contractVersion, action.minContractVersion)) {
+      logger.warn(
+        `Action "${action.id}" requires DevDocket API contract version >= ${action.minContractVersion}, ` +
+        `but core implements ${this.contractVersion}. Skipping registration; ` +
+        `update the DevDocket core extension to enable this action.`,
+      );
+      return NOOP_DISPOSABLE;
+    }
     return this.actionRegistry.register(action);
   }
 

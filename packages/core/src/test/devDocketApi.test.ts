@@ -1,5 +1,6 @@
 import { DevDocketApiImpl } from '../api/devDocketApi';
 import { DevDocketProvider, DevDocketAction, ProviderItem } from '../api/types';
+import { CONTRACT_VERSION } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
@@ -126,6 +127,46 @@ describe('DevDocketApiImpl', () => {
 
       expect(() => api.registerProvider(p2)).toThrow('Provider already registered: dup');
     });
+
+    it('registers when no minContractVersion is declared', () => {
+      const provider = createMockProvider('no-min');
+      const disposable = api.registerProvider(provider);
+
+      expect(providerRegistry.getProvider('no-min')).toBe(provider);
+      disposable.dispose();
+    });
+
+    it('registers when minContractVersion <= core contractVersion', () => {
+      const provider: DevDocketProvider = {
+        ...createMockProvider('ok'),
+        minContractVersion: '1.0.0',
+      };
+      const disposable = api.registerProvider(provider);
+
+      expect(providerRegistry.getProvider('ok')).toBe(provider);
+      disposable.dispose();
+    });
+
+    it('skips registration and returns a no-op disposable when minContractVersion > core', () => {
+      const provider: DevDocketProvider = {
+        ...createMockProvider('future'),
+        minContractVersion: '99.0.0',
+      };
+      const registerSpy = vi.spyOn(providerRegistry, 'register');
+
+      const disposable = api.registerProvider(provider);
+
+      expect(registerSpy).not.toHaveBeenCalled();
+      expect(providerRegistry.getProvider('future')).toBeUndefined();
+      expect(() => disposable.dispose()).not.toThrow();
+    });
+  });
+
+  describe('contractVersion', () => {
+    it('is exposed and matches the shared CONTRACT_VERSION', () => {
+      expect(api.contractVersion).toBe(CONTRACT_VERSION);
+      expect(api.contractVersion).toMatch(/^\d+\.\d+\.\d+/);
+    });
   });
 
   describe('getProviderItem', () => {
@@ -208,6 +249,31 @@ describe('DevDocketApiImpl', () => {
       api.registerAction(a1);
 
       expect(() => api.registerAction(a2)).toThrow('Action already registered: dup');
+    });
+
+    it('registers when minContractVersion <= core contractVersion', () => {
+      const action: DevDocketAction = {
+        ...createMockAction('ok'),
+        minContractVersion: '1.0.0',
+      };
+      const disposable = api.registerAction(action);
+
+      expect(actionRegistry.getAction('ok')).toBe(action);
+      disposable.dispose();
+    });
+
+    it('skips registration and returns a no-op disposable when minContractVersion > core', () => {
+      const action: DevDocketAction = {
+        ...createMockAction('future'),
+        minContractVersion: '99.0.0',
+      };
+      const registerSpy = vi.spyOn(actionRegistry, 'register');
+
+      const disposable = api.registerAction(action);
+
+      expect(registerSpy).not.toHaveBeenCalled();
+      expect(actionRegistry.getAction('future')).toBeUndefined();
+      expect(() => disposable.dispose()).not.toThrow();
     });
   });
 

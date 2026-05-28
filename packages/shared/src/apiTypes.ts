@@ -113,6 +113,17 @@ export interface DevDocketProvider {
    */
   refresh(token?: CancellationTokenLike, options?: ProviderRefreshOptions): Promise<void>;
   /**
+   * Optional minimum DevDocket API contract version (semver `major.minor.patch`)
+   * this provider requires. The core extension compares this against
+   * {@link DevDocketApi.contractVersion} when {@link DevDocketApi.registerProvider}
+   * is called; if the core version is lower, registration is skipped (a warning
+   * is logged and a no-op {@link Disposable} is returned) so the host extension
+   * keeps working without the provider.
+   *
+   * Leave undefined to opt out of the check.
+   */
+  readonly minContractVersion?: string;
+  /**
    * Attempt to resolve a URL into an item this provider can manage.
    *
    * Providers that support URL import should parse the URL and, if it
@@ -180,6 +191,16 @@ export interface DevDocketAction {
   /** Optional hints for richer DevDocket surfaces beyond the Run Action picker. */
   readonly presentation?: DevDocketActionPresentation;
   /**
+   * Optional minimum DevDocket API contract version (semver `major.minor.patch`)
+   * this action requires. The core extension compares this against
+   * {@link DevDocketApi.contractVersion} when {@link DevDocketApi.registerAction}
+   * is called; if the core version is lower, registration is skipped (a warning
+   * is logged and a no-op {@link Disposable} is returned).
+   *
+   * Leave undefined to opt out of the check.
+   */
+  readonly minContractVersion?: string;
+  /**
    * Determine whether this action is applicable to the given work item.
    *
    * @param item - A read-only view of the work item to test.
@@ -213,6 +234,20 @@ export interface DevDocketAction {
  * ```
  */
 export interface DevDocketApi {
+  /**
+   * Semver string identifying the DevDocket extension API contract version
+   * implemented by the core extension at runtime.
+   *
+   * Providers and actions may declare a {@link DevDocketProvider.minContractVersion}
+   * (or {@link DevDocketAction.minContractVersion}); when the core's
+   * `contractVersion` is lower, the corresponding `register*` call logs a
+   * warning and returns a no-op {@link Disposable} instead of throwing,
+   * letting the host extension degrade gracefully.
+   *
+   * Bumped according to semver: minor for additive changes, major for
+   * breaking changes. See `docs/extension-api.md` for the bump policy.
+   */
+  readonly contractVersion: string;
   /**
    * Register a work-item provider.
    *
