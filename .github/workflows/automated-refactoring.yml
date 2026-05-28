@@ -120,10 +120,8 @@ jobs:
 
             If you find no refactoring opportunities, close the issue with an explanation.
             If you apply refactorings, create a PR with a clear description.
-          # GitHub App installation tokens cannot assign Copilot agents (the
-          # agent_assignment API and plain assignee endpoints both reject them
-          # with "Assigning agents is not supported with GitHub App installation
-          # tokens"). Keep using the user PAT (COPILOT_ASSIGN_TOKEN) for the
-          # assignment step until GitHub adds App support for agent assignment.
+          # Copilot assignment uses GitHub's GraphQL suggestedActors and
+          # replaceActorsForAssignable APIs. GitHub App installation tokens
+          # cannot assign Copilot agents, so keep this as a user/OAuth token.
           copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
           github-token: ${{ steps.app-token.outputs.token }}
