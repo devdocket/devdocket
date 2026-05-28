@@ -69,6 +69,7 @@ function createMockWorkGraph(items: WorkItem[] = []) {
   const itemMap = new Map(items.map(item => [item.id, item]));
   return {
     getAll: vi.fn(() => Array.from(itemMap.values())),
+    getRelatedItemsVersion: vi.fn(() => 1),
     getItem: vi.fn((id: string) => itemMap.get(id)),
     findItemByProvenance: vi.fn((providerId: string, externalId: string) =>
       Array.from(itemMap.values()).find(item => item.providerId === providerId && item.externalId === externalId)),

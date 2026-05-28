@@ -38,6 +38,7 @@ export class WorkGraph {
   private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
+  private relatedItemsVersion = 0;
   private currentMutation: Promise<void> = Promise.resolve();
   private shutdownRequested = false;
   private readonly _onDidChange = new vscode.EventEmitter<WorkGraphChangeEvent>();
@@ -99,6 +100,7 @@ export class WorkGraph {
       }
     }
     this.invalidateStateCache();
+    this.invalidateRelatedItemsCache();
     logger.debug(`Loaded ${items.length} work items from store`);
     await this.backfillSortOrder();
   }
@@ -146,6 +148,18 @@ export class WorkGraph {
   /** Return all work items. */
   getAll(): WorkItem[] {
     return Array.from(this.items.values());
+  }
+
+  /**
+   * Cache-invalidation token for related-item indexes. It only changes when work-item
+   * membership or titles change because related-item matching and labels ignore other fields.
+   */
+  getRelatedItemsVersion(): number {
+    return this.relatedItemsVersion;
+  }
+
+  private invalidateRelatedItemsCache(): void {
+    this.relatedItemsVersion++;
   }
 
   private invalidateStateCache(): void {
@@ -245,6 +259,7 @@ export class WorkGraph {
       }
     }
     this.invalidateStateCache();
+    this.invalidateRelatedItemsCache();
     this.emitDidChange();
     logger.info(`Created work item: ${item.id}`);
     return item;
@@ -314,6 +329,9 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
+    if (updated.title !== item.title) {
+      this.invalidateRelatedItemsCache();
+    }
     this.emitDidChange();
     logger.info(`Updated work item: ${id}`);
   }
@@ -639,6 +657,7 @@ export class WorkGraph {
     }
     this.items.delete(id);
     this.invalidateStateCache();
+    this.invalidateRelatedItemsCache();
     if (!options?.silent) {
       this.emitDidChange();
     }

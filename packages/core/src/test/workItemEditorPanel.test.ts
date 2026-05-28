@@ -74,6 +74,7 @@ function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record
 
   return {
     getAll: vi.fn(() => Array.from(items.values())),
+    getRelatedItemsVersion: vi.fn(() => 1),
     getItem: vi.fn((id: string) => items.get(id)),
     updateItem: vi.fn(applyPatch),
     updateItemDuringShutdown: vi.fn(applyPatch),
