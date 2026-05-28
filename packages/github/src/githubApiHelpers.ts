@@ -574,9 +574,8 @@ export async function fetchClosedGitHubItems(
       closedIds.push(...result.value);
       continue;
     }
-    if (isAbortError(result.reason) || result.reason instanceof PollingBackoffError) {
-      throw result.reason;
-    }
+    if (isAbortError(result.reason) && signal?.aborted) { throw result.reason; }
+    if (result.reason instanceof PollingBackoffError) { throw result.reason; }
     logger.warn(`Failed during ${apiType} closed-item batch check: ${String(result.reason)}`);
   }
 
