@@ -515,50 +515,22 @@ export class WalkthroughParticipant {
     }
     const presented = new Set(progress.presentedFiles);
     const identifiedRemaining = progress.allFiles.filter(file => !presented.has(file)).length;
-    // Estimate total presentations from the strongest available signal:
-    //   - `presented.size + unidentifiedPresentations` — model-driven (signalPhase paths
-    //     plus unmatched signalPhase calls); only useful when the model actually calls
-    //     signalPhase.
-    //   - `advanceCount` — user-driven: counts the user prompts that advance the
-    //     walkthrough (button clicks like "Start the walkthrough" / "Continue to the
-    //     next file", plus any custom user text that isn't a recognised non-advance
-    //     action). This signal is independent of model behavior, so it still works
-    //     when the model ignores signalPhase entirely.
-    // Take the max so the strongest evidence wins.
-    const totalPresented = Math.max(
-      progress.presentedFiles.length + progress.unidentifiedPresentations,
-      advanceCount,
-    );
+    // Prefer model-reported file progress because a single response may present
+    // a group of files. Fall back to deterministic advance prompts only when
+    // the model has not reported any file progress at all.
+    const signaledPresented = progress.presentedFiles.length + progress.unidentifiedPresentations;
+    const totalPresented = signaledPresented > 0 ? signaledPresented : advanceCount;
     // Credit any presentations beyond the identified set toward unidentified files.
     const unidentifiedCredit = Math.max(0, totalPresented - progress.presentedFiles.length);
     return Math.max(0, identifiedRemaining - unidentifiedCredit);
   }
 
-  /**
-   * Pattern matching prompts that do NOT advance the file walkthrough by one file.
-   * Anchored to the start so user free-form text after the prefix (e.g. "Walk me
-   * through https://...") is still matched.
-   *
-   * The PR-URL pattern is also treated as non-advance because a brand-new walkthrough
-   * request shouldn't count.
-   */
-  private static readonly NON_ADVANCE_PROMPT_PATTERN =
-    /^(Adjust the reading order|Go deeper|Skip to the wrap-up summary|Walk me through)/i;
+  /** Match only deterministic prompts emitted by walkthrough advance buttons. */
+  private static readonly ADVANCE_PROMPT_PATTERN = /^(Start the walkthrough|Continue(?: to the next file)?|Next file)$/i;
 
   /**
-   * Count how many user prompts (including the current one) are file-advance signals
-   * — i.e. prompts triggered by clicking "Start the walkthrough" or "Continue to the
-   * next file", or any free-form user prompt that isn't a recognised non-advance
-   * action.
-   *
-   * This is the user-driven lower bound on "how many files have been presented in
-   * this session". It's robust to models that ignore the signalPhase tool entirely
-   * (which Claude Opus 4.7 does, per observed behaviour) because the button prompts
-   * we emit are deterministic.
-   *
-   * Over-counting (e.g. when a user types a clarifying question instead of clicking
-   * a button) is the safe direction: it surfaces wrap-up buttons earlier rather than
-   * the bug of "Next file" persisting on the actual last file.
+   * Count deterministic file-advance prompts. Free-form follow-ups and
+   * clarification questions must not consume remaining file progress.
    */
   private countAdvancePrompts(currentPrompt: string, history: readonly unknown[]): number {
     const prompts: string[] = [];
@@ -573,9 +545,9 @@ export class WalkthroughParticipant {
     for (const raw of prompts) {
       const trimmed = (raw ?? '').trim();
       if (!trimmed) continue;
-      if (WalkthroughParticipant.NON_ADVANCE_PROMPT_PATTERN.test(trimmed)) continue;
-      if (PR_URL_PATTERN.test(trimmed)) continue;
-      count++;
+      if (WalkthroughParticipant.ADVANCE_PROMPT_PATTERN.test(trimmed)) {
+        count++;
+      }
     }
     return count;
   }

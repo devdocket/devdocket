@@ -1030,6 +1030,32 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
+    it('does not count free-form clarification prompts as advance prompts', async () => {
+      const silentModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Clarifying detail without moving files.');
+          })(),
+        })),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Why was this helper changed?', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+        ]),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
     it('does not downgrade a model-reported lastFile phase when files appear to remain', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({
