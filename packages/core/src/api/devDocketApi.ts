@@ -1,5 +1,17 @@
-import { DevDocketApi, DevDocketProvider, DevDocketAction, DevDocketRunWatcher, DevDocketPRWatcher, Disposable, type ActivityType, type ActivityDetailRenderer, type StateTransitionEvent } from './types';
-import { CONTRACT_VERSION, compareContractVersions, isContractVersionSatisfied } from './types';
+import {
+  CONTRACT_VERSION,
+  compareContractVersions,
+  DevDocketAction,
+  DevDocketApi,
+  DevDocketPRWatcher,
+  DevDocketProvider,
+  DevDocketRunWatcher,
+  Disposable,
+  isContractVersionSatisfied,
+  type ActivityDetailRenderer,
+  type ActivityType,
+  type StateTransitionEvent,
+} from './types';
 import type { Event } from '@devdocket/shared';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
