@@ -85,6 +85,7 @@ function createMockWorkGraph(initialItems: WorkItem[] = []) {
 
   return {
     getAll: vi.fn(() => Array.from(items.values())),
+    getRelatedItemsVersion: vi.fn(() => 1),
     getItemsByState: vi.fn((...states: WorkItemState[]) => Array.from(items.values()).filter(item => states.includes(item.state))),
     getItem: vi.fn((id: string) => items.get(id)),
     findItemByProvenance: vi.fn((providerId: string, externalId: string) => Array.from(items.values()).find(

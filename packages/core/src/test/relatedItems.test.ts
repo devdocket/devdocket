@@ -39,6 +39,7 @@ function makeRegistry(discovered: Map<string, ProviderItem[]>) {
 
 function makeWorkGraph(items: WorkItem[] = []) {
   return {
+    getRelatedItemsVersion: vi.fn(() => 1),
     getAll: vi.fn(() => items),
     findItemByProvenance: vi.fn((providerId: string, externalId: string) => items.find(
       item => item.providerId === providerId && item.externalId === externalId,

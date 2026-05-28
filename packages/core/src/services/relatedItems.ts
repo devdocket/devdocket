@@ -206,29 +206,7 @@ function getRelatedItemsIndexSignature(providerItems: Map<string, ProviderItem[]
 }
 
 function getWorkGraphSignature(workGraph: WorkGraph): string {
-  const getRelatedItemsVersion = (workGraph as Partial<Pick<WorkGraph, 'getRelatedItemsVersion'>>).getRelatedItemsVersion;
-  const relatedItemsVersion = getRelatedItemsVersion?.call(workGraph);
-  if (relatedItemsVersion !== undefined) {
-    return `v:${relatedItemsVersion}`;
-  }
-
-  // Older test doubles may not expose the version token. The fallback is a coarser
-  // proxy over work-item identity and title so tests still invalidate on provenance
-  // or label changes; production WorkGraph instances take the token path above.
-  let hash = 2166136261;
-  let provenanceCount = 0;
-  for (const item of workGraph.getAll()) {
-    if (!item.providerId || !item.externalId) {
-      continue;
-    }
-    provenanceCount++;
-    hash = appendHashPart(hash, item.id);
-    hash = appendHashPart(hash, item.providerId);
-    hash = appendHashPart(hash, item.externalId);
-    hash = appendHashPart(hash, item.itemType);
-    hash = appendHashPart(hash, item.title);
-  }
-  return `h:${provenanceCount}:${hash.toString(36)}`;
+  return `v:${workGraph.getRelatedItemsVersion()}`;
 }
 
 function appendHashPart(hash: number, value: unknown): number {
