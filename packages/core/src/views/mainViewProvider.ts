@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
+import type { PRIdentifier } from '@devdocket/shared';
 import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
@@ -7,7 +8,7 @@ import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, getRelatedItemsIndexKey, type RelatedItemsIndex } from '../services/relatedItems';
-import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
+import { WatcherService, type WatchedRun } from '../services/watcherService';
 import { WorkGraph } from '../services/workGraph';
 import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
@@ -19,7 +20,6 @@ import { toItemAuthorData } from './itemAuthorData';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
-  CIBadgeChangeData,
   ItemCardData,
   SourceGroupData,
   SourceItemData,
@@ -28,10 +28,10 @@ import type {
   WebviewMessage,
 } from './mainTypes';
 
-type CIWatchIndexEntry =
-  | { kind: 'run'; watch: WatchedRun }
-  | { kind: 'pr'; watch: WatchedPR };
-type CIWatchIndex = Map<string, CIWatchIndexEntry>;
+interface CIBadgeLookup {
+  byWorkItemId: Map<string, BadgeData>;
+  byProviderItemKey: Map<string, BadgeData>;
+}
 
 export type RefreshReason =
   | 'workGraph'
@@ -51,7 +51,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private refreshTimer?: ReturnType<typeof setTimeout>;
   private webviewReadyTimer?: ReturnType<typeof setTimeout>;
   private pendingRefreshReasons = new Set<RefreshReason>();
-  private lastCIBadgesByUrl = new Map<string, BadgeData | undefined>();
   private webviewReady = false;
   private disposed = false;
 
@@ -150,33 +149,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    if (this.isWatchOnlyRefresh(reasons)) {
-      this.postCIBadgeChanges();
-      this.updateBadge();
-      return;
-    }
-
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
-    const ciWatchIndex = this.buildCIWatchIndex();
+    const ciBadgeLookup = this.buildCIBadgeLookup(allProviderItems);
 
     // My Work renders unread markers, tier state/order, related-item markers, and CI badges.
     void this.view.webview.postMessage({
       type: 'updateItems',
-      tiers: this.buildTierData(allProviderItems, relatedItemsIndex, ciWatchIndex),
+      tiers: this.buildTierData(allProviderItems, relatedItemsIndex, ciBadgeLookup),
     });
     if (this.shouldRefreshSources(reasons)) {
       void this.view.webview.postMessage({
         type: 'updateSources',
-        providers: this.buildSourcesData(allProviderItems, relatedItemsIndex, ciWatchIndex),
+        providers: this.buildSourcesData(allProviderItems, relatedItemsIndex, ciBadgeLookup),
       });
     }
-    this.lastCIBadgesByUrl = this.buildCurrentCIBadgeMap(ciWatchIndex);
     this.updateBadge();
-  }
-
-  private isWatchOnlyRefresh(reasons: ReadonlySet<RefreshReason>): boolean {
-    return reasons.size > 0 && Array.from(reasons).every(reason => reason === 'watchedRuns' || reason === 'watchedPRs');
   }
 
   private shouldRefreshSources(reasons: ReadonlySet<RefreshReason>): boolean {
@@ -185,45 +173,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       || reasons.has('health')
       || reasons.has('state')
       || reasons.has('workGraph')
-      || ((reasons.has('watchedRuns') || reasons.has('watchedPRs')) && !this.isWatchOnlyRefresh(reasons));
-  }
-
-  private postCIBadgeChanges(): void {
-    if (!this.view) {
-      return;
-    }
-
-    const currentBadges = this.buildCurrentCIBadgeMap();
-    const urls = new Set([...this.lastCIBadgesByUrl.keys(), ...currentBadges.keys()]);
-    const changes: CIBadgeChangeData[] = [];
-
-    for (const url of urls) {
-      const previous = this.lastCIBadgesByUrl.get(url);
-      const current = currentBadges.get(url);
-      if (!areBadgesEqual(previous, current)) {
-        changes.push({ url, badge: current ?? null });
-      }
-    }
-
-    this.lastCIBadgesByUrl = currentBadges;
-    if (changes.length > 0) {
-      void this.view.webview.postMessage({ type: 'updateCIBadges', changes });
-    }
-  }
-
-  private buildCurrentCIBadgeMap(ciWatchIndex?: CIWatchIndex): Map<string, BadgeData | undefined> {
-    const index = ciWatchIndex ?? this.buildCIWatchIndex();
-    const watchedUrls = new Set<string>(index.keys());
-
-    const urls = new Set([...this.lastCIBadgesByUrl.keys(), ...watchedUrls]);
-    const badgesByUrl = new Map<string, BadgeData | undefined>();
-    for (const url of urls) {
-      const badge = this.buildCIBadge(url, index);
-      if (badge || watchedUrls.has(url)) {
-        badgesByUrl.set(url, badge);
-      }
-    }
-    return badgesByUrl;
+      || reasons.has('watchedRuns')
+      || reasons.has('watchedPRs');
   }
 
   /** Update the activity-bar badge with the unread incoming count. */
@@ -245,7 +196,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private buildTierData(
     allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
-    ciWatchIndex: CIWatchIndex,
+    ciBadgeLookup: CIBadgeLookup,
   ): TierData[] {
     const hiddenCanonicalKeys = buildCanonicalHiddenSet(
       allProviderItems,
@@ -272,7 +223,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
             providerItem,
             relatedItemsIndex,
             this.workGraph.findItemByProvenance(providerId, providerItem.externalId),
-            ciWatchIndex,
+            ciBadgeLookup,
           ),
         );
       }
@@ -284,24 +235,24 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
         || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'inProgress', providerItemMap, relatedItemsIndex, ciWatchIndex));
+      .map(item => this.buildWorkItemCardData(item, 'inProgress', providerItemMap, relatedItemsIndex, ciBadgeLookup));
 
     const readyToStartItems = this.workGraph
       .getItemsByState(WorkItemState.New)
       .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
         || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'readyToStart', providerItemMap, relatedItemsIndex, ciWatchIndex));
+      .map(item => this.buildWorkItemCardData(item, 'readyToStart', providerItemMap, relatedItemsIndex, ciBadgeLookup));
 
     const pausedItems = this.workGraph
       .getItemsByState(WorkItemState.Paused)
       .sort((a, b) => a.updatedAt - b.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'paused', providerItemMap, relatedItemsIndex, ciWatchIndex));
+      .map(item => this.buildWorkItemCardData(item, 'paused', providerItemMap, relatedItemsIndex, ciBadgeLookup));
 
     const doneItems = this.workGraph
       .getItemsByState(WorkItemState.Done, WorkItemState.Archived)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'done', providerItemMap, relatedItemsIndex, ciWatchIndex));
+      .map(item => this.buildWorkItemCardData(item, 'done', providerItemMap, relatedItemsIndex, ciBadgeLookup));
 
     return [
       { id: 'incoming', name: 'Incoming', icon: '↓', items: incomingItems, collapsed: false },
@@ -315,7 +266,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private buildSourcesData(
     allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
-    ciWatchIndex: CIWatchIndex,
+    ciBadgeLookup: CIBadgeLookup,
   ): SourceProviderData[] {
     return Array.from(allProviderItems)
       .map(([providerId, items]) => {
@@ -329,7 +280,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
             externalId: item.externalId,
             providerId,
             title: item.title,
-            badges: this.buildBadges(providerId, item, item.url, ciWatchIndex),
+            badges: this.buildBadges(providerId, item, ciBadgeLookup.byProviderItemKey.get(getProviderItemKey(providerId, item.externalId))),
             url: item.url,
             hasRelatedItems: this.hasResolvedRelatedItems(providerId, item.externalId, relatedItemsIndex),
             isAccepted: state === 'accepted',
@@ -394,13 +345,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     providerItem: ProviderItem,
     relatedItemsIndex: RelatedItemsIndex,
     existingWorkItem: WorkItem | undefined,
-    ciWatchIndex: CIWatchIndex,
+    ciBadgeLookup: CIBadgeLookup,
   ): ItemCardData {
     const key = getProviderItemKey(providerId, providerItem.externalId);
     return {
       id: existingWorkItem?.id ?? key,
       title: providerItem.title,
-      badges: this.buildBadges(providerId, providerItem, providerItem.url, ciWatchIndex),
+      badges: this.buildBadges(providerId, providerItem, ciBadgeLookup.byProviderItemKey.get(key)),
       url: providerItem.url,
       repoAnnotation: providerItem.group ?? existingWorkItem?.group,
       author: toItemAuthorData(providerItem),
@@ -419,13 +370,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     tierType: ItemCardData['tierType'],
     providerItemMap: Map<string, ProviderItem>,
     relatedItemsIndex: RelatedItemsIndex,
-    ciWatchIndex: CIWatchIndex,
+    ciBadgeLookup: CIBadgeLookup,
   ): ItemCardData {
     const providerItem = this.getProviderItemForWorkItem(item, providerItemMap);
     return {
       id: item.id,
       title: item.title,
-      badges: this.buildBadges(item.providerId, providerItem, item.url, ciWatchIndex),
+      badges: this.buildBadges(item.providerId, providerItem, ciBadgeLookup.byWorkItemId.get(item.id)),
       url: providerItem?.url ?? item.url,
       repoAnnotation: item.group ?? providerItem?.group,
       author: toItemAuthorData(providerItem),
@@ -465,8 +416,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private buildBadges(
     providerId: string | undefined,
     providerItem: ProviderItem | undefined,
-    itemUrl: string | undefined,
-    ciWatchIndex: CIWatchIndex,
+    ciBadge: BadgeData | undefined,
   ): BadgeData[] {
     const badges: BadgeData[] = [];
     // Pass through the provider's human-readable label so third-party
@@ -485,7 +435,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     badges.push(...buildProviderBadges(providerItem, 'sidebar'));
 
-    const ciBadge = this.buildCIBadge(providerItem?.url ?? itemUrl, ciWatchIndex);
     if (ciBadge) {
       badges.push(ciBadge);
     }
@@ -493,83 +442,51 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return badges;
   }
 
-  private buildCIWatchIndex(): CIWatchIndex {
-    const index: CIWatchIndex = new Map();
-    for (const watch of this.watcherService.getActiveWatches()) {
-      // Preserve the previous .find(...) behavior if duplicate URLs ever appear:
-      // first run wins, then first PR.
-      if (!index.has(watch.identifier.url)) {
-        index.set(watch.identifier.url, { kind: 'run', watch });
+  private buildCIBadgeLookup(allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>): CIBadgeLookup {
+    const lookup: CIBadgeLookup = {
+      byWorkItemId: new Map(),
+      byProviderItemKey: new Map(),
+    };
+    const workItemIdsByExternalId = new Map<string, string[]>();
+    const providerItemKeysByExternalId = new Map<string, string[]>();
+
+    for (const item of this.workGraph.getAll()) {
+      if (!isPRWorkItem(item)) {
+        continue;
+      }
+      const itemIds = workItemIdsByExternalId.get(item.externalId) ?? [];
+      itemIds.push(item.id);
+      workItemIdsByExternalId.set(item.externalId, itemIds);
+    }
+
+    for (const [providerId, items] of allProviderItems) {
+      for (const item of items) {
+        if (!isPRProviderItem(providerId, item)) {
+          continue;
+        }
+        const keys = providerItemKeysByExternalId.get(item.externalId) ?? [];
+        keys.push(getProviderItemKey(providerId, item.externalId));
+        providerItemKeysByExternalId.set(item.externalId, keys);
       }
     }
+
     for (const watch of this.watcherService.getActivePRWatches()) {
-      if (!index.has(watch.identifier.url)) {
-        index.set(watch.identifier.url, { kind: 'pr', watch });
+      const badge = computeCIBadge(this.watcherService.getChildRuns(this.watcherService.getPRWatchKey(watch.identifier)));
+      if (!badge) {
+        continue;
+      }
+
+      for (const externalId of getPRExternalIds(watch.identifier)) {
+        for (const itemId of workItemIdsByExternalId.get(externalId) ?? []) {
+          lookup.byWorkItemId.set(itemId, badge);
+        }
+        for (const providerItemKey of providerItemKeysByExternalId.get(externalId) ?? []) {
+          lookup.byProviderItemKey.set(providerItemKey, badge);
+        }
       }
     }
-    return index;
-  }
 
-  private buildCIBadge(url: string | undefined, ciWatchIndex: CIWatchIndex): BadgeData | undefined {
-    if (!url) {
-      return undefined;
-    }
-
-    const watched = ciWatchIndex.get(url);
-    if (!watched) {
-      return undefined;
-    }
-
-    return watched.kind === 'run'
-      ? this.getRunCIBadge(watched.watch)
-      : this.getPRCIBadge(watched.watch);
-  }
-
-  private getRunCIBadge(watchedRun: WatchedRun): BadgeData | undefined {
-    // hasWarning means we couldn't poll the run successfully — that's a
-    // watcher health concern, not a CI failure. Don't surface it on the
-    // sidebar item; the watch panel still shows the warning where it's
-    // actionable.
-    if (isFailedRun(watchedRun)) {
-      return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
-    }
-    if (watchedRun.hasWarning) {
-      return undefined;
-    }
-    if (watchedRun.status.overallState !== 'completed') {
-      return { label: 'CI running', type: 'ci', variant: 'ci-running' };
-    }
-    if (watchedRun.status.conclusion === 'partial_success') {
-      return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
-    }
-    if (watchedRun.status.conclusion === 'success') {
-      return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
-    }
-    return undefined;
-  }
-
-  private getPRCIBadge(watchedPR: WatchedPR): BadgeData | undefined {
-    const childRuns = this.watcherService.getChildRuns(this.watcherService.getPRWatchKey(watchedPR.identifier));
-    // No CI runs detected — don't surface a CI status. The PR may simply
-    // have no CI configured; runs may not have started yet; or the watcher
-    // is having trouble polling (watchedPR.hasWarning) — none of those
-    // mean "the CI failed".
-    if (childRuns.length === 0) {
-      return undefined;
-    }
-    if (childRuns.some(isFailedRun)) {
-      return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
-    }
-    if (childRuns.some(runWatch => runWatch.status.overallState !== 'completed')) {
-      return { label: 'CI running', type: 'ci', variant: 'ci-running' };
-    }
-    if (childRuns.every(runWatch => runWatch.status.conclusion === 'success')) {
-      return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
-    }
-    if (childRuns.some(runWatch => runWatch.status.conclusion === 'partial_success')) {
-      return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
-    }
-    return undefined;
+    return lookup;
   }
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
@@ -720,8 +637,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private async handleAcceptAll(requestedItems?: ReadonlyArray<{ providerId: string; externalId: string }>): Promise<void> {
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
-    const ciWatchIndex = this.buildCIWatchIndex();
-    const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex, ciWatchIndex).find(tier => tier.id === 'incoming');
+    const ciBadgeLookup = this.buildCIBadgeLookup(allProviderItems);
+    const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex, ciBadgeLookup).find(tier => tier.id === 'incoming');
     if (!incomingTier) {
       return;
     }
@@ -1486,6 +1403,15 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       font-weight: 600;
       line-height: 1.4;
     }
+    .badge-pill--clickable {
+      cursor: pointer;
+    }
+    .badge-pill--clickable:hover,
+    .badge-pill--clickable:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
+      filter: brightness(1.08);
+    }
     .badge-pill--fallback {
       background: transparent;
       color: var(--vscode-descriptionForeground);
@@ -1530,16 +1456,56 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 }
 
+export function computeCIBadge(runs: readonly WatchedRun[]): BadgeData | undefined {
+  if (runs.length === 0) {
+    return undefined;
+  }
+  if (runs.some(isFailedRun)) {
+    return { label: '✗ CI failing', type: 'ci', variant: 'ci-fail' };
+  }
+  if (runs.some(runWatch => runWatch.status.overallState !== 'completed')) {
+    return { label: '⟳ CI running', type: 'ci', variant: 'ci-running' };
+  }
+  if (runs.some(runWatch => runWatch.status.conclusion === 'partial_success')) {
+    return { label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' };
+  }
+  if (runs.every(runWatch => runWatch.status.conclusion === 'success')) {
+    return { label: '✓ CI passing', type: 'ci', variant: 'ci-pass' };
+  }
+  return undefined;
+}
+
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   return isFailedConclusion(runWatch.status.conclusion);
 }
 
-function areBadgesEqual(a?: BadgeData, b?: BadgeData): boolean {
-  if (!a || !b) {
-    return a === b;
-  }
-  return a.label === b.label && a.type === b.type && a.variant === b.variant;
+const PR_EMITTING_PROVIDER_IDS = new Set([
+  'github-my-prs',
+  'github-pr-reviews',
+  'github-mentions',
+  'ado-my-prs',
+  'ado-pr-reviews',
+]);
+
+function getPRExternalIds(identifier: PRIdentifier): string[] {
+  // GitHub PR providers emit externalIds as `${owner}/${repo}#${number}`;
+  // ADO PR providers emit `${org}/${project}/${repo}/${prId}`. The two
+  // forms never collide (3-vs-4 segments, '#'-vs-'/' separator), so we
+  // emit both candidates and let the lookup map decide which one matches.
+  return [`${identifier.repo}#${identifier.prId}`, `${identifier.repo}/${identifier.prId}`];
+}
+
+function isPRWorkItem(item: WorkItem): item is WorkItem & { providerId: string; externalId: string } {
+  return Boolean(item.providerId && item.externalId && isPRCandidate(item.providerId, item.itemType));
+}
+
+function isPRProviderItem(providerId: string, item: ProviderItem): boolean {
+  return isPRCandidate(providerId, item.itemType);
+}
+
+function isPRCandidate(providerId: string, itemType: 'issue' | 'pr' | undefined): boolean {
+  return itemType === 'pr' || (itemType === undefined && PR_EMITTING_PROVIDER_IDS.has(providerId));
 }
 
 function normalizeText(value?: string): string {

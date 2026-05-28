@@ -1,4 +1,5 @@
 import { useRef, useState } from 'preact/hooks';
+import { postMessage } from '../../shared/messaging';
 import { formatProviderAnnotation } from '../../shared/providerAnnotation';
 import type { ItemCardData } from '../../shared/types';
 import { BadgePill } from './BadgePill';
@@ -194,7 +195,15 @@ export function ItemCard({
         {item.badges.length > 0 ? (
           <div class="badge-row">
             {item.badges.map(badge => (
-              <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
+              <BadgePill
+                key={`${badge.type}-${badge.variant}-${badge.label}`}
+                badge={badge}
+                onClick={badge.type === 'ci' ? () => {
+                  postMessage({ type: 'openWatches' });
+                } : undefined}
+                tabIndex={badge.type === 'ci' ? (tabIndex === 0 ? 0 : -1) : undefined}
+                ariaLabel={badge.type === 'ci' ? `${badge.label} — open CI Watches` : undefined}
+              />
             ))}
           </div>
         ) : null}

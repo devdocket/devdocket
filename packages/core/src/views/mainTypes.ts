@@ -5,7 +5,6 @@ import type { ResolvedRelatedItem } from './relatedItemTypes';
 export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
   | { type: 'updateSources'; providers: SourceProviderData[] }
-  | { type: 'updateCIBadges'; changes: CIBadgeChangeData[] }
   | { type: 'selectItem'; itemId: string }
   | { type: 'toggleSearch' }
   | { type: 'updateWatches'; watches: WatchData[] }
@@ -83,11 +82,6 @@ export interface BadgeData {
   label: string;
   type: 'provider' | 'type' | 'state' | 'ci' | 'provider-supplied';
   variant: string;
-}
-
-export interface CIBadgeChangeData {
-  url: string;
-  badge: BadgeData | null;
 }
 
 export interface EditorCIWatchData {

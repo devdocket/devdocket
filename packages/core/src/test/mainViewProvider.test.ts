@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { MainViewProvider } from '../views/mainViewProvider';
+import { MainViewProvider, computeCIBadge } from '../views/mainViewProvider';
 
 type MessageHandler = (message: unknown) => void | Promise<void>;
 
@@ -279,7 +279,6 @@ describe('MainViewProvider', () => {
     expect(incomingTier.items[0].badges).toEqual(expect.arrayContaining([
       { label: 'GitHub', type: 'provider', variant: 'github' },
       { label: 'Review requested', type: 'provider-supplied', variant: 'review-requested' },
-      { label: 'CI failed', type: 'ci', variant: 'ci-fail' },
     ]));
 
     const inProgressTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'in-progress');
@@ -302,7 +301,6 @@ describe('MainViewProvider', () => {
     expect(readyTier.items.find((item: { id: string }) => item.id === 'ordinary-ready').badges).toEqual(expect.arrayContaining([
       { label: 'ADO', type: 'provider', variant: 'ado' },
       { label: 'Approved', type: 'provider-supplied', variant: 'approved' },
-      { label: 'CI running', type: 'ci', variant: 'ci-running' },
     ]));
     expect(readyTier.items.find((item: { id: string }) => item.id === 'manual-ready').badges).toContainEqual(
       { label: 'Manual', type: 'provider', variant: 'manual' },
@@ -314,7 +312,6 @@ describe('MainViewProvider', () => {
     const doneTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'done');
     expect(doneTier.collapsed).toBe(true);
     expect(doneTier.items.map((item: { id: string }) => item.id)).toEqual(['done-new', 'done-old']);
-    expect(doneTier.items[0].badges).toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
   });
 
   it('builds non-CI badges when no watches exist', () => {
@@ -323,13 +320,11 @@ describe('MainViewProvider', () => {
       createProviderRegistry({ github: [] }),
       createStateStore(),
     );
-    const ciWatchIndex = (provider as any).buildCIWatchIndex();
 
     const badges = (provider as any).buildBadges(
       'github',
       { externalId: 'pr-1', title: 'PR item', itemType: 'pr', url: 'https://github.com/org/repo/pull/1' },
-      'https://github.com/org/repo/pull/1',
-      ciWatchIndex,
+      undefined,
     );
 
     expect(badges).toEqual([
@@ -338,171 +333,140 @@ describe('MainViewProvider', () => {
     ]);
   });
 
-  it('builds a CI badge from a matching run watch', () => {
-    const runUrl = 'https://github.com/org/repo/actions/runs/123';
-    const watcherService = createWatcherService({
-      runs: [{
-        identifier: { providerId: 'github-actions', runId: '123', displayName: 'CI', url: runUrl },
-        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
-      }],
+  describe('computeCIBadge', () => {
+    it('returns ci-pass when all runs are passing', () => {
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'success' } },
+        { status: { overallState: 'completed', conclusion: 'success' } },
+      ] as any)).toEqual({ label: '✓ CI passing', type: 'ci', variant: 'ci-pass' });
     });
-    const provider = createProvider(
-      createMockWorkGraph(),
-      createProviderRegistry({ github: [] }),
-      createStateStore(),
-      watcherService,
-    );
-    const ciWatchIndex = (provider as any).buildCIWatchIndex();
 
-    expect((provider as any).buildCIBadge(runUrl, ciWatchIndex)).toEqual(
-      { label: 'CI passed', type: 'ci', variant: 'ci-pass' },
-    );
+    it('returns ci-fail when any run is failing', () => {
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'success' } },
+        { status: { overallState: 'completed', conclusion: 'failure' } },
+      ] as any)).toEqual({ label: '✗ CI failing', type: 'ci', variant: 'ci-fail' });
+    });
+
+    it('returns ci-running when any non-failing run is still running', () => {
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'success' } },
+        { status: { overallState: 'running' } },
+      ] as any)).toEqual({ label: '⟳ CI running', type: 'ci', variant: 'ci-running' });
+    });
+
+    it('returns ci-warn for partial success', () => {
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'partial_success' } },
+      ] as any)).toEqual({ label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' });
+    });
+
+    it('returns undefined for empty runs', () => {
+      expect(computeCIBadge([])).toBeUndefined();
+    });
+
+    it('returns undefined for unknown completed conclusions', () => {
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'provider_future_value' } },
+      ] as any)).toBeUndefined();
+    });
   });
 
-  it('builds a CI badge from a matching PR watch', () => {
-    const prUrl = 'https://github.com/org/repo/pull/12';
-    const prWatchKey = 'pr:github-pr:org/repo:12';
-    const watcherService = createWatcherService({
-      prs: [{
-        identifier: { providerId: 'github-pr', repo: 'org/repo', prId: '12', displayName: 'PR #12', url: prUrl },
-        prState: 'open',
-        childRunKeys: ['github-actions:org/repo:123'],
-      }],
-      childRuns: {
-        [prWatchKey]: [{
-          identifier: { providerId: 'github-actions', repo: 'org/repo', runId: '123', displayName: 'CI', url: 'https://github.com/org/repo/actions/runs/123' },
-          status: { overallState: 'completed', conclusion: 'success', jobs: [] },
-        }],
-      },
-    });
-    const provider = createProvider(
-      createMockWorkGraph(),
-      createProviderRegistry({ github: [] }),
-      createStateStore(),
-      watcherService,
-    );
-    const ciWatchIndex = (provider as any).buildCIWatchIndex();
-
-    expect((provider as any).buildCIBadge(prUrl, ciWatchIndex)).toEqual(
-      { label: 'CI passed', type: 'ci', variant: 'ci-pass' },
-    );
-  });
-
-  it('does not build a CI badge when no watch URL matches', () => {
-    const watcherService = createWatcherService({
-      runs: [{
-        identifier: { providerId: 'github-actions', runId: '123', displayName: 'CI', url: 'https://github.com/org/repo/actions/runs/123' },
-        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
-      }],
-    });
-    const provider = createProvider(
-      createMockWorkGraph(),
-      createProviderRegistry({ github: [] }),
-      createStateStore(),
-      watcherService,
-    );
-    const ciWatchIndex = (provider as any).buildCIWatchIndex();
-
-    expect((provider as any).buildCIBadge('https://github.com/org/repo/pull/123', ciWatchIndex)).toBeUndefined();
-  });
-
-  it('builds the CI watch index once per sidebar refresh', async () => {
+  it('adds a CI badge to a watched PR work item and omits unwatched items', async () => {
     vi.useFakeTimers();
-    const runUrl = 'https://github.com/org/repo/actions/runs/123';
+    const prWatchKey = 'pr:github-pr:org/repo:42';
     const workGraph = createMockWorkGraph([
-      makeWorkItem({ id: 'ready-run', title: 'Ready run', state: WorkItemState.New, providerId: 'github', externalId: 'ready-run', url: runUrl }),
+      makeWorkItem({ id: 'watched-pr', title: 'Watched PR', state: WorkItemState.New, providerId: 'github-my-prs', externalId: 'org/repo#42', itemType: 'pr' }),
+      makeWorkItem({ id: 'unwatched-pr', title: 'Unwatched PR', state: WorkItemState.New, providerId: 'github-my-prs', externalId: 'org/repo#43', itemType: 'pr' }),
     ]);
     const providerRegistry = createProviderRegistry({
-      github: [
-        { externalId: 'incoming-run', title: 'Incoming run', url: runUrl },
-        { externalId: 'ready-run', title: 'Ready run', url: runUrl },
+      'github-my-prs': [
+        { externalId: 'org/repo#42', title: 'Watched PR', itemType: 'pr' },
+        { externalId: 'org/repo#43', title: 'Unwatched PR', itemType: 'pr' },
       ],
     });
-    const stateStore = createStateStore({ 'github::ready-run': 'accepted' });
     const watcherService = createWatcherService({
-      runs: [{
-        identifier: { providerId: 'github-actions', runId: '123', displayName: 'CI', url: runUrl },
-        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
-      }],
+      prs: [{ identifier: { providerId: 'github-pr', repo: 'org/repo', prId: '42', displayName: 'PR #42', url: 'https://github.com/org/repo/pull/42' }, prState: 'open' }],
+      childRuns: {
+        [prWatchKey]: [{ status: { overallState: 'completed', conclusion: 'failure' } }],
+      },
     });
-    const provider = createProvider(workGraph, providerRegistry, stateStore, watcherService);
+    const provider = createProvider(workGraph, providerRegistry, createStateStore({
+      'github-my-prs::org/repo#42': 'accepted',
+      'github-my-prs::org/repo#43': 'accepted',
+    }), watcherService);
     const mockView = createMockWebviewView();
 
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
     await vi.advanceTimersByTimeAsync(50);
 
-    expect(watcherService.getActiveWatches).toHaveBeenCalledTimes(1);
-    expect(watcherService.getActivePRWatches).toHaveBeenCalledTimes(1);
+    const readyTier = findPostedMessage(mockView, 'updateItems').tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
+    expect(readyTier.items.find((item: { id: string }) => item.id === 'watched-pr').badges)
+      .toContainEqual({ label: '✗ CI failing', type: 'ci', variant: 'ci-fail' });
+    expect(readyTier.items.find((item: { id: string }) => item.id === 'unwatched-pr').badges.some((badge: { type: string }) => badge.type === 'ci'))
+      .toBe(false);
   });
 
-  it('does not classify partial-success run badges as failed', async () => {
+  it('removes a CI badge when the PR watch is dismissed', async () => {
     vi.useFakeTimers();
+    const prWatchKey = 'pr:github-pr:org/repo:44';
+    const prs: any[] = [{ identifier: { providerId: 'github-pr', repo: 'org/repo', prId: '44', displayName: 'PR #44', url: 'https://github.com/org/repo/pull/44' }, prState: 'open' }];
     const workGraph = createMockWorkGraph([
-      makeWorkItem({
-        id: 'partial-run-item',
-        title: 'Partial run item',
-        state: WorkItemState.New,
-        providerId: 'ado',
-        externalId: 'partial-run-item',
-        url: 'https://dev.azure.com/org/project/_build/results?buildId=570',
-      }),
+      makeWorkItem({ id: 'watched-pr', title: 'Watched PR', state: WorkItemState.New, providerId: 'github-my-prs', externalId: 'org/repo#44', itemType: 'pr' }),
     ]);
     const providerRegistry = createProviderRegistry({
-      ado: [{ externalId: 'partial-run-item', title: 'Partial run item', url: 'https://dev.azure.com/org/project/_build/results?buildId=570' }],
+      'github-my-prs': [{ externalId: 'org/repo#44', title: 'Watched PR', itemType: 'pr' }],
     });
-    const stateStore = createStateStore({ 'ado::partial-run-item': 'accepted' });
-    const watcherService = createWatcherService({
-      runs: [{
-        identifier: { providerId: 'ado-pipelines', runId: '570', url: 'https://dev.azure.com/org/project/_build/results?buildId=570' },
-        status: { overallState: 'completed', conclusion: 'partial_success' },
-      }],
-    });
-    const provider = createProvider(workGraph, providerRegistry, stateStore, watcherService);
+    const provider = createProvider(
+      workGraph,
+      providerRegistry,
+      createStateStore({ 'github-my-prs::org/repo#44': 'accepted' }),
+      createWatcherService({
+        prs,
+        childRuns: { [prWatchKey]: [{ status: { overallState: 'completed', conclusion: 'success' } }] },
+      }),
+    );
     const mockView = createMockWebviewView();
 
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
     await vi.advanceTimersByTimeAsync(50);
+    expect(findPostedMessage(mockView, 'updateItems').tiers[0].items[0].badges)
+      .toContainEqual({ label: '✓ CI passing', type: 'ci', variant: 'ci-pass' });
 
-    const updateItems = findPostedMessage(mockView, 'updateItems');
-    const readyTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
-    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI failed', type: 'ci', variant: 'ci-fail' });
-    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
-    expect(readyTier.items[0].badges).toContainEqual({ label: 'CI issues', type: 'ci', variant: 'ci-warn' });
-  });
-
-  it('leaves unknown completed run conclusions neutral in the sidebar', async () => {
-    vi.useFakeTimers();
-    const workGraph = createMockWorkGraph([
-      makeWorkItem({
-        id: 'custom-run-item',
-        title: 'Custom run item',
-        state: WorkItemState.New,
-        providerId: 'ado',
-        externalId: 'custom-run-item',
-        url: 'https://dev.azure.com/org/project/_build/results?buildId=999',
-      }),
-    ]);
-    const providerRegistry = createProviderRegistry({
-      ado: [{ externalId: 'custom-run-item', title: 'Custom run item', url: 'https://dev.azure.com/org/project/_build/results?buildId=999' }],
-    });
-    const stateStore = createStateStore({ 'ado::custom-run-item': 'accepted' });
-    const watcherService = createWatcherService({
-      runs: [{
-        identifier: { providerId: 'ado-pipelines', runId: '999', url: 'https://dev.azure.com/org/project/_build/results?buildId=999' },
-        status: { overallState: 'completed', conclusion: 'provider_future_value' },
-      }],
-    });
-    const provider = createProvider(workGraph, providerRegistry, stateStore, watcherService);
-    const mockView = createMockWebviewView();
-
-    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    mockView.webview.postMessage.mockClear();
+    prs.splice(0, prs.length);
+    provider.scheduleRefresh('watchedPRs');
     await vi.advanceTimersByTimeAsync(50);
 
-    const updateItems = findPostedMessage(mockView, 'updateItems');
-    const readyTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
-    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI failed', type: 'ci', variant: 'ci-fail' });
-    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
+    const readyTier = findPostedMessage(mockView, 'updateItems').tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
     expect(readyTier.items[0].badges.some((badge: { type: string }) => badge.type === 'ci')).toBe(false);
+  });
+
+  it('adds a CI badge to incoming and source PR items matched by provider and external id', async () => {
+    vi.useFakeTimers();
+    const prWatchKey = 'pr:github-pr:org/repo:7';
+    const providerRegistry = createProviderRegistry({
+      'github-my-prs': [{ externalId: 'org/repo#7', title: 'Incoming PR', itemType: 'pr' }],
+    });
+    const provider = createProvider(
+      createMockWorkGraph(),
+      providerRegistry,
+      createStateStore(),
+      createWatcherService({
+        prs: [{ identifier: { providerId: 'github-pr', repo: 'org/repo', prId: '7', displayName: 'PR #7', url: 'https://github.com/org/repo/pull/7' }, prState: 'open' }],
+        childRuns: { [prWatchKey]: [{ status: { overallState: 'running' } }] },
+      }),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+
+    const incomingTier = findPostedMessage(mockView, 'updateItems').tiers.find((tier: { id: string }) => tier.id === 'incoming');
+    expect(incomingTier.items[0].badges).toContainEqual({ label: '⟳ CI running', type: 'ci', variant: 'ci-running' });
+
+    const sourceItem = findPostedMessage(mockView, 'updateSources').providers[0].groups[0].items[0];
+    expect(sourceItem.badges).toContainEqual({ label: '⟳ CI running', type: 'ci', variant: 'ci-running' });
   });
 
   it('filters empty tiers out of the refresh payload', async () => {
@@ -1100,74 +1064,20 @@ describe('MainViewProvider', () => {
     expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
   });
 
-  it('posts CI badge patches for watch-only refreshes without full snapshots', async () => {
+  it('refreshes sidebar snapshots when watched PR runs change', async () => {
     vi.useFakeTimers();
-    const runUrl = 'https://github.com/org/repo/actions/runs/1';
-    const runs: any[] = [];
-    const workGraph = createMockWorkGraph([
-      makeWorkItem({ id: 'ready-1', title: 'Ready 1', state: WorkItemState.New, providerId: 'github', externalId: 'ready-1', url: runUrl }),
-    ]);
-    const providerRegistry = createProviderRegistry({
-      github: [{ externalId: 'ready-1', title: 'Ready 1', url: runUrl }],
-    });
-    const watcherService = createWatcherService({ runs });
-    const provider = createProvider(workGraph, providerRegistry, createStateStore({ 'github::ready-1': 'accepted' }), watcherService);
-    const mockView = createMockWebviewView();
-
-    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
-    await vi.advanceTimersByTimeAsync(50);
-    mockView.webview.postMessage.mockClear();
-
-    runs.push({
-      identifier: { providerId: 'github-actions', runId: '1', displayName: 'CI', url: runUrl },
-      status: { overallState: 'running' },
-    });
-    provider.scheduleRefresh('watchedRuns');
-    await vi.advanceTimersByTimeAsync(50);
-
-    expect(mockView.getMessages().map(message => message?.type)).toEqual(['updateCIBadges']);
-    expect(findPostedMessage(mockView, 'updateCIBadges')).toEqual({
-      type: 'updateCIBadges',
-      changes: [{ url: runUrl, badge: { label: 'CI running', type: 'ci', variant: 'ci-running' } }],
-    });
-    expect(findPostedMessage(mockView, 'updateItems')).toBeUndefined();
-    expect(findPostedMessage(mockView, 'updateSources')).toBeUndefined();
-
-    mockView.webview.postMessage.mockClear();
-    runs[0].status = { overallState: 'completed', conclusion: 'success' };
-    provider.scheduleRefresh('watchedRuns');
-    await vi.advanceTimersByTimeAsync(50);
-
-    expect(findPostedMessage(mockView, 'updateCIBadges')).toEqual({
-      type: 'updateCIBadges',
-      changes: [{ url: runUrl, badge: { label: 'CI passed', type: 'ci', variant: 'ci-pass' } }],
-    });
-
-    mockView.webview.postMessage.mockClear();
-    runs.splice(0, runs.length);
-    provider.scheduleRefresh('watchedRuns');
-    await vi.advanceTimersByTimeAsync(50);
-
-    expect(findPostedMessage(mockView, 'updateCIBadges')).toEqual({
-      type: 'updateCIBadges',
-      changes: [{ url: runUrl, badge: null }],
-    });
-  });
-
-  it('falls back to full snapshots when watch and non-watch refresh reasons are batched together', async () => {
-    vi.useFakeTimers();
-    const runUrl = 'https://github.com/org/repo/actions/runs/2';
-    const runs: any[] = [{
-      identifier: { providerId: 'github-actions', runId: '2', displayName: 'CI', url: runUrl },
-      status: { overallState: 'running' },
-    }];
+    const prWatchKey = 'pr:github-pr:org/repo:2';
+    const childRuns: any[] = [{ status: { overallState: 'running' } }];
     const provider = createProvider(
       createMockWorkGraph([
-        makeWorkItem({ id: 'ready-2', title: 'Ready 2', state: WorkItemState.New, providerId: 'github', externalId: 'ready-2', url: runUrl }),
+        makeWorkItem({ id: 'ready-2', title: 'Ready 2', state: WorkItemState.New, providerId: 'github-my-prs', externalId: 'org/repo#2', itemType: 'pr' }),
       ]),
-      createProviderRegistry({ github: [{ externalId: 'ready-2', title: 'Ready 2', url: runUrl }] }),
-      createStateStore({ 'github::ready-2': 'accepted' }),
-      createWatcherService({ runs }),
+      createProviderRegistry({ 'github-my-prs': [{ externalId: 'org/repo#2', title: 'Ready 2', itemType: 'pr' }] }),
+      createStateStore({ 'github-my-prs::org/repo#2': 'accepted' }),
+      createWatcherService({
+        prs: [{ identifier: { providerId: 'github-pr', repo: 'org/repo', prId: '2', displayName: 'PR #2', url: 'https://github.com/org/repo/pull/2' }, prState: 'open' }],
+        childRuns: { [prWatchKey]: childRuns },
+      }),
     );
     const mockView = createMockWebviewView();
 
@@ -1175,14 +1085,14 @@ describe('MainViewProvider', () => {
     await vi.advanceTimersByTimeAsync(50);
     mockView.webview.postMessage.mockClear();
 
-    runs[0].status = { overallState: 'completed', conclusion: 'success' };
+    childRuns[0].status = { overallState: 'completed', conclusion: 'success' };
     provider.scheduleRefresh('watchedRuns');
-    provider.scheduleRefresh('readState');
     await vi.advanceTimersByTimeAsync(50);
 
     const messageTypes = mockView.getMessages().map(message => message?.type);
     expect(messageTypes).toEqual(['updateItems', 'updateSources']);
-    expect(findPostedMessage(mockView, 'updateCIBadges')).toBeUndefined();
+    expect(findPostedMessage(mockView, 'updateItems').tiers[0].items[0].badges)
+      .toContainEqual({ label: '✓ CI passing', type: 'ci', variant: 'ci-pass' });
   });
 
   it('skips sources updates for read-state-only refreshes', async () => {
