@@ -608,6 +608,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'markSeen':
         await this.handleMarkSeen(message.providerId, message.externalId);
         break;
+      case 'openWatches':
+        await vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
+        break;
     }
   }
 
