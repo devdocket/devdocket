@@ -27,6 +27,11 @@ import type {
   WebviewMessage,
 } from './mainTypes';
 
+type CIWatchIndexEntry =
+  | { kind: 'run'; watch: WatchedRun }
+  | { kind: 'pr'; watch: WatchedPR };
+type CIWatchIndex = Map<string, CIWatchIndexEntry>;
+
 export type RefreshReason =
   | 'workGraph'
   | 'discovered'
@@ -145,16 +150,17 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
+    const ciWatchIndex = this.buildCIWatchIndex();
 
     // My Work renders unread markers, tier state/order, related-item markers, and CI badges.
     void this.view.webview.postMessage({
       type: 'updateItems',
-      tiers: this.buildTierData(allProviderItems, relatedItemsIndex),
+      tiers: this.buildTierData(allProviderItems, relatedItemsIndex, ciWatchIndex),
     });
     if (this.shouldRefreshSources(reasons)) {
       void this.view.webview.postMessage({
         type: 'updateSources',
-        providers: this.buildSourcesData(allProviderItems, relatedItemsIndex),
+        providers: this.buildSourcesData(allProviderItems, relatedItemsIndex, ciWatchIndex),
       });
     }
     this.updateBadge();
@@ -189,6 +195,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private buildTierData(
     allProviderItems: Map<string, ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
+    ciWatchIndex: CIWatchIndex,
   ): TierData[] {
     const hiddenCanonicalKeys = buildCanonicalHiddenSet(
       allProviderItems,
@@ -215,6 +222,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
             providerItem,
             relatedItemsIndex,
             this.workGraph.findItemByProvenance(providerId, providerItem.externalId),
+            ciWatchIndex,
           ),
         );
       }
@@ -226,24 +234,24 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
         || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'inProgress', providerItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'inProgress', providerItemMap, relatedItemsIndex, ciWatchIndex));
 
     const readyToStartItems = this.workGraph
       .getItemsByState(WorkItemState.New)
       .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
         || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'readyToStart', providerItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'readyToStart', providerItemMap, relatedItemsIndex, ciWatchIndex));
 
     const pausedItems = this.workGraph
       .getItemsByState(WorkItemState.Paused)
       .sort((a, b) => a.updatedAt - b.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'paused', providerItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'paused', providerItemMap, relatedItemsIndex, ciWatchIndex));
 
     const doneItems = this.workGraph
       .getItemsByState(WorkItemState.Done, WorkItemState.Archived)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'done', providerItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'done', providerItemMap, relatedItemsIndex, ciWatchIndex));
 
     return [
       { id: 'incoming', name: 'Incoming', icon: '↓', items: incomingItems, collapsed: false },
@@ -257,6 +265,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private buildSourcesData(
     allProviderItems: Map<string, ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
+    ciWatchIndex: CIWatchIndex,
   ): SourceProviderData[] {
     return Array.from(allProviderItems)
       .map(([providerId, items]) => {
@@ -270,7 +279,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
             externalId: item.externalId,
             providerId,
             title: item.title,
-            badges: this.buildBadges(providerId, item, item.url),
+            badges: this.buildBadges(providerId, item, item.url, ciWatchIndex),
             hasRelatedItems: this.hasResolvedRelatedItems(providerId, item.externalId, relatedItemsIndex),
             isAccepted: state === 'accepted',
             isDismissed: state === 'dismissed',
@@ -333,13 +342,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     providerId: string,
     providerItem: ProviderItem,
     relatedItemsIndex: RelatedItemsIndex,
-    existingWorkItem?: WorkItem,
+    existingWorkItem: WorkItem | undefined,
+    ciWatchIndex: CIWatchIndex,
   ): ItemCardData {
     const key = getProviderItemKey(providerId, providerItem.externalId);
     return {
       id: existingWorkItem?.id ?? key,
       title: providerItem.title,
-      badges: this.buildBadges(providerId, providerItem, providerItem.url),
+      badges: this.buildBadges(providerId, providerItem, providerItem.url, ciWatchIndex),
       repoAnnotation: providerItem.group ?? existingWorkItem?.group,
       author: toItemAuthorData(providerItem),
       authored: providerItem.authored,
@@ -357,12 +367,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     tierType: ItemCardData['tierType'],
     providerItemMap: Map<string, ProviderItem>,
     relatedItemsIndex: RelatedItemsIndex,
+    ciWatchIndex: CIWatchIndex,
   ): ItemCardData {
     const providerItem = this.getProviderItemForWorkItem(item, providerItemMap);
     return {
       id: item.id,
       title: item.title,
-      badges: this.buildBadges(item.providerId, providerItem, item.url),
+      badges: this.buildBadges(item.providerId, providerItem, item.url, ciWatchIndex),
       repoAnnotation: item.group ?? providerItem?.group,
       author: toItemAuthorData(providerItem),
       authored: providerItem?.authored,
@@ -398,7 +409,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private buildBadges(providerId?: string, providerItem?: ProviderItem, itemUrl?: string): BadgeData[] {
+  private buildBadges(
+    providerId: string | undefined,
+    providerItem: ProviderItem | undefined,
+    itemUrl: string | undefined,
+    ciWatchIndex: CIWatchIndex,
+  ): BadgeData[] {
     const badges: BadgeData[] = [];
     // Pass through the provider's human-readable label so third-party
     // providers (anything not GitHub/ADO) get a real name on the badge
@@ -416,7 +432,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     badges.push(...buildProviderBadges(providerItem, 'sidebar'));
 
-    const ciBadge = this.buildCIBadge(providerItem?.url ?? itemUrl);
+    const ciBadge = this.buildCIBadge(providerItem?.url ?? itemUrl, ciWatchIndex);
     if (ciBadge) {
       badges.push(ciBadge);
     }
@@ -424,26 +440,36 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return badges;
   }
 
-  private buildCIBadge(url?: string): BadgeData | undefined {
+  private buildCIWatchIndex(): CIWatchIndex {
+    const index: CIWatchIndex = new Map();
+    for (const watch of this.watcherService.getActiveWatches()) {
+      // Preserve the previous .find(...) behavior if duplicate URLs ever appear:
+      // first run wins, then first PR.
+      if (!index.has(watch.identifier.url)) {
+        index.set(watch.identifier.url, { kind: 'run', watch });
+      }
+    }
+    for (const watch of this.watcherService.getActivePRWatches()) {
+      if (!index.has(watch.identifier.url)) {
+        index.set(watch.identifier.url, { kind: 'pr', watch });
+      }
+    }
+    return index;
+  }
+
+  private buildCIBadge(url: string | undefined, ciWatchIndex: CIWatchIndex): BadgeData | undefined {
     if (!url) {
       return undefined;
     }
 
-    const watchedRun = this.watcherService
-      .getActiveWatches()
-      .find(runWatch => runWatch.identifier.url === url);
-    if (watchedRun) {
-      return this.getRunCIBadge(watchedRun);
+    const watched = ciWatchIndex.get(url);
+    if (!watched) {
+      return undefined;
     }
 
-    const watchedPR = this.watcherService
-      .getActivePRWatches()
-      .find(prWatch => prWatch.identifier.url === url);
-    if (watchedPR) {
-      return this.getPRCIBadge(watchedPR);
-    }
-
-    return undefined;
+    return watched.kind === 'run'
+      ? this.getRunCIBadge(watched.watch)
+      : this.getPRCIBadge(watched.watch);
   }
 
   private getRunCIBadge(watchedRun: WatchedRun): BadgeData | undefined {
@@ -641,7 +667,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private async handleAcceptAll(requestedItems?: ReadonlyArray<{ providerId: string; externalId: string }>): Promise<void> {
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
-    const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex).find(tier => tier.id === 'incoming');
+    const ciWatchIndex = this.buildCIWatchIndex();
+    const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex, ciWatchIndex).find(tier => tier.id === 'incoming');
     if (!incomingTier) {
       return;
     }

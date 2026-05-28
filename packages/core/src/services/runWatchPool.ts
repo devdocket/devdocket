@@ -45,6 +45,7 @@ export class RunWatchPool implements vscode.Disposable {
   private watches = new Map<string, WatchedRun>();
   private consecutiveFailures = new Map<string, number>();
   private acknowledgedFailedRunKeys = new Set<string>();
+  private activeWatchesCache: readonly WatchedRun[] | undefined;
 
   private readonly _onDidDetectJobFailure = new vscode.EventEmitter<{ run: WatchedRun; job: JobStatus }>();
   readonly onDidDetectJobFailure = this._onDidDetectJobFailure.event;
@@ -72,6 +73,9 @@ export class RunWatchPool implements vscode.Disposable {
       this.watches.set(key, watch);
       restored++;
     }
+    if (restored > 0) {
+      this.invalidateActiveWatchesCache();
+    }
     return restored;
   }
 
@@ -84,6 +88,7 @@ export class RunWatchPool implements vscode.Disposable {
 
     if (existing) {
       this.watches.delete(key);
+      this.invalidateActiveWatchesCache();
       this.acknowledgedFailedRunKeys.delete(key);
     }
 
@@ -124,6 +129,7 @@ export class RunWatchPool implements vscode.Disposable {
     }
 
     this.watches.set(key, watchedRun);
+    this.invalidateActiveWatchesCache();
     this.consecutiveFailures.delete(key);
     this.logger.info(`Started watching: ${identifier.displayName} (${identifier.providerId})`);
 
@@ -142,6 +148,7 @@ export class RunWatchPool implements vscode.Disposable {
     }
 
     watch.dismissed = true;
+    this.invalidateActiveWatchesCache();
     this.consecutiveFailures.delete(key);
     this.acknowledgedFailedRunKeys.delete(key);
     const dismissedPRCount = this.onRunDismissed(key, watch);
@@ -153,6 +160,7 @@ export class RunWatchPool implements vscode.Disposable {
     const childWatch = this.watches.get(runKey);
     if (childWatch && childWatch.parentPRKey === parentPRKey) {
       this.watches.delete(runKey);
+      this.invalidateActiveWatchesCache();
       this.consecutiveFailures.delete(runKey);
       this.acknowledgedFailedRunKeys.delete(runKey);
     }
@@ -162,6 +170,7 @@ export class RunWatchPool implements vscode.Disposable {
     const childWatch = this.watches.get(runKey);
     if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === parentPRKey) {
       childWatch.dismissed = true;
+      this.invalidateActiveWatchesCache();
       this.consecutiveFailures.delete(runKey);
       if (options?.clearAcknowledgement !== false) {
         this.acknowledgedFailedRunKeys.delete(runKey);
@@ -181,6 +190,7 @@ export class RunWatchPool implements vscode.Disposable {
           affectedPRKeys.add(prKey);
         }
         watch.dismissed = true;
+        this.invalidateActiveWatchesCache();
         this.consecutiveFailures.delete(key);
         this.acknowledgedFailedRunKeys.delete(key);
         dismissedCount++;
@@ -205,18 +215,25 @@ export class RunWatchPool implements vscode.Disposable {
     return this.acknowledgedFailedRunKeys.has(this.getWatchKey(watch.identifier));
   }
 
-  getActiveWatches(): WatchedRun[] {
-    return Array.from(this.watches.values()).filter(w => !w.dismissed);
+  getActiveWatches(): readonly WatchedRun[] {
+    if (!this.activeWatchesCache) {
+      this.activeWatchesCache = Array.from(this.watches.values()).filter(w => !w.dismissed);
+    }
+    return this.activeWatchesCache;
   }
 
   getActiveStandaloneWatches(prLinkedKeys: Set<string>): WatchedRun[] {
-    return Array.from(this.watches.values()).filter(
-      w => !w.dismissed && !w.parentPRKey && !prLinkedKeys.has(this.getWatchKey(w.identifier)),
+    return this.getActiveWatches().filter(
+      w => !w.parentPRKey && !prLinkedKeys.has(this.getWatchKey(w.identifier)),
     );
   }
 
   getAllWatches(): WatchedRun[] {
     return Array.from(this.watches.values());
+  }
+
+  private invalidateActiveWatchesCache(): void {
+    this.activeWatchesCache = undefined;
   }
 
   entries(): IterableIterator<[string, WatchedRun]> {
@@ -456,6 +473,7 @@ export class RunWatchPool implements vscode.Disposable {
     this._onDidDetectJobFailure.dispose();
     this._onDidCompleteRun.dispose();
     this.watches.clear();
+    this.invalidateActiveWatchesCache();
     this.consecutiveFailures.clear();
     this.acknowledgedFailedRunKeys.clear();
   }

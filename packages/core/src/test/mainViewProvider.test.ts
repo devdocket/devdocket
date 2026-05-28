@@ -311,6 +311,124 @@ describe('MainViewProvider', () => {
     expect(doneTier.items[0].badges).toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
   });
 
+  it('builds non-CI badges when no watches exist', () => {
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({ github: [] }),
+      createStateStore(),
+    );
+    const ciWatchIndex = (provider as any).buildCIWatchIndex();
+
+    const badges = (provider as any).buildBadges(
+      'github',
+      { externalId: 'pr-1', title: 'PR item', itemType: 'pr', url: 'https://github.com/org/repo/pull/1' },
+      'https://github.com/org/repo/pull/1',
+      ciWatchIndex,
+    );
+
+    expect(badges).toEqual([
+      { label: 'GitHub', type: 'provider', variant: 'github' },
+      { label: 'PR', type: 'type', variant: 'pr' },
+    ]);
+  });
+
+  it('builds a CI badge from a matching run watch', () => {
+    const runUrl = 'https://github.com/org/repo/actions/runs/123';
+    const watcherService = createWatcherService({
+      runs: [{
+        identifier: { providerId: 'github-actions', runId: '123', displayName: 'CI', url: runUrl },
+        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+      }],
+    });
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({ github: [] }),
+      createStateStore(),
+      watcherService,
+    );
+    const ciWatchIndex = (provider as any).buildCIWatchIndex();
+
+    expect((provider as any).buildCIBadge(runUrl, ciWatchIndex)).toEqual(
+      { label: 'CI passed', type: 'ci', variant: 'ci-pass' },
+    );
+  });
+
+  it('builds a CI badge from a matching PR watch', () => {
+    const prUrl = 'https://github.com/org/repo/pull/12';
+    const prWatchKey = 'pr:github-pr:org/repo:12';
+    const watcherService = createWatcherService({
+      prs: [{
+        identifier: { providerId: 'github-pr', repo: 'org/repo', prId: '12', displayName: 'PR #12', url: prUrl },
+        prState: 'open',
+        childRunKeys: ['github-actions:org/repo:123'],
+      }],
+      childRuns: {
+        [prWatchKey]: [{
+          identifier: { providerId: 'github-actions', repo: 'org/repo', runId: '123', displayName: 'CI', url: 'https://github.com/org/repo/actions/runs/123' },
+          status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+        }],
+      },
+    });
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({ github: [] }),
+      createStateStore(),
+      watcherService,
+    );
+    const ciWatchIndex = (provider as any).buildCIWatchIndex();
+
+    expect((provider as any).buildCIBadge(prUrl, ciWatchIndex)).toEqual(
+      { label: 'CI passed', type: 'ci', variant: 'ci-pass' },
+    );
+  });
+
+  it('does not build a CI badge when no watch URL matches', () => {
+    const watcherService = createWatcherService({
+      runs: [{
+        identifier: { providerId: 'github-actions', runId: '123', displayName: 'CI', url: 'https://github.com/org/repo/actions/runs/123' },
+        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+      }],
+    });
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({ github: [] }),
+      createStateStore(),
+      watcherService,
+    );
+    const ciWatchIndex = (provider as any).buildCIWatchIndex();
+
+    expect((provider as any).buildCIBadge('https://github.com/org/repo/pull/123', ciWatchIndex)).toBeUndefined();
+  });
+
+  it('builds the CI watch index once per sidebar refresh', async () => {
+    vi.useFakeTimers();
+    const runUrl = 'https://github.com/org/repo/actions/runs/123';
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'ready-run', title: 'Ready run', state: WorkItemState.New, providerId: 'github', externalId: 'ready-run', url: runUrl }),
+    ]);
+    const providerRegistry = createProviderRegistry({
+      github: [
+        { externalId: 'incoming-run', title: 'Incoming run', url: runUrl },
+        { externalId: 'ready-run', title: 'Ready run', url: runUrl },
+      ],
+    });
+    const stateStore = createStateStore({ 'github::ready-run': 'accepted' });
+    const watcherService = createWatcherService({
+      runs: [{
+        identifier: { providerId: 'github-actions', runId: '123', displayName: 'CI', url: runUrl },
+        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+      }],
+    });
+    const provider = createProvider(workGraph, providerRegistry, stateStore, watcherService);
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+
+    expect(watcherService.getActiveWatches).toHaveBeenCalledTimes(1);
+    expect(watcherService.getActivePRWatches).toHaveBeenCalledTimes(1);
+  });
+
   it('does not classify partial-success run badges as failed', async () => {
     vi.useFakeTimers();
     const workGraph = createMockWorkGraph([
