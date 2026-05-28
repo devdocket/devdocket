@@ -11,7 +11,7 @@ interface ItemCardProps {
   onFocus?: () => void;
   onMoveFocus?: (direction: -1 | 1) => void;
   onMoveTierFocus?: (direction: -1 | 1) => boolean;
-  onClick: () => void;
+  onClick: (modifiers: ClickModifiers) => void;
   onAccept?: (providerId: string, externalId: string) => void;
   onAcceptToFocus?: (providerId: string, externalId: string) => void;
   onDismiss?: (providerId: string, externalId: string) => void;
@@ -26,6 +26,20 @@ interface ItemCardProps {
   onMoveItem?: (itemId: string, direction: -1 | 1) => void;
   disableDragReorder?: boolean;
   query?: string;
+  /**
+   * True when this card is part of an active multi-selection. Distinct from
+   * `item.isSelected`, which marks the item currently shown in the editor /
+   * preview panel. Multi-selection drives bulk-action eligibility; the editor
+   * selection drives `aria-current`.
+   */
+  isInMultiSelection?: boolean;
+}
+
+export interface ClickModifiers {
+  /** Shift key — range-extend from the anchor item. */
+  shift: boolean;
+  /** Ctrl (Windows/Linux) or Cmd (macOS) — toggle this item in the selection. */
+  toggle: boolean;
 }
 
 interface ItemAction {
@@ -52,6 +66,7 @@ export function ItemCard({
   onMoveItem,
   disableDragReorder = false,
   query,
+  isInMultiSelection = false,
 }: ItemCardProps) {
   const actions = getItemActions(item, onAccept, onAcceptToFocus, onDismiss, onTransition);
   const isDraggable = !disableDragReorder && (item.tierType === 'readyToStart' || item.tierType === 'inProgress');
@@ -100,7 +115,7 @@ export function ItemCard({
         break;
       case 'Enter':
         event.preventDefault();
-        onClick();
+        onClick({ shift: event.shiftKey, toggle: event.ctrlKey || event.metaKey });
         break;
       case ' ':
       case 'Spacebar':
@@ -166,14 +181,14 @@ export function ItemCard({
   return (
     <div
       ref={setItemElement}
-      class={`item-card item-card--${getTierClassName(item.tierType)} ${item.isUrgent ? 'urgent' : ''} ${item.isSelected ? 'selected' : ''} ${actionsOpen ? 'actions-open' : ''} ${isDragging ? 'dragging' : ''}`.trim()}
+      class={`item-card item-card--${getTierClassName(item.tierType)} ${item.isUrgent ? 'urgent' : ''} ${item.isSelected ? 'selected' : ''} ${isInMultiSelection ? 'multi-selected' : ''} ${actionsOpen ? 'actions-open' : ''} ${isDragging ? 'dragging' : ''}`.trim()}
       role="option"
       tabIndex={tabIndex}
       draggable={isDraggable}
-      aria-label={buildItemAriaLabel(item)}
-      aria-selected={item.isSelected ?? false}
+      aria-label={buildItemAriaLabel(item, isInMultiSelection)}
+      aria-selected={isInMultiSelection || (item.isSelected ?? false)}
       aria-current={item.isSelected ? 'true' : undefined}
-      onClick={onClick}
+      onClick={(event) => onClick({ shift: event.shiftKey, toggle: event.ctrlKey || event.metaKey })}
       onKeyDown={handleKeyDown}
       onFocus={onFocus}
       onBlurCapture={handleBlurCapture}
@@ -230,7 +245,7 @@ export function ItemCard({
   );
 }
 
-function buildItemAriaLabel(item: ItemCardData): string {
+function buildItemAriaLabel(item: ItemCardData, isInMultiSelection: boolean): string {
   // aria-label fully overrides child text for screen readers, so build the
   // announcement from every visible piece of context: the title, repo
   // annotation, all badge labels (provider / type / CI / state /
@@ -248,6 +263,7 @@ function buildItemAriaLabel(item: ItemCardData): string {
   }
   if (item.hasRelatedItems) parts.push('has related items');
   if (item.isSelected) parts.push('selected');
+  if (isInMultiSelection && !item.isSelected) parts.push('selected');
   return parts.filter((value): value is string => Boolean(value)).join(', ');
 }
 

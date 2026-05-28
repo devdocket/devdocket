@@ -23,6 +23,7 @@ export type WebviewMessage =
   | { type: 'acceptAll'; items?: Array<{ providerId: string; externalId: string }> }
   | { type: 'dismissItem'; providerId: string; externalId: string }
   | { type: 'transitionState'; itemId: string; targetState: string }
+  | { type: 'bulkTransition'; itemIds: string[]; targetState: string }
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
   | { type: 'openWalkthrough' }

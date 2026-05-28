@@ -649,6 +649,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'transitionState':
         await this.handleTransitionState(message.itemId, message.targetState);
         break;
+      case 'bulkTransition':
+        await this.handleBulkTransition(message.itemIds, message.targetState);
+        break;
       case 'reorderItems':
         await this.handleReorder(message.itemIds);
         break;
@@ -794,6 +797,37 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     } catch (err) {
       logger.error('DevDocket: dismiss failed', err);
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  /**
+   * Apply the same state transition to many items in sequence. The webview
+   * only ever sends ids that share a tier (and therefore a current state), so
+   * the per-item validation in {@link WorkGraph.transitionState} is just a
+   * defensive check — invalid transitions are logged and skipped rather than
+   * aborting the whole batch.
+   */
+  private async handleBulkTransition(itemIds: readonly string[], targetState: string): Promise<void> {
+    const targetWorkState = targetState as WorkItemState;
+    let failures = 0;
+    for (const itemId of itemIds) {
+      const item = this.workGraph.getItem(itemId);
+      if (!item) {
+        logger.warn(`DevDocket: bulk transition skipped — item ${itemId} not found`);
+        failures += 1;
+        continue;
+      }
+      try {
+        await this.workGraph.transitionState(itemId, targetWorkState);
+      } catch (err) {
+        failures += 1;
+        logger.error(`DevDocket: bulk transition of ${itemId} to ${targetState} failed`, err);
+      }
+    }
+    if (failures > 0) {
+      void vscode.window.showErrorMessage(
+        `Failed to transition ${failures} item${failures === 1 ? '' : 's'} to ${targetState}.`,
+      );
     }
   }
 
@@ -1366,6 +1400,58 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .item-card.selected {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 0;
+    }
+    .item-card.multi-selected {
+      background: var(--vscode-list-activeSelectionBackground, rgba(64, 128, 255, 0.2));
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 0;
+    }
+    .item-card.multi-selected:hover,
+    .item-card.multi-selected:focus-within {
+      background: var(--vscode-list-activeSelectionBackground, rgba(64, 128, 255, 0.25));
+    }
+    .bulk-action-bar {
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      margin: 8px -8px 0;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+      border-top: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
+      box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.2);
+      z-index: 5;
+      flex-wrap: wrap;
+    }
+    .bulk-action-count {
+      font-weight: 600;
+    }
+    .bulk-action-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .bulk-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: var(--vscode-button-secondaryBackground, transparent);
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, transparent));
+      border-radius: 4px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .bulk-action-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+    }
+    .bulk-action-btn.bulk-action-clear {
+      padding: 4px 8px;
     }
     .item-card:hover,
     .item-card:focus-within {

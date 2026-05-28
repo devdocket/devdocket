@@ -1,11 +1,12 @@
 import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { TierData } from '../../shared/types';
-import { ItemCard } from './ItemCard';
+import { isMultiSelectTier } from '../selectionModel';
+import { ItemCard, type ClickModifiers } from './ItemCard';
 
 interface TierSectionProps {
   tier: TierData;
-  onItemClick: (itemId: string) => void;
+  onItemClick: (itemId: string, modifiers: ClickModifiers) => void;
   onAcceptItem?: (providerId: string, externalId: string) => void;
   onAcceptToFocus?: (providerId: string, externalId: string) => void;
   onDismissItem?: (providerId: string, externalId: string) => void;
@@ -25,6 +26,11 @@ interface TierSectionProps {
   forceExpanded?: boolean;
   totalCount?: number;
   query?: string;
+  /**
+   * Ids of items in this tier currently part of a multi-selection. Empty when
+   * this tier doesn't own the active selection.
+   */
+  multiSelectionIds?: ReadonlySet<string>;
 }
 
 export function TierSection({
@@ -43,6 +49,7 @@ export function TierSection({
   forceExpanded = false,
   totalCount,
   query,
+  multiSelectionIds,
 }: TierSectionProps) {
   const [collapsed, setCollapsed] = useState(tier.collapsed);
   const [activeItemId, setActiveItemId] = useState<string | undefined>(() =>
@@ -344,7 +351,7 @@ export function TierSection({
           role="listbox"
           aria-label={itemCountLabel}
           aria-orientation="vertical"
-          aria-multiselectable={false}
+          aria-multiselectable={isMultiSelectTier(tier.id)}
           onDragEnter={isReorderableTier ? handleDragEnter : undefined}
           onDragOver={isReorderableTier ? handleDragOver : undefined}
           onDragLeave={isReorderableTier ? handleDragLeave : undefined}
@@ -364,7 +371,8 @@ export function TierSection({
                 onFocus={() => setActiveItemId(item.id)}
                 onMoveFocus={moveItemFocus}
                 onMoveTierFocus={focusTierHeader}
-                onClick={() => onItemClick(item.id)}
+                onClick={(modifiers) => onItemClick(item.id, modifiers)}
+                isInMultiSelection={multiSelectionIds?.has(item.id) ?? false}
                 onAccept={onAcceptItem}
                 onAcceptToFocus={onAcceptToFocus}
                 onDismiss={onDismissItem}

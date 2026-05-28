@@ -688,6 +688,73 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('handles bulkTransition by dispatching transitionState once per item', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'item-a', title: 'A', state: WorkItemState.New }),
+      makeWorkItem({ id: 'item-b', title: 'B', state: WorkItemState.New }),
+      makeWorkItem({ id: 'item-c', title: 'C', state: WorkItemState.New }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['item-a', 'item-b', 'item-c'],
+      targetState: WorkItemState.InProgress,
+    });
+
+    await vi.waitFor(() => {
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+    });
+    expect(workGraph.transitionState).toHaveBeenNthCalledWith(1, 'item-a', WorkItemState.InProgress);
+    expect(workGraph.transitionState).toHaveBeenNthCalledWith(2, 'item-b', WorkItemState.InProgress);
+    expect(workGraph.transitionState).toHaveBeenNthCalledWith(3, 'item-c', WorkItemState.InProgress);
+  });
+
+  it('bulkTransition continues past per-item failures and surfaces a single error toast', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'ok-1', title: 'OK 1', state: WorkItemState.New }),
+      makeWorkItem({ id: 'ok-2', title: 'OK 2', state: WorkItemState.New }),
+    ]);
+    workGraph.transitionState.mockImplementation(async (id: string) => {
+      if (id === 'ok-2') {
+        throw new Error('boom');
+      }
+    });
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    workGraph.transitionState.mockImplementation(async (id: string) => {
+      if (id === 'ok-2') {
+        throw new Error('boom');
+      }
+    });
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['ok-1', 'ok-2', 'missing-item'],
+      targetState: WorkItemState.InProgress,
+    });
+
+    await vi.waitFor(() => {
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Failed to transition 2 items to InProgress.',
+      );
+    });
+    expect(workGraph.transitionState).toHaveBeenCalledWith('ok-1', WorkItemState.InProgress);
+    expect(workGraph.transitionState).toHaveBeenCalledWith('ok-2', WorkItemState.InProgress);
+  });
+
   it('handles provider health messages through the webview message switch', async () => {
     vi.useFakeTimers();
     const provider = createProvider(createMockWorkGraph(), createProviderRegistry({}), createStateStore());
