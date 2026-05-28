@@ -546,6 +546,34 @@ describe('WalkthroughParticipant', () => {
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
     });
 
+    it('accounts for unmatched paths in partially matched final file groups', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Grouped final file analysis with a malformed path.');
+            yield new LanguageModelToolCallPart('phase-partial-group', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['src/first.ts', 'not-in-diff.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const result = await handler(
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mockModel),
+        createMockContext(),
+        createMockResponse(),
+        { isCancellationRequested: false },
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
     it('does not record file paths from summary phase signals', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({

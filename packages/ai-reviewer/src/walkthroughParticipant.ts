@@ -274,11 +274,14 @@ export class WalkthroughParticipant {
                   identifiedCount++;
                 }
               }
+              const unidentifiedCount = signaledPaths.length === 0
+                ? 1
+                : Math.max(0, signaledPaths.length - identifiedCount);
               // Only advance unidentified progress for prompts that move to a
               // new file. Follow-ups like "Go deeper" may re-signal the same
               // phase without presenting the next file.
-              if (identifiedCount === 0 && progress.allFiles.length > 0 && this.isAdvancePrompt(request.prompt)) {
-                progress.unidentifiedPresentations++;
+              if (unidentifiedCount > 0 && progress.allFiles.length > 0 && this.isAdvancePrompt(request.prompt)) {
+                this.addUnidentifiedPresentations(progress, unidentifiedCount);
               }
               phase = this.deriveFileWalkthroughPhase(phase, progress, advanceCount);
             }
@@ -479,6 +482,12 @@ export class WalkthroughParticipant {
       file => file === withoutDiffPrefix || file.endsWith('/' + withoutDiffPrefix),
     );
     return suffixMatches.length === 1 ? suffixMatches[0] : undefined;
+  }
+
+  private addUnidentifiedPresentations(progress: WalkthroughProgress, count: number): void {
+    const presented = new Set(progress.presentedFiles);
+    const unaccountedFiles = progress.allFiles.filter(file => !presented.has(file)).length - progress.unidentifiedPresentations;
+    progress.unidentifiedPresentations += Math.max(0, Math.min(count, unaccountedFiles));
   }
 
   private deriveFileWalkthroughPhase(
