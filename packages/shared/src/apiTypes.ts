@@ -225,9 +225,11 @@ export interface DevDocketAction {
  * > **Implementation note**: this interface is *implemented* only by the
  * > DevDocket core extension. Provider/action extensions and other
  * > third-party consumers should hold and call a `DevDocketApi` reference
- * > but must not implement the interface themselves. New required members
- * > may therefore be added in additive `minor` releases of `@devdocket/shared`
- * > without being considered a consumer-visible breaking change.
+ * > but must not implement the interface themselves. To keep additions
+ * > structurally compatible with consumers that nevertheless do
+ * > implement the interface (e.g. strict mocks or test wrappers), new
+ * > members in `minor` releases of `@devdocket/shared` should be declared
+ * > optional even when the core always populates them.
  *
  * @example
  * ```ts
