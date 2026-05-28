@@ -959,6 +959,7 @@ export function registerCommands(
       )),
     vscode.commands.registerCommand('devdocket.browseProviderExtensions',
       wrapCommand('Failed to open Extensions view', () => browseProviderExtensions())),
+    vscode.commands.registerCommand('devdocket.providerDiscoveredFirstItem', () => undefined),
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',

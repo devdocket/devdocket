@@ -89,8 +89,7 @@
               "markdown": "media/walkthroughs/providers.md"
             },
             "completionEvents": [
-              "extensionInstalled:devdocket.devdocket-github",
-              "extensionInstalled:devdocket.devdocket-ado"
+              "onCommand:devdocket.providerDiscoveredFirstItem"
             ]
           },
           {
