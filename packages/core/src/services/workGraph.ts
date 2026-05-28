@@ -410,9 +410,6 @@ export class WorkGraph {
     if (!input.externalId.trim()) {
       throw new Error('External ID is required');
     }
-    if (!input.title.trim()) {
-      throw new Error('Title is required');
-    }
   }
 
   /** Apply a partial update (title, notes, description, and/or url) to an existing work item. */

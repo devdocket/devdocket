@@ -232,6 +232,19 @@ describe('WorkGraph', () => {
     expect(graph.findItemByProvenance('github', '')).toBeUndefined();
   });
 
+  it('preserves empty inbox titles during bulk accept', async () => {
+    const result = await graph.acceptManyFromInbox([
+      { providerId: 'github', externalId: 'empty-title', title: '   ', description: 'Untitled provider item' },
+    ]);
+
+    expect(result.failures).toEqual([]);
+    expect(result.accepted).toHaveLength(1);
+    expect(graph.findItemByProvenance('github', 'empty-title')).toEqual(expect.objectContaining({
+      title: '   ',
+      description: 'Untitled provider item',
+    }));
+  });
+
   it('coalesces bulk accept change events while preserving transition events', async () => {
     const existing = await graph.createItem(
       { title: 'Done item' },
