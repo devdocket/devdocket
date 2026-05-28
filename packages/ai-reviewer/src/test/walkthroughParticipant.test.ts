@@ -633,7 +633,7 @@ describe('WalkthroughParticipant', () => {
       const token = { isCancellationRequested: false };
 
       const firstResult = await handler(
-        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstModel),
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', firstModel),
         createMockContext(),
         createMockResponse(),
         token,
@@ -683,7 +683,7 @@ describe('WalkthroughParticipant', () => {
       const token = { isCancellationRequested: false };
 
       const firstResult = await handler(
-        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mismatchedFirst),
+        createMockRequest('Start the walkthrough https://github.com/owner/repo/pull/42', mismatchedFirst),
         createMockContext(),
         createMockResponse(),
         token,
@@ -753,8 +753,8 @@ describe('WalkthroughParticipant', () => {
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
 
       const result = await handler(
-        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', model),
-        createMockContext([new ChatRequestTurn('previous turn')]),
+        createMockRequest('Continue to the next file', model),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
         createMockResponse(),
         { isCancellationRequested: false },
       );
@@ -763,6 +763,51 @@ describe('WalkthroughParticipant', () => {
       // but counted as an unidentified presentation so progress still advances.
       expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual([]);
       expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+    });
+
+    it('does not advance unidentified progress for non-advancing follow-ups', async () => {
+      const firstFileModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+      const deeperModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('More detail about the first file.');
+            yield new LanguageModelToolCallPart('phase-deeper', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', firstFileModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      const deeperResult = await handler(
+        createMockRequest('Go deeper — show callers and related code', deeperModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
     it('resets file progress when a fresh chat starts for the same PR', async () => {

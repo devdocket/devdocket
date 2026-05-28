@@ -10,11 +10,9 @@ interface WalkthroughProgress {
   allFiles: string[];
   presentedFiles: string[];
   /**
-   * Count of signalPhase calls with a file-walkthrough phase where the model
-   * did not provide any path that we could match to a file in `allFiles`
-   * (missing, malformed, or paths we couldn't canonicalize). Each such call
-   * is treated as one presentation of some unspecified remaining file so
-   * the derived `remainingFiles` count still progresses toward zero.
+   * Count of advancing signalPhase calls with a file-walkthrough phase where
+   * the model did not provide any path that we could match to a file in
+   * `allFiles` (missing, malformed, or paths we couldn't canonicalize).
    */
   unidentifiedPresentations: number;
 }
@@ -275,13 +273,10 @@ export class WalkthroughParticipant {
                   identifiedCount++;
                 }
               }
-              // The model signaled a file-presentation phase but we couldn't
-              // identify any matching file (missing or mangled paths). Treat
-              // it as one unaccounted presentation so progress still advances.
-              // This is safe: the worst case is over-counting toward `lastFile`,
-              // which surfaces the correct follow-ups slightly earlier rather
-              // than the buggy state of "Next file" lingering forever.
-              if (identifiedCount === 0 && progress.allFiles.length > 0) {
+              // Only advance unidentified progress for prompts that move to a
+              // new file. Follow-ups like "Go deeper" may re-signal the same
+              // phase without presenting the next file.
+              if (identifiedCount === 0 && progress.allFiles.length > 0 && this.isAdvancePrompt(request.prompt)) {
                 progress.unidentifiedPresentations++;
               }
               phase = this.deriveFileWalkthroughPhase(phase, progress);
@@ -423,6 +418,10 @@ export class WalkthroughParticipant {
       ...(typeof input.filePath === 'string' ? [input.filePath] : []),
       ...(Array.isArray(input.filePaths) ? input.filePaths.filter((filePath): filePath is string => typeof filePath === 'string') : []),
     ];
+  }
+
+  private isAdvancePrompt(prompt: string): boolean {
+    return /\b(start(?: the)? walkthrough|continue(?: to the next file)?|next file)\b/i.test(prompt);
   }
 
   /**
