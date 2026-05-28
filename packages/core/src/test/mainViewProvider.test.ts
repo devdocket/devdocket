@@ -755,6 +755,31 @@ describe('MainViewProvider', () => {
     expect(workGraph.transitionState).toHaveBeenCalledWith('ok-2', WorkItemState.InProgress);
   });
 
+  it('bulkTransition rejects an unsupported targetState up front without invoking transitionState', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'item-a', title: 'A', state: WorkItemState.New }),
+      makeWorkItem({ id: 'item-b', title: 'B', state: WorkItemState.New }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['item-a', 'item-b'],
+      targetState: 'NotAState',
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Unsupported target state: NotAState.');
+    });
+    expect(workGraph.transitionState).not.toHaveBeenCalled();
+  });
+
   it('handles provider health messages through the webview message switch', async () => {
     vi.useFakeTimers();
     const provider = createProvider(createMockWorkGraph(), createProviderRegistry({}), createStateStore());

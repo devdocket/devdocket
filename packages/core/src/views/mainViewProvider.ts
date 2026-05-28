@@ -808,7 +808,16 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
    * aborting the whole batch.
    */
   private async handleBulkTransition(itemIds: readonly string[], targetState: string): Promise<void> {
-    const targetWorkState = targetState as WorkItemState;
+    // Validate the target state once up front. Without this, an invalid
+    // targetState would fail per-item inside WorkGraph.transitionState, emitting
+    // N error logs and an aggregated toast for what is really a single
+    // input-validation failure from the webview.
+    if (!isWorkItemState(targetState)) {
+      logger.error(`DevDocket: bulk transition rejected — unsupported targetState ${targetState}`);
+      void vscode.window.showErrorMessage(`Unsupported target state: ${targetState}.`);
+      return;
+    }
+    const targetWorkState: WorkItemState = targetState;
     let failures = 0;
     for (const itemId of itemIds) {
       const item = this.workGraph.getItem(itemId);
@@ -1619,6 +1628,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   return isFailedConclusion(runWatch.status.conclusion);
+}
+
+const WORK_ITEM_STATES = new Set<string>(Object.values(WorkItemState));
+
+function isWorkItemState(value: string): value is WorkItemState {
+  return WORK_ITEM_STATES.has(value);
 }
 
 function areBadgesEqual(a?: BadgeData, b?: BadgeData): boolean {
