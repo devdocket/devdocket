@@ -480,21 +480,23 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private async saveData(data: AutosaveData): Promise<void> {
+  private async saveData(data: AutosaveData): Promise<{ rejected: string[] }> {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       throw new Error('Work item no longer exists. Your changes could not be saved.');
     }
     const managed = this.isProviderManaged(item);
     const patch: Partial<WorkItemInput> = {};
+    const rejected: string[] = [];
 
     if (!managed) {
       if ('title' in data) {
         const title = data.title?.trim() ?? '';
         if (!title) {
-          return;
+          rejected.push('Title cannot be empty');
+        } else {
+          patch.title = title;
         }
-        patch.title = title;
       }
 
       if ('url' in data) {
@@ -505,6 +507,8 @@ export class WorkItemEditorPanel {
           const safe = isSafeUrl(rawUrl);
           if (safe) {
             patch.url = safe.href;
+          } else {
+            rejected.push('URL is not a valid http(s) URL');
           }
         }
       }
@@ -515,15 +519,16 @@ export class WorkItemEditorPanel {
     }
 
     if (Object.keys(patch).length === 0) {
-      return;
+      return { rejected };
     }
 
     if (this.disposed) {
       await this.workGraph.updateItemDuringShutdown(this.itemId, patch);
-      return;
+      return { rejected };
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
+    return { rejected };
   }
 
   private update(options: {
@@ -819,8 +824,12 @@ export class WorkItemEditorPanel {
   private enqueueSave(request: AutosaveRequest): void {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await this.saveData(request.data);
-        this.postAutosaveAck(request.requestId);
+        const result = await this.saveData(request.data);
+        if (result.rejected.length > 0) {
+          this.postAutosaveError(request.requestId, result.rejected.join('; '));
+        } else {
+          this.postAutosaveAck(request.requestId);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         this.postAutosaveError(request.requestId, message);
