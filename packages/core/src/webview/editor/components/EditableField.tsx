@@ -51,7 +51,7 @@ export function EditableField({
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
-          onInput={event => onInput?.((event.target as HTMLTextAreaElement).value)}
+          onInput={event => onInput?.(event.currentTarget.value)}
         />
       ) : (
         <input
@@ -60,7 +60,7 @@ export function EditableField({
           value={value}
           placeholder={placeholder}
           readOnly={readOnly}
-          onInput={event => onInput?.((event.target as HTMLInputElement).value)}
+          onInput={event => onInput?.(event.currentTarget.value)}
         />
       )}
       {hint ? <span class="editor-field-hint">{hint}</span> : null}
