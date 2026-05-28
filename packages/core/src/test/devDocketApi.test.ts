@@ -174,6 +174,20 @@ describe('DevDocketApiImpl', () => {
       expect(providerRegistry.getProvider('bad-min')).toBe(provider);
       disposable.dispose();
     });
+
+    it('treats an empty / whitespace-only minContractVersion as malformed', () => {
+      const provider: DevDocketProvider = {
+        ...createMockProvider('empty-min'),
+        minContractVersion: '   ',
+      };
+      const registerSpy = vi.spyOn(providerRegistry, 'register');
+
+      const disposable = api.registerProvider(provider);
+
+      expect(registerSpy).toHaveBeenCalledWith(provider);
+      expect(providerRegistry.getProvider('empty-min')).toBe(provider);
+      disposable.dispose();
+    });
   });
 
   describe('contractVersion', () => {

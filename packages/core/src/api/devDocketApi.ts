@@ -12,6 +12,11 @@ import { logger } from '../services/logger';
 const NOOP_DISPOSABLE: Disposable = { dispose: () => { /* no-op */ } };
 
 function isMalformedMinContractVersion(value: string, current: string): boolean {
+  // An empty or whitespace-only declaration is treated as malformed so it
+  // surfaces a warning rather than silently bypassing the gate.
+  if (value.trim() === '') {
+    return true;
+  }
   // compareContractVersions returns NaN when either input is unparseable.
   // The core's `current` is always valid (it's our own constant), so a NaN
   // result here unambiguously means `value` failed to parse.
@@ -35,7 +40,7 @@ export class DevDocketApiImpl implements DevDocketApi {
 
   registerProvider(provider: DevDocketProvider): Disposable {
     const min = provider.minContractVersion;
-    if (min) {
+    if (min !== undefined) {
       if (isMalformedMinContractVersion(min, this.contractVersion)) {
         logger.warn(
           `Provider "${provider.id}" declared minContractVersion="${min}", which is not a valid semver ` +
