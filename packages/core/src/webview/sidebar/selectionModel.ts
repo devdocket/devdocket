@@ -111,7 +111,30 @@ export function reconcileSelection(
   const anchorId = present.has(current.anchorId)
     ? current.anchorId
     : tierMembership.itemIds.find(id => next.has(id)) ?? current.anchorId;
+  // Preserve referential equality when nothing actually changed. Callers
+  // (e.g. App.tsx's tier-change effect) feed the result straight into
+  // React/Preact state, so allocating a fresh object on every tier update
+  // would trigger redundant rerenders.
+  if (
+    anchorId === current.anchorId &&
+    next.size === current.itemIds.size &&
+    setsEqual(next, current.itemIds)
+  ) {
+    return current;
+  }
   return { tierId: current.tierId, itemIds: next, anchorId };
+}
+
+function setsEqual(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) {
+    return false;
+  }
+  for (const value of a) {
+    if (!b.has(value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function selectOne(tierId: string, itemId: string): SelectionState {

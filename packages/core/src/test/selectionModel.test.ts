@@ -178,6 +178,18 @@ describe('selectionModel.reconcileSelection', () => {
     const next = reconcileSelection(seed, { tierId: 'ready-to-start', itemIds: ['b', 'c'] });
     expect(next).toBeNull();
   });
+
+  it('returns the same reference when nothing changed', () => {
+    const seed: SelectionState = {
+      tierId: 'ready-to-start',
+      itemIds: new Set(['a', 'c']),
+      anchorId: 'a',
+    };
+    const next = reconcileSelection(seed, { tierId: 'ready-to-start', itemIds: ['a', 'b', 'c', 'd'] });
+    // Referential equality matters: callers feed this into Preact state and
+    // a new object would cause redundant rerenders on every tier update.
+    expect(next).toBe(seed);
+  });
 });
 
 describe('selectionModel.isMultiSelectTier', () => {
