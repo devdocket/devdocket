@@ -732,7 +732,8 @@ async function fetchClosedGitHubItemsRest(
       const closedId = await fetchClosedGitHubItemRest(token, item, apiType, signal);
       if (closedId) { closedIds.push(closedId); }
     } catch (error) {
-      if (isAbortError(error) || error instanceof PollingBackoffError) { throw error; }
+      if (isAbortError(error) && signal?.aborted) { throw error; }
+      if (error instanceof PollingBackoffError) { throw error; }
       if (error instanceof GitHubSsoError) {
         logger.debug(`Skipping ${apiType} ${item.id} REST closed-item check after SSO error: ${error.message}`);
         continue;
