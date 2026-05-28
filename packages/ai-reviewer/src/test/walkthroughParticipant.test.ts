@@ -875,6 +875,135 @@ describe('WalkthroughParticipant', () => {
       expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
     });
 
+    it('combines signaled and advance-prompt progress via max so a model that signals once and then stops still advances', async () => {
+      // 3-file PR. Turn 1 signals the first file via signalPhase. Turns 2-3 are
+      // deterministic "Continue to the next file" prompts where the model
+      // emits only text (no signalPhase call). The advance-prompt counter
+      // must continue to credit progress; otherwise `signaledPresented = 1`
+      // would lock `totalPresented` at 1 forever and "Next file" would
+      // persist on the final file.
+      vi.mocked(gitExec).mockResolvedValue('src/first.ts\nsrc/second.ts\nsrc/third.ts');
+
+      const signalingFirstModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+      const silentModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Next file analysis (model does not call signalPhase).');
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      // Turn 1: Start prompt → model signals first file.
+      await handler(
+        createMockRequest('Start the walkthrough', signalingFirstModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      // Turn 2: Continue → model emits only text, no signalPhase. Should still
+      // advance via the deterministic prompt counter, so remainingFiles drops
+      // from 2 to 1.
+      const turn2 = await handler(
+        createMockRequest('Continue to the next file', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+      expect((turn2 as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((turn2 as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+
+      // Turn 3: Continue → final file. Advance counter reaches 3, equal to
+      // allFiles.length, so remainingFiles must be 0 and the phase must be
+      // upgraded to lastFile.
+      const turn3 = await handler(
+        createMockRequest('Continue to the next file', silentModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+          new ChatRequestTurn('Continue to the next file'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+      expect((turn3 as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((turn3 as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+    });
+
+    it('reconciles an unidentified presentation when the same file is later identified', async () => {
+      // 2-file PR. Turn 1 records a presentation without filePath
+      // (unidentifiedPresentations += 1). Turn 2 is a non-advancing
+      // follow-up that DOES include a filePath for the same first file.
+      // Without reconciliation, signaledPresented = 1 (presentedFiles) +
+      // 1 (unidentifiedPresentations) = 2 == allFiles.length, so
+      // remainingFiles would prematurely collapse to 0 before the second
+      // file is shown. The reconciliation must keep remainingFiles at 1.
+      vi.mocked(gitExec).mockResolvedValue('src/first.ts\nsrc/second.ts');
+
+      const unidentifiedFirstModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis (no filePath signaled).');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+      const deeperWithPathModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Deeper look at the first file, now with the path.');
+            yield new LanguageModelToolCallPart('phase-deeper', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePath: 'src/first.ts',
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Walk me through https://github.com/owner/repo/pull/42', unidentifiedFirstModel),
+        createMockContext(),
+        createMockResponse(),
+        token,
+      );
+
+      const deeperResult = await handler(
+        createMockRequest('Go deeper — show callers and related code', deeperWithPathModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('walkthrough');
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(1);
+      expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
+    });
+
     it('resets file progress when a fresh chat starts for the same PR', async () => {
       const firstFileModel = {
         sendRequest: vi.fn().mockImplementation(() => ({
