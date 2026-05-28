@@ -34,12 +34,13 @@ export function handleCommandError(context: string, err: unknown): void {
 }
 
 /** Wrap a command handler so unhandled errors are logged and shown to the user. */
-export function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Promise<void> | void): (...args: T) => Promise<void> {
-  return async (...args: T) => {
+export function wrapCommand<T extends unknown[], R>(label: string, fn: (...args: T) => Promise<R> | R): (...args: T) => Promise<R | undefined> {
+  return async (...args: T): Promise<R | undefined> => {
     try {
-      await fn(...args);
+      return await fn(...args);
     } catch (err: unknown) {
       handleCommandError(label, err);
+      return undefined;
     }
   };
 }
@@ -113,56 +114,39 @@ export async function batchAcceptItems<T extends AcceptableItem>(
   items: T[],
   logLabel: string,
 ): Promise<T[]> {
-  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
-  const acceptedItems: T[] = [];
-  const createdIds: string[] = [];
-  // Track re-opened items so we can roll back on setStates failure
-  const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
-  let failed = 0;
-
-  for (const item of items) {
-    const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
-    if (existing) {
-      // Re-open items in terminal states so resurfaced items return to Ready to Start
-      if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
-        const originalState = existing.state;
-        try {
-          await workGraph.transitionState(existing.id, WorkItemState.New);
-          reopenedItems.push({ id: existing.id, originalState });
-        } catch (err: unknown) {
-          failed++;
-          logger.error(`Failed to re-open ${logLabel} "${item.title}"`, err);
-          continue;
-        }
-      }
-      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-      acceptedItems.push(item);
-      continue;
-    }
-    try {
-      const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item), description: item.description },
-        { providerId: item.providerId, externalId: item.externalId, itemType: item.itemType, url: item.url, group: item.group?.trim() || undefined },
-      );
-      createdIds.push(createdItem.id);
-      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-      acceptedItems.push(item);
-    } catch (err: unknown) {
-      failed++;
-      logger.error(`Failed to accept ${logLabel} "${item.title}"`, err);
-    }
+  let result: Awaited<ReturnType<WorkGraph['acceptManyFromInbox']>>;
+  try {
+    result = await workGraph.acceptManyFromInbox(items.map(item => ({
+      ...item,
+      title: formatItemTitle(item),
+      group: item.group?.trim() || undefined,
+    })));
+  } catch (err: unknown) {
+    handleCommandError(`Failed to accept ${logLabel}s`, err);
+    return [];
   }
+
+  for (const failure of result.failures) {
+    logger.error(`Failed to accept ${logLabel} "${failure.input.title}"`, failure.error);
+  }
+
+  const acceptedItems = result.accepted.map(accepted => accepted.input as T);
+  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = acceptedItems.map(item => ({
+    providerId: item.providerId,
+    externalId: item.externalId,
+    state: 'accepted',
+  }));
 
   if (stateUpdates.length > 0) {
     try {
       await stateStore.setStates(stateUpdates);
     } catch (err: unknown) {
-      for (const id of createdIds) {
+      for (const id of result.createdItemIds) {
         try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
           logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
         }
       }
-      for (const { id, originalState } of reopenedItems) {
+      for (const { id, originalState } of result.reopenedItems) {
         try { await workGraph.transitionState(id, originalState); } catch (rollbackErr: unknown) {
           logger.error('Failed to roll back re-opened item after batch setStates failure', rollbackErr);
         }
@@ -173,6 +157,7 @@ export async function batchAcceptItems<T extends AcceptableItem>(
   }
 
   const total = stateUpdates.length;
+  const failed = result.failures.length;
   if (total > 0) {
     const msg = failed > 0
       ? `Accepted ${total} of ${total + failed} items to Ready to Start`

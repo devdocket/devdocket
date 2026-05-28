@@ -198,6 +198,84 @@ describe('WorkGraph', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it('bulk-accepts multiple inbox items with one save', async () => {
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    const result = await graph.acceptManyFromInbox([
+      { providerId: 'github', externalId: 'ext-1', title: 'Issue 1', description: 'First' },
+      { providerId: 'github', externalId: 'ext-2', title: 'Issue 2', description: 'Second' },
+    ]);
+
+    expect(result.failures).toEqual([]);
+    expect(result.accepted).toHaveLength(2);
+    expect(store.saveAll).toHaveBeenCalledTimes(1);
+    expect(store.save).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(graph.getAll()).toEqual(expect.arrayContaining([
+      expect.objectContaining({ title: 'Issue 1', providerId: 'github', externalId: 'ext-1', state: WorkItemState.New, sortOrder: 0 }),
+      expect.objectContaining({ title: 'Issue 2', providerId: 'github', externalId: 'ext-2', state: WorkItemState.New, sortOrder: 1 }),
+    ]));
+  });
+
+  it('continues bulk accept after one invalid inbox item', async () => {
+    const result = await graph.acceptManyFromInbox([
+      { providerId: 'github', externalId: 'ext-1', title: 'Issue 1' },
+      { providerId: 'github', externalId: '', title: 'Invalid issue' },
+    ]);
+
+    expect(result.accepted).toHaveLength(1);
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0].error).toEqual(expect.objectContaining({ message: 'External ID is required' }));
+    expect(store.saveAll).toHaveBeenCalledTimes(1);
+    expect(graph.findItemByProvenance('github', 'ext-1')?.title).toBe('Issue 1');
+    expect(graph.findItemByProvenance('github', '')).toBeUndefined();
+  });
+
+  it('preserves empty inbox titles during bulk accept', async () => {
+    const result = await graph.acceptManyFromInbox([
+      { providerId: 'github', externalId: 'empty-title', title: '   ', description: 'Untitled provider item' },
+    ]);
+
+    expect(result.failures).toEqual([]);
+    expect(result.accepted).toHaveLength(1);
+    expect(graph.findItemByProvenance('github', 'empty-title')).toEqual(expect.objectContaining({
+      title: '   ',
+      description: 'Untitled provider item',
+    }));
+  });
+
+  it('coalesces bulk accept change events while preserving transition events', async () => {
+    const existing = await graph.createItem(
+      { title: 'Done item' },
+      { providerId: 'github', externalId: 'done-1' },
+    );
+    await graph.transitionState(existing.id, WorkItemState.InProgress);
+    await graph.transitionState(existing.id, WorkItemState.Done);
+    vi.mocked(store.saveAll).mockClear();
+
+    const changeListener = vi.fn();
+    const transitionListener = vi.fn();
+    graph.onDidChange(changeListener);
+    graph.onDidTransitionState(transitionListener);
+
+    const result = await graph.acceptManyFromInbox([
+      { providerId: 'github', externalId: 'done-1', title: 'Done item' },
+      { providerId: 'github', externalId: 'ext-2', title: 'New issue' },
+    ]);
+
+    expect(result.failures).toEqual([]);
+    expect(store.saveAll).toHaveBeenCalledTimes(1);
+    expect(changeListener).toHaveBeenCalledTimes(1);
+    expect(transitionListener).toHaveBeenCalledTimes(1);
+    expect(transitionListener).toHaveBeenCalledWith(expect.objectContaining({
+      itemId: existing.id,
+      oldState: WorkItemState.Done,
+      newState: WorkItemState.New,
+    }));
+    expect(graph.getItem(existing.id)?.state).toBe(WorkItemState.New);
+  });
+
   it('tags invalidateAndReload change events as external reloads', async () => {
     const listener = vi.fn();
     graph.onDidChange(listener);

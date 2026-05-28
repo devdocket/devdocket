@@ -169,13 +169,19 @@ function createProvider(
   providerRegistry: ReturnType<typeof createProviderRegistry>,
   stateStore: ReturnType<typeof createStateStore>,
   watcherService: ReturnType<typeof createWatcherService> = createWatcherService(),
+  readStateStore: any = {
+    has: () => false,
+    add: vi.fn().mockResolvedValue(true),
+    addMany: vi.fn().mockResolvedValue([]),
+    keys: () => [][Symbol.iterator](),
+  },
 ) {
   return new MainViewProvider(
     vscode.Uri.file('C:\\repos\\devdocket-mission-control-454\\packages\\core'),
     workGraph as any,
     providerRegistry as any,
     stateStore as any,
-    { has: () => false, add: vi.fn().mockResolvedValue(true), keys: () => [][Symbol.iterator]() } as any,
+    readStateStore as any,
     watcherService as any,
   );
 }
@@ -647,14 +653,13 @@ describe('MainViewProvider', () => {
       );
     });
     await vi.waitFor(() => {
-      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(2);
+      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.acceptFromInbox',
-        expect.objectContaining({ providerId: 'github', externalId: 'incoming-a' }),
-      );
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.acceptFromInbox',
-        expect.objectContaining({ providerId: 'github', externalId: 'incoming-b' }),
+        'devdocket.acceptAllFromInbox',
+        [
+          expect.objectContaining({ providerId: 'github', externalId: 'incoming-b' }),
+          expect.objectContaining({ providerId: 'github', externalId: 'incoming-a' }),
+        ],
       );
     });
   });
@@ -686,8 +691,8 @@ describe('MainViewProvider', () => {
     });
     await vi.waitFor(() => {
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.acceptFromInbox',
-        expect.objectContaining({ providerId: 'github', externalId: 'incoming-one' }),
+        'devdocket.acceptAllFromInbox',
+        [expect.objectContaining({ providerId: 'github', externalId: 'incoming-one' })],
       );
     });
   });
@@ -728,19 +733,55 @@ describe('MainViewProvider', () => {
       );
     });
     await vi.waitFor(() => {
-      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(2);
+      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.acceptFromInbox',
-        expect.objectContaining({ providerId: 'github', externalId: 'visible' }),
-      );
-      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.acceptFromInbox',
-        expect.objectContaining({ providerId: 'ado', externalId: 'other-visible' }),
+        'devdocket.acceptAllFromInbox',
+        [
+          expect.objectContaining({ providerId: 'ado', externalId: 'other-visible' }),
+          expect.objectContaining({ providerId: 'github', externalId: 'visible' }),
+        ],
       );
       expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
-        'devdocket.acceptFromInbox',
-        expect.objectContaining({ providerId: 'github', externalId: 'hidden' }),
+        'devdocket.acceptAllFromInbox',
+        expect.arrayContaining([expect.objectContaining({ providerId: 'github', externalId: 'hidden' })]),
       );
+    });
+  });
+
+  it('marks only successfully accepted bulk items as seen', async () => {
+    vi.useFakeTimers();
+    (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All');
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'accepted' },
+    ]);
+    const readStateStore = {
+      has: () => false,
+      add: vi.fn().mockResolvedValue(true),
+      addMany: vi.fn().mockResolvedValue(['github::accepted']),
+      keys: () => [][Symbol.iterator](),
+    };
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [
+          { externalId: 'accepted', title: 'Accepted incoming' },
+          { externalId: 'failed', title: 'Failed incoming' },
+        ],
+      }),
+      createStateStore(),
+      createWatcherService(),
+      readStateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'acceptAll' });
+
+    await vi.waitFor(() => {
+      expect(readStateStore.addMany).toHaveBeenCalledWith(['github::accepted']);
     });
   });
 

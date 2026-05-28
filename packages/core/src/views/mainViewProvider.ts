@@ -734,8 +734,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    for (const item of itemsToAccept) {
-      await this.handleAcceptItem(item.providerId, item.externalId);
+    const payloads = itemsToAccept
+      .map(item => {
+        const providerItem = this.providerRegistry.getProviderItems(item.providerId).find(candidate => candidate.externalId === item.externalId);
+        return providerItem ? this.buildAcceptPayload(item.providerId, providerItem) : undefined;
+      })
+      .filter((item): item is ReturnType<MainViewProvider['buildAcceptPayload']> => item !== undefined);
+    if (payloads.length === 0) {
+      return;
+    }
+
+    try {
+      const acceptedItems = await vscode.commands.executeCommand<Array<{ providerId: string; externalId: string }>>('devdocket.acceptAllFromInbox', payloads);
+      await this.readStateStore.addMany((acceptedItems ?? []).map(item => getProviderItemKey(item.providerId, item.externalId)));
+    } catch (err) {
+      logger.error('DevDocket: accept all failed', err);
+      void vscode.window.showErrorMessage(`Failed to accept items: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

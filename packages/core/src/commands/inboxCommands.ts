@@ -532,22 +532,29 @@ async function handleAcceptAllFromInbox(
   workGraph: WorkGraph,
   stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
-  node?: InboxElement,
-): Promise<void> {
-  if (!isBulkInboxNode(node)) { return; }
+  target?: InboxElement | InboxItem[],
+): Promise<InboxItem[]> {
+  let items: InboxItem[];
+  if (Array.isArray(target)) {
+    items = target.filter(isInboxItem);
+  } else {
+    if (!isBulkInboxNode(target)) { return []; }
+    items = resolveBulkInboxItems(target, providerRegistry, stateStore);
+  }
+  if (items.length === 0) { return []; }
 
-  const items = resolveBulkInboxItems(node, providerRegistry, stateStore);
-  if (items.length === 0) { return; }
-
-  const confirm = await vscode.window.showInformationMessage(
-    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'Ready to Start'),
-    { modal: true },
-    'Accept All to Ready to Start',
-  );
-  if (confirm !== 'Accept All to Ready to Start') { return; }
+  if (!Array.isArray(target)) {
+    const confirm = await vscode.window.showInformationMessage(
+      formatBulkInboxMessage('Accept', items.length, target, providerRegistry, 'Ready to Start'),
+      { modal: true },
+      'Accept All to Ready to Start',
+    );
+    if (confirm !== 'Accept All to Ready to Start') { return []; }
+  }
 
   const acceptedItems = await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
   await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
+  return acceptedItems;
 }
 
 async function handleAcceptAllToFocusFromInbox(
@@ -615,7 +622,7 @@ export function registerInboxCommands(
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptAllFromInbox',
-      wrapCommand('Failed to accept all from inbox', (item?: InboxElement) => handleAcceptAllFromInbox(workGraph, stateStore, providerRegistry, item))),
+      wrapCommand('Failed to accept all from inbox', (item?: InboxElement | InboxItem[]) => handleAcceptAllFromInbox(workGraph, stateStore, providerRegistry, item))),
     vscode.commands.registerCommand('devdocket.acceptAllToFocusFromInbox',
       wrapCommand('Failed to accept all to In Progress from inbox', (item?: InboxElement) => handleAcceptAllToFocusFromInbox(workGraph, stateStore, providerRegistry, item))),
     vscode.commands.registerCommand('devdocket.dismissAllFromInbox',

@@ -11,6 +11,35 @@ interface UpdateItemOptions {
   source?: 'user' | 'provider-sync';
 }
 
+export interface WorkGraphInboxAcceptInput {
+  providerId: string;
+  externalId: string;
+  title: string;
+  description?: string;
+  itemType?: WorkItem['itemType'];
+  url?: string;
+  group?: string;
+}
+
+export interface WorkGraphAcceptedInboxItem<T extends WorkGraphInboxAcceptInput = WorkGraphInboxAcceptInput> {
+  input: T;
+  item: WorkItem;
+  created: boolean;
+  reopenedFrom?: WorkItemState;
+}
+
+export interface WorkGraphInboxAcceptFailure<T extends WorkGraphInboxAcceptInput = WorkGraphInboxAcceptInput> {
+  input: T;
+  error: unknown;
+}
+
+export interface WorkGraphAcceptManyFromInboxResult<T extends WorkGraphInboxAcceptInput = WorkGraphInboxAcceptInput> {
+  accepted: Array<WorkGraphAcceptedInboxItem<T>>;
+  failures: Array<WorkGraphInboxAcceptFailure<T>>;
+  createdItemIds: string[];
+  reopenedItems: Array<{ id: string; originalState: WorkItemState }>;
+}
+
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map<WorkItemState, ReadonlySet<WorkItemState>>([
@@ -220,6 +249,25 @@ export class WorkGraph {
     return this.withLock(() => this.doCreateItem(input, provenance));
   }
 
+  private indexProvenance(item: WorkItem): void {
+    if (!item.providerId || !item.externalId) {
+      return;
+    }
+
+    const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+    const existingId = this.provenanceIndex.get(key);
+    if (existingId === undefined) {
+      this.provenanceIndex.set(key, item.id);
+      return;
+    }
+
+    this.duplicateProvenanceCounts.set(key, (this.duplicateProvenanceCounts.get(key) ?? 0) + 1);
+    logger.warn(
+      `Duplicate work item provenance detected for ${key}; ` +
+        `keeping existing item ${existingId} indexed and leaving new item ${item.id} unindexed by provenance.`,
+    );
+  }
+
   private async doCreateItem(
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; itemType?: WorkItem['itemType']; url?: string; group?: string },
@@ -245,24 +293,123 @@ export class WorkGraph {
     };
     await this.store.save(item);
     this.items.set(item.id, item);
-    if (item.providerId && item.externalId) {
-      const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
-      const existingId = this.provenanceIndex.get(key);
-      if (existingId === undefined) {
-        this.provenanceIndex.set(key, item.id);
-      } else {
-        this.duplicateProvenanceCounts.set(key, (this.duplicateProvenanceCounts.get(key) ?? 0) + 1);
-        logger.warn(
-          `Duplicate work item provenance detected for ${key}; ` +
-            `keeping existing item ${existingId} indexed and leaving new item ${item.id} unindexed by provenance.`,
-        );
-      }
-    }
+    this.indexProvenance(item);
     this.invalidateStateCache();
     this.invalidateRelatedItemsCache();
     this.emitDidChange();
     logger.info(`Created work item: ${item.id}`);
     return item;
+  }
+
+  async acceptManyFromInbox<T extends WorkGraphInboxAcceptInput>(items: readonly T[]): Promise<WorkGraphAcceptManyFromInboxResult<T>> {
+    return this.withLock(() => this.doAcceptManyFromInbox(items));
+  }
+
+  private async doAcceptManyFromInbox<T extends WorkGraphInboxAcceptInput>(items: readonly T[]): Promise<WorkGraphAcceptManyFromInboxResult<T>> {
+    const accepted: Array<WorkGraphAcceptedInboxItem<T>> = [];
+    const failures: Array<WorkGraphInboxAcceptFailure<T>> = [];
+    const createdItemIds: string[] = [];
+    const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
+    const itemsToSave: WorkItem[] = [];
+    const transitionEvents: Array<{ itemId: string; item: WorkItem; oldState: WorkItemState; newState: WorkItemState }> = [];
+    const pendingByProvenance = new Map<string, WorkItem>();
+    let nextNewSortOrder = this.nextSortOrder(WorkItemState.New);
+    let createdCount = 0;
+
+    for (const input of items) {
+      try {
+        this.validateInboxAcceptInput(input);
+        const provenanceKey = WorkGraph.provenanceKey(input.providerId, input.externalId);
+        const indexedId = this.provenanceIndex.get(provenanceKey);
+        const existing = pendingByProvenance.get(provenanceKey)
+          ?? (indexedId !== undefined ? this.items.get(indexedId) : undefined);
+
+        if (existing) {
+          if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+            const originalState = existing.state;
+            const now = Date.now();
+            const updated: WorkItem = {
+              ...existing,
+              state: WorkItemState.New,
+              sortOrder: Math.max(nextNewSortOrder, (existing.sortOrder ?? -1) + 1),
+              activityLog: WorkGraph.appendLogEntry(existing.activityLog, {
+                timestamp: now,
+                type: 'state-changed',
+                detail: `${existing.state} → ${WorkItemState.New}`,
+              }),
+              updatedAt: now,
+            };
+            nextNewSortOrder = (updated.sortOrder ?? nextNewSortOrder) + 1;
+            pendingByProvenance.set(provenanceKey, updated);
+            itemsToSave.push(updated);
+            reopenedItems.push({ id: updated.id, originalState });
+            transitionEvents.push({ itemId: updated.id, item: updated, oldState: originalState, newState: WorkItemState.New });
+            accepted.push({ input, item: updated, created: false, reopenedFrom: originalState });
+            continue;
+          }
+
+          accepted.push({ input, item: existing, created: false });
+          continue;
+        }
+
+        const group = input.group?.trim();
+        const now = Date.now();
+        const item: WorkItem = {
+          id: generateId(),
+          title: input.title,
+          description: input.description,
+          state: WorkItemState.New,
+          providerId: input.providerId,
+          externalId: input.externalId,
+          itemType: input.itemType,
+          url: isSafeUrl(input.url?.trim() ?? '')?.href,
+          ...(group ? { group } : {}),
+          sortOrder: nextNewSortOrder++,
+          createdAt: now,
+          updatedAt: now,
+          activityLog: [{ timestamp: now, type: 'created' }],
+        };
+        pendingByProvenance.set(provenanceKey, item);
+        itemsToSave.push(item);
+        createdItemIds.push(item.id);
+        createdCount++;
+        accepted.push({ input, item, created: true });
+      } catch (error: unknown) {
+        failures.push({ input, error });
+      }
+    }
+
+    if (itemsToSave.length > 0) {
+      await this.store.saveAll(itemsToSave);
+      for (const item of itemsToSave) {
+        this.items.set(item.id, item);
+        if (createdItemIds.includes(item.id)) {
+          this.indexProvenance(item);
+          logger.info(`Created work item: ${item.id}`);
+        } else {
+          logger.info(`Transitioned work item ${item.id} to ${item.state}`);
+        }
+      }
+      this.invalidateStateCache();
+      if (createdCount > 0) {
+        this.invalidateRelatedItemsCache();
+      }
+      this.emitDidChange();
+      for (const event of transitionEvents) {
+        this._onDidTransitionState.fire(event);
+      }
+    }
+
+    return { accepted, failures, createdItemIds, reopenedItems };
+  }
+
+  private validateInboxAcceptInput(input: WorkGraphInboxAcceptInput): void {
+    if (!input.providerId.trim()) {
+      throw new Error('Provider ID is required');
+    }
+    if (!input.externalId.trim()) {
+      throw new Error('External ID is required');
+    }
   }
 
   /** Apply a partial update (title, notes, description, and/or url) to an existing work item. */
