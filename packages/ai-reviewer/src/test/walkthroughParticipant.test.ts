@@ -1049,6 +1049,56 @@ describe('WalkthroughParticipant', () => {
       expect((deeperResult as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/first.ts']);
     });
 
+    it('does not reconcile unidentified progress during later advancing file groups', async () => {
+      vi.mocked(gitExec).mockResolvedValue('src/first.ts\nsrc/second.ts\nsrc/third.ts');
+      const unidentifiedFirstModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('First file analysis without a path.');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+            });
+          })(),
+        }),
+      };
+      const finalGroupModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Final grouped file analysis.');
+            yield new LanguageModelToolCallPart('phase-group', 'devdocket-signalPhase', {
+              phase: 'walkthrough',
+              filePaths: ['src/second.ts', 'src/third.ts'],
+            });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+      const token = { isCancellationRequested: false };
+
+      await handler(
+        createMockRequest('Start the walkthrough', unidentifiedFirstModel),
+        createMockContext([new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42')]),
+        createMockResponse(),
+        token,
+      );
+
+      const result = await handler(
+        createMockRequest('Continue to the next file', finalGroupModel),
+        createMockContext([
+          new ChatRequestTurn('Walk me through https://github.com/owner/repo/pull/42'),
+          new ChatRequestTurn('Start the walkthrough'),
+        ]),
+        createMockResponse(),
+        token,
+      );
+
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('lastFile');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.remainingFiles).toBe(0);
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.presentedFiles).toEqual(['src/second.ts', 'src/third.ts']);
+    });
+
     it('resets file progress when a fresh chat starts for the same PR', async () => {
       const firstFileModel = {
         sendRequest: vi.fn().mockImplementation(() => ({

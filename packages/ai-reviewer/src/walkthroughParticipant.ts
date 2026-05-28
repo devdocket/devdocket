@@ -268,9 +268,10 @@ export class WalkthroughParticipant {
               phase = input.phase;
             }
             if (this.isFileWalkthroughPhase(phase)) {
+              const isAdvance = this.isAdvancePrompt(request.prompt);
               let identifiedCount = 0;
               for (const filePath of signaledPaths) {
-                if (this.recordPresentedFile(progress, filePath)) {
+                if (this.recordPresentedFile(progress, filePath, !isAdvance)) {
                   identifiedCount++;
                 }
               }
@@ -284,7 +285,7 @@ export class WalkthroughParticipant {
                 unidentifiedCount > 0
                 && streamedTextThisIteration
                 && progress.allFiles.length > 0
-                && this.isAdvancePrompt(request.prompt)
+                && isAdvance
               ) {
                 this.addUnidentifiedPresentations(progress, unidentifiedCount);
               }
@@ -445,7 +446,11 @@ export class WalkthroughParticipant {
    * Only canonical paths that exist in `allFiles` are pushed onto
    * `presentedFiles` — keeping that array a strict subset of `allFiles`.
    */
-  private recordPresentedFile(progress: WalkthroughProgress, filePath: string): boolean {
+  private recordPresentedFile(
+    progress: WalkthroughProgress,
+    filePath: string,
+    reconcileUnidentified = false,
+  ): boolean {
     const normalizedPath = this.normalizePresentedFilePath(filePath);
     if (!normalizedPath) {
       return false;
@@ -462,7 +467,7 @@ export class WalkthroughParticipant {
       // credited a presentation without a filePath, treat this newly
       // identified file as that prior presentation rather than a separate
       // one, so the two sources of progress don't double-count.
-      if (progress.unidentifiedPresentations > 0) {
+      if (reconcileUnidentified && progress.unidentifiedPresentations > 0) {
         progress.unidentifiedPresentations--;
       }
     }
