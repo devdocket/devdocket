@@ -298,8 +298,8 @@ export function App() {
     // Plain click: on a multi-select-capable tier, replace the selection
     // with the single clicked item (so the listbox always has an
     // aria-selected option and shift-click has an anchor). On non-multi-select
-    // tiers (Incoming, Sources) just drop any stray selection. Either way,
-    // also open the item.
+    // tiers (Sources) just drop any stray selection. Either way, also open
+    // the item.
     if (supportsMultiSelect) {
       setMultiSelection(applySelectionClick(
         null,
