@@ -126,7 +126,11 @@ export function ItemCard({
         break;
       case 'Enter':
         event.preventDefault();
-        onClick({ shift: event.shiftKey, toggle: event.ctrlKey || event.metaKey });
+        // Keyboard activation should always open the item, regardless of
+        // held modifiers. Forwarding Shift/Ctrl/Cmd here would turn a
+        // keyboard "open" gesture into a selection-modifier gesture (e.g.
+        // Shift+Enter would range-extend instead of opening).
+        onClick({ shift: false, toggle: false });
         break;
       case ' ':
       case 'Spacebar':
