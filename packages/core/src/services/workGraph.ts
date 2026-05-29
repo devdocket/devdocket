@@ -1,4 +1,5 @@
 import * as crypto from 'crypto';
+import { Buffer } from 'buffer';
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
@@ -41,6 +42,8 @@ export interface WorkGraphAcceptManyFromInboxResult<T extends WorkGraphInboxAcce
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+export const MAX_ACTIVITY_DETAIL_BYTES = 8 * 1024;
+const ACTIVITY_DETAIL_TRUNCATION_SUFFIX = '…[truncated]';
 
 export const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map<WorkItemState, ReadonlySet<WorkItemState>>([
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.Archived])],
@@ -53,6 +56,12 @@ export const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemS
 type WorkGraphChangeSource = 'local' | 'externalReload';
 interface WorkGraphChangeEvent {
   source: WorkGraphChangeSource;
+}
+
+interface VscodeExtensionLike {
+  id: string;
+  extensionPath?: string;
+  packageJSON?: { displayName?: string; name?: string };
 }
 
 /**
@@ -836,12 +845,55 @@ export class WorkGraph {
       throw new Error(`Work item not found: ${id}`);
     }
     const now = Date.now();
-    const entry: ActivityLogEntry = { timestamp: now, type, ...(detail !== undefined ? { detail } : {}) };
+    const boundedDetail = WorkGraph.boundActivityDetail(id, type, detail);
+    const entry: ActivityLogEntry = {
+      timestamp: now,
+      type,
+      ...(boundedDetail !== undefined ? { detail: boundedDetail } : {}),
+    };
     const updated = { ...item, activityLog: WorkGraph.appendLogEntry(item.activityLog, entry), updatedAt: now };
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
     this.emitDidChange();
+  }
+
+  private static boundActivityDetail(id: string, type: ActivityType, detail: string | undefined): string | undefined {
+    if (detail === undefined) {
+      return undefined;
+    }
+
+    const originalBytes = Buffer.byteLength(detail, 'utf8');
+    if (originalBytes <= MAX_ACTIVITY_DETAIL_BYTES) {
+      return detail;
+    }
+
+    const boundedDetail = truncateUtf8WithSuffix(detail, MAX_ACTIVITY_DETAIL_BYTES, ACTIVITY_DETAIL_TRUNCATION_SUFFIX);
+    const caller = WorkGraph.discoverCallingExtension() ?? 'an unknown extension';
+    logger.warn(
+      `Activity detail for work item ${id} (${type}) from ${caller} exceeded ` +
+        `${MAX_ACTIVITY_DETAIL_BYTES} bytes (${originalBytes} bytes) and was truncated.`,
+    );
+    return boundedDetail;
+  }
+
+  private static discoverCallingExtension(): string | undefined {
+    const stack = new Error().stack;
+    if (!stack) {
+      return undefined;
+    }
+
+    const extensions = (vscode as unknown as { extensions?: { all?: VscodeExtensionLike[] } }).extensions?.all ?? [];
+    const normalizedStack = normalizePathForComparison(stack);
+    for (const extension of extensions) {
+      if (extension.id === 'devdocket.devdocket' || !extension.extensionPath) {
+        continue;
+      }
+      if (normalizedStack.includes(normalizePathForComparison(extension.extensionPath))) {
+        return extension.packageJSON?.displayName ?? extension.packageJSON?.name ?? extension.id;
+      }
+    }
+    return undefined;
   }
 
   /** Append an entry to the log, trimming the oldest entries if the cap is exceeded. */
@@ -887,4 +939,26 @@ export class WorkGraph {
 
 function generateId(): string {
   return `wc-${crypto.randomUUID()}`;
+}
+
+function truncateUtf8WithSuffix(value: string, maxBytes: number, suffix: string): string {
+  const suffixBytes = Buffer.byteLength(suffix, 'utf8');
+  const contentBytesLimit = Math.max(0, maxBytes - suffixBytes);
+  let contentBytes = 0;
+  let contentEnd = 0;
+
+  for (const char of value) {
+    const charBytes = Buffer.byteLength(char, 'utf8');
+    if (contentBytes + charBytes > contentBytesLimit) {
+      break;
+    }
+    contentBytes += charBytes;
+    contentEnd += char.length;
+  }
+
+  return `${value.slice(0, contentEnd)}${suffix}`;
+}
+
+function normalizePathForComparison(value: string): string {
+  return value.replace(/\\/g, '/').toLowerCase();
 }
