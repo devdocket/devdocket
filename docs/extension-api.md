@@ -93,6 +93,13 @@ The API surface is intentionally small:
 import * as vscode from 'vscode';
 
 interface DevDocketApi {
+  /**
+   * Semver version of the implemented API contract (e.g. `"1.0.0"`).
+   * Optional at the type level: older DevDocket cores predate this
+   * field and report `undefined` here. The current core always sets it.
+   */
+  readonly contractVersion?: string;
+
   registerProvider(provider: DevDocketProvider): vscode.Disposable;
   registerAction(action: DevDocketAction): vscode.Disposable;
 
@@ -119,6 +126,48 @@ interface DevDocketApi {
   ): vscode.Disposable;
 }
 ```
+
+### Contract version
+
+`DevDocketApi.contractVersion` is a semver string identifying the version of the extension API contract implemented by the core extension at runtime. It is bumped:
+
+- **minor** for additive changes (new optional members, new methods),
+- **major** for breaking changes,
+- **patch** for internal fixes that do not change the surface.
+
+Providers and actions can opt into a compatibility gate by declaring
+`minContractVersion` on the registered object:
+
+```ts
+import { CONTRACT_VERSION } from '@devdocket/shared';
+
+const provider: DevDocketProvider = {
+  id: 'my-provider',
+  label: 'My Provider',
+  minContractVersion: CONTRACT_VERSION, // requires DevDocket core >= the version this build targets
+  onDidDiscoverItems: emitter.event,
+  async refresh() { /* … */ },
+};
+
+api.registerProvider(provider);
+```
+
+If `api.contractVersion` is lower than `minContractVersion`, `registerProvider` (and `registerAction`) **does not throw** — it logs a warning, skips registration, and returns a no-op `Disposable`. This lets the host extension keep working when paired with an older DevDocket core. If you need to react to incompatibility explicitly, compare versions yourself before calling `register*`:
+
+```ts
+import { isContractVersionSatisfied } from '@devdocket/shared';
+
+// `api.contractVersion` is `string | undefined`: older DevDocket cores
+// predate the field and report `undefined`. Treat that as "too old".
+if (!api.contractVersion || !isContractVersionSatisfied(api.contractVersion, '1.2.0')) {
+  vscode.window.showWarningMessage(
+    `My Provider needs DevDocket >= 1.2.0 (found ${api.contractVersion ?? 'unknown'}).`,
+  );
+  return;
+}
+```
+
+The `CONTRACT_VERSION` constant from `@devdocket/shared` corresponds to the version of the contract your build was compiled against — useful for declaring `minContractVersion: CONTRACT_VERSION` so the gate moves automatically when you upgrade.
 
 `ActivityDetailRender` is one of:
 
