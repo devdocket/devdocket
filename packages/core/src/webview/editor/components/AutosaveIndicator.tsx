@@ -36,20 +36,25 @@ export function AutosaveIndicator({ status, savedAt }: AutosaveIndicatorProps) {
     return () => window.clearTimeout(timer);
   }, [status, savedAt]);
 
-  const dotVisible = status !== 'idle' && !(status === 'saved' && savedExpired);
-  const tone = dotVisible ? toneFor(status) : undefined;
-  const label = dotVisible ? labelFor(status) : '';
+  if (status === 'idle' || (status === 'saved' && savedExpired)) {
+    return (
+      <span class="editor-autosave-live" role="status" aria-live="polite">
+        <span class="editor-visually-hidden" />
+      </span>
+    );
+  }
+
+  const tone = toneFor(status);
+  const label = labelFor(status);
 
   return (
     <span class="editor-autosave-live" role="status" aria-live="polite">
       <span class="editor-visually-hidden">{label}</span>
-      {dotVisible ? (
-        <span
-          class={`editor-autosave-dot editor-autosave-dot--${tone}`}
-          title={label}
-          aria-hidden="true"
-        />
-      ) : null}
+      <span
+        class={`editor-autosave-dot editor-autosave-dot--${tone}`}
+        title={label}
+        aria-hidden="true"
+      />
     </span>
   );
 }
