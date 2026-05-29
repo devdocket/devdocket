@@ -107,6 +107,13 @@ interface DevDocketApi {
   getProviderItem?(providerId: string, externalId: string): ProviderItem | undefined;
 
   /**
+   * Optional: append an activity log entry to a work item. The optional detail
+   * string is capped at 8 KiB (UTF-8) and larger values are truncated with
+   * `…[truncated]`.
+   */
+  addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
+
+  /**
    * Optional: register a renderer that converts an activity log entry's
    * raw `detail` string into a display-ready representation for the
    * editor. Use this when your extension writes structured `detail`
@@ -562,6 +569,8 @@ Action authors should use this mapping when implementing `canRun()` — for exam
 
 Activity log entries carry a free-form `detail` string. Extensions that write structured payloads (e.g. JSON encoded with their own schema) should register a renderer so the core extension can display the entry without parsing the schema itself. This keeps the core decoupled from extension-private schemas — only the writer extension knows the shape.
 
+`api.addActivity` caps each `detail` value at **8 KiB** measured as UTF-8 bytes. Larger details are truncated with the suffix `…[truncated]`, and DevDocket logs a warning instead of throwing. Keep activity details concise; store large artifacts externally and link to them from the detail text.
+
 ```ts
 api.registerActivityDetailRenderer?.('work-started', (raw) => {
   const decoded = decodeMyDetail(raw);
@@ -587,6 +596,10 @@ If the extension does not register a renderer for an activity type, the raw `det
 ### Item Count Limits
 
 Each provider is capped at **10,000 discovered items** per refresh. If a provider emits more than 10,000 items, excess items are silently truncated from the end and a warning is logged. Design your provider to stay within this limit — for example, by filtering to only relevant items in your `refresh()` implementation.
+
+### Activity Detail Limits
+
+Activity log `detail` strings written through `DevDocketApi.addActivity` are capped at **8 KiB** measured as UTF-8 bytes. Oversized details are truncated with `…[truncated]` and a warning is logged. The API call still succeeds.
 
 ### Readonly WorkItem in Actions
 

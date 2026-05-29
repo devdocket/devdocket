@@ -320,7 +320,8 @@ export interface DevDocketApi {
    *
    * @param itemId - The work item ID to log against.
    * @param type - The activity type discriminator.
-   * @param detail - Optional human-readable detail string.
+   * @param detail - Optional human-readable detail string. DevDocket caps this
+   *   value at 8 KiB (UTF-8) and truncates larger entries with `…[truncated]`.
    */
   addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
   /**
