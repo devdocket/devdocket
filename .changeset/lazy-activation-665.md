@@ -1,8 +1,6 @@
 ---
-"devdocket-github": patch
-"devdocket-ado": patch
 "devdocket-start-git-work": patch
 "devdocket-ai-reviewer": patch
 ---
 
-All non-core extensions now activate only when the DevDocket sidebar is first opened, regardless of whether a workspace folder is present. The GitHub and Azure DevOps providers no longer declare `onStartupFinished`, so they no longer cascade-activate the core extension on every VS Code session. DevDocket continues to work fully in no-folder windows.
+The `start-git-work` and `ai-reviewer` action extensions now activate lazily via `onView:devdocket.main` instead of `onStartupFinished`. They are pure on-demand — `start-git-work` runs when a user starts work on an item, and `ai-reviewer` runs when its review action is invoked or its `@walkthrough` chat participant is mentioned (chat participants wake on mention regardless of activation events). This avoids loading them on every VS Code session for users who never open the DevDocket sidebar. The GitHub and Azure DevOps provider extensions continue to activate at startup so background incoming-item discovery and CI/PR watchers keep running whether or not the sidebar is open.
