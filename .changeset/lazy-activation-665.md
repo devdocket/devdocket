@@ -5,4 +5,4 @@
 "devdocket-ai-reviewer": patch
 ---
 
-Reduce startup work in windows without a workspace folder (e.g. empty windows, `--remote` connection setup). The `start-git-work` and `ai-reviewer` action extensions now activate lazily via the DevDocket sidebar view instead of `onStartupFinished`, and all four non-core extensions short-circuit `activate()` to a no-op when no workspace folder is open, re-running activation once a folder is added. As a side effect, the GitHub and Azure DevOps providers no longer poll for items in folder-less windows — open a folder to enable the inbox.
+All non-core extensions now activate only when the DevDocket sidebar is first opened, regardless of whether a workspace folder is present. The GitHub and Azure DevOps providers no longer declare `onStartupFinished`, so they no longer cascade-activate the core extension on every VS Code session. DevDocket continues to work fully in no-folder windows.
