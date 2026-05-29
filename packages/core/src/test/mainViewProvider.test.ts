@@ -806,7 +806,7 @@ describe('MainViewProvider', () => {
     await vi.waitFor(() => {
       expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'Failed to transition 2 items to InProgress.',
+        'Failed to transition 2 items to In Progress.',
       );
     });
     expect(workGraph.transitionState).toHaveBeenCalledWith('ok-1', WorkItemState.InProgress);

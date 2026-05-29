@@ -844,7 +844,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     if (failures > 0) {
       void vscode.window.showErrorMessage(
-        `Failed to transition ${failures} item${failures === 1 ? '' : 's'} to ${targetState}.`,
+        `Failed to transition ${failures} item${failures === 1 ? '' : 's'} to ${formatStateLabel(targetState)}.`,
       );
     }
   }
@@ -1647,6 +1647,17 @@ const WORK_ITEM_STATES = new Set<string>(Object.values(WorkItemState));
 
 function isWorkItemState(value: string): value is WorkItemState {
   return WORK_ITEM_STATES.has(value);
+}
+
+/**
+ * Human-readable label for a WorkItemState enum value, matching the editor
+ * webview's {@link stateLabel} helper. Used in user-facing toasts so messages
+ * read "In Progress" rather than the raw "InProgress" identifier.
+ */
+function formatStateLabel(state: string): string {
+  return state === WorkItemState.InProgress
+    ? 'In Progress'
+    : state.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
 function areBadgesEqual(a?: BadgeData, b?: BadgeData): boolean {
