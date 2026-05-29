@@ -804,7 +804,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         logger.warn(`DevDocket: item ${itemId} not found for transition`);
         return;
       }
-      await this.workGraph.transitionState(itemId, targetState as WorkItemState);
+      if (item.state === WorkItemState.Paused && targetState === WorkItemState.InProgress) {
+        await this.workGraph.resumeItem(itemId);
+      } else {
+        await this.workGraph.transitionState(itemId, targetState as WorkItemState);
+      }
     } catch (err) {
       logger.error('DevDocket: transition failed', err);
       void vscode.window.showErrorMessage(`Failed to transition item: ${err instanceof Error ? err.message : String(err)}`);

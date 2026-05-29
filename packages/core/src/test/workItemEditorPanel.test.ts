@@ -97,6 +97,18 @@ function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record
       ));
       changeEmitter.fire();
     }),
+    resumeItem: vi.fn(async (id: string) => {
+      const current = items.get(id);
+      if (!current) {
+        throw new Error(`Missing item ${id}`);
+      }
+      items.set(id, appendActivityLogEntry(
+        { ...current, state: WorkItemState.InProgress },
+        'state-changed',
+        `${current.state} → ${WorkItemState.InProgress}`,
+      ));
+      changeEmitter.fire();
+    }),
     addActivity: vi.fn(async (id: string, type: ActivityType, detail?: string) => {
       const current = items.get(id);
       if (!current) {
@@ -895,6 +907,17 @@ describe('WorkItemEditorPanel', () => {
     expect(workGraph.transitionState).toHaveBeenCalledWith(item.id, WorkItemState.Done);
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(1, 'devdocket.runAction', { id: item.id });
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(2, 'devdocket.editItem', { id: item.id });
+  });
+
+  it('routes a Paused → InProgress transitionState message through workGraph.resumeItem', async () => {
+    const item = makeItem({ state: WorkItemState.Paused });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    await mock.simulateMessage({ type: 'transitionState', itemId: item.id, targetState: WorkItemState.InProgress });
+
+    expect(workGraph.resumeItem).toHaveBeenCalledWith(item.id);
+    expect(workGraph.transitionState).not.toHaveBeenCalledWith(item.id, WorkItemState.InProgress);
   });
 
   it('opens related Sources items from the editor using explicit provenance fields', async () => {

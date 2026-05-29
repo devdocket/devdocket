@@ -33,8 +33,8 @@ Each tier exposes a small floating action overlay on hover. Available actions pe
 |------|---------------|
 | Incoming | **✓ Accept**, **▶ Start** (accept + go to In Progress), **✗ Dismiss** |
 | In Progress | **✓ Complete**, **⏸ Pause** |
-| Ready to Start | **▶ Start** |
-| Paused | **▶ Resume** |
+| Ready to Start | **▶ Start**, **⏸ Pause** |
+| Paused | **▶ Resume** (returns to In Progress or Ready to Start — wherever it was paused from) |
 | Done | **↩ Requeue** |
 
 The drag handle (left side of the card) appears on hover for tiers that support reordering: Ready to Start and In Progress. Drag a card up or down to change its priority within that tier.
@@ -124,10 +124,12 @@ flowchart TD
     Manual["Manual ➕ Create Item"] --> Ready
     Ready["Ready to Start<br/>[New]"]
     Ready -- Start --> InProgress
+    Ready -- Pause --> Paused
     InProgress["In Progress<br/>[InProgress]"]
     InProgress -- Pause --> Paused
     Paused["Paused<br/>[Paused]"]
-    Paused -- Resume --> InProgress
+    Paused -- "Resume (from Ready)" --> Ready
+    Paused -- "Resume (from In Progress)" --> InProgress
     InProgress -- Complete --> Done
     Done["Done<br/>[Done] · [Archived]"]
     Done -- Requeue --> Ready

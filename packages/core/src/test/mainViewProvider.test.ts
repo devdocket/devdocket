@@ -111,6 +111,12 @@ function createMockWorkGraph(initialItems: WorkItem[] = []) {
         item.state = state;
       }
     }),
+    resumeItem: vi.fn(async (id: string) => {
+      const item = items.get(id);
+      if (item) {
+        item.state = WorkItemState.InProgress;
+      }
+    }),
     reorderItem: vi.fn(async (draggedId: string, beforeId: string) => {
       const orderedIds = getReadyItems().map(item => item.id).filter(id => id !== draggedId);
       const beforeIndex = orderedIds.indexOf(beforeId);
@@ -685,6 +691,31 @@ describe('MainViewProvider', () => {
       );
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-99', 'dismissed');
       expect(workGraph.transitionState).toHaveBeenCalledWith('existing-item', WorkItemState.Done);
+    });
+  });
+
+  it('routes a Paused → InProgress transitionState message through workGraph.resumeItem', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'paused-item', title: 'Paused item', state: WorkItemState.Paused }),
+      makeWorkItem({ id: 'ready-item', title: 'Ready item', state: WorkItemState.New }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    // Paused → InProgress should resume (delegate origin-tier decision to WorkGraph)
+    mockView.simulateMessage({ type: 'transitionState', itemId: 'paused-item', targetState: WorkItemState.InProgress });
+    // Ready → Paused should still go through transitionState (no special routing)
+    mockView.simulateMessage({ type: 'transitionState', itemId: 'ready-item', targetState: WorkItemState.Paused });
+
+    await vi.waitFor(() => {
+      expect(workGraph.resumeItem).toHaveBeenCalledWith('paused-item');
+      expect(workGraph.transitionState).not.toHaveBeenCalledWith('paused-item', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('ready-item', WorkItemState.Paused);
     });
   });
 
