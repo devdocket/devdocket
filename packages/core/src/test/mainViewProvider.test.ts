@@ -153,6 +153,11 @@ function createStateStore(initialStates: Record<string, string> = {}) {
     setState: vi.fn(async (providerId: string, externalId: string, state: string) => {
       states.set(`${providerId}::${externalId}`, state);
     }),
+    setStates: vi.fn(async (items: Array<{ providerId: string; externalId: string; state: string }>) => {
+      for (const { providerId, externalId, state } of items) {
+        states.set(`${providerId}::${externalId}`, state);
+      }
+    }),
   };
 }
 
@@ -836,6 +841,268 @@ describe('MainViewProvider', () => {
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Unsupported target state: NotAState.');
     });
     expect(workGraph.transitionState).not.toHaveBeenCalled();
+  });
+
+  it('routes bulkInboxAction accept through devdocket.acceptAllFromInbox once for the selected subset', async () => {
+    vi.useFakeTimers();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'visible-1' },
+      { providerId: 'ado', externalId: 'other-visible' },
+    ]);
+    const readStateStore = {
+      has: () => false,
+      add: vi.fn().mockResolvedValue(true),
+      addMany: vi.fn().mockResolvedValue([]),
+      keys: () => [][Symbol.iterator](),
+    };
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [
+          { externalId: 'visible-1', title: 'Visible GitHub item' },
+          { externalId: 'hidden', title: 'Hidden GitHub item' },
+        ],
+        ado: [{ externalId: 'other-visible', title: 'Visible ADO item' }],
+      }),
+      createStateStore(),
+      undefined,
+      readStateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'visible-1' },
+      { providerId: 'ado', externalId: 'other-visible' },
+    ]);
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [
+        { providerId: 'github', externalId: 'visible-1' },
+        { providerId: 'ado', externalId: 'other-visible' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptAllFromInbox',
+        [
+          expect.objectContaining({ providerId: 'github', externalId: 'visible-1' }),
+          expect.objectContaining({ providerId: 'ado', externalId: 'other-visible' }),
+        ],
+      );
+      expect(readStateStore.addMany).toHaveBeenCalledWith([
+        'github::visible-1',
+        'ado::other-visible',
+      ]);
+    });
+    // No confirmation prompt — selecting + clicking a bulk button is the
+    // explicit intent. This mirrors bulkTransition (no modal) and differs
+    // from the Accept All button's "Accept all N items?" confirmation.
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it('bulkInboxAction accept skips items whose providerItem is no longer in the registry', async () => {
+    vi.useFakeTimers();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'present' },
+    ]);
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'present', title: 'Present item' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'present' },
+    ]);
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [
+        { providerId: 'github', externalId: 'present' },
+        { providerId: 'github', externalId: 'vanished' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptAllFromInbox',
+        [expect.objectContaining({ providerId: 'github', externalId: 'present' })],
+      );
+    });
+    const acceptCalls = (vscode.commands.executeCommand as Mock).mock.calls.filter(
+      ([cmd]: [string]) => cmd === 'devdocket.acceptAllFromInbox',
+    );
+    expect(acceptCalls).toHaveLength(1);
+    expect(acceptCalls[0][1]).toHaveLength(1);
+  });
+
+  it('bulkInboxAction accept does nothing when every requested item is missing from the registry', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({ github: [] }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [{ providerId: 'github', externalId: 'vanished' }],
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'devdocket.acceptAllFromInbox',
+      expect.anything(),
+    );
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it('bulkInboxAction accept surfaces an error toast when acceptAllFromInbox throws', async () => {
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'visible-1', title: 'Visible GitHub item' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    (vscode.commands.executeCommand as Mock).mockReset();
+    (vscode.commands.executeCommand as Mock).mockImplementation((cmd: string) => {
+      if (cmd === 'devdocket.acceptAllFromInbox') {
+        return Promise.reject(new Error('boom'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [{ providerId: 'github', externalId: 'visible-1' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to accept items: boom');
+    });
+  });
+
+  it('routes bulkInboxAction dismiss through stateStore.setStates in a single batched write', async () => {
+    vi.useFakeTimers();
+    const stateStore = createStateStore();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'visible-1', title: 'Visible' }],
+        ado: [{ externalId: 'other-visible', title: 'Other' }],
+      }),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'dismiss',
+      items: [
+        { providerId: 'github', externalId: 'visible-1' },
+        { providerId: 'ado', externalId: 'other-visible' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(stateStore.setStates).toHaveBeenCalledTimes(1);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'visible-1', state: 'dismissed' },
+        { providerId: 'ado', externalId: 'other-visible', state: 'dismissed' },
+      ]);
+    });
+    // Dismiss must not touch acceptAllFromInbox or the per-item setState path
+    // — the whole point of using setStates is one atomic write.
+    expect(stateStore.setState).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'devdocket.acceptAllFromInbox',
+      expect.anything(),
+    );
+  });
+
+  it('bulkInboxAction dismiss surfaces an error toast when setStates fails', async () => {
+    vi.useFakeTimers();
+    const stateStore = createStateStore();
+    stateStore.setStates.mockRejectedValueOnce(new Error('io error'));
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'visible-1', title: 'Visible' }],
+      }),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    stateStore.setStates.mockRejectedValueOnce(new Error('io error'));
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'dismiss',
+      items: [{ providerId: 'github', externalId: 'visible-1' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to dismiss items: io error');
+    });
+  });
+
+  it('bulkInboxAction with an empty items list is a silent no-op', async () => {
+    vi.useFakeTimers();
+    const stateStore = createStateStore();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({}),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'bulkInboxAction', action: 'dismiss', items: [] });
+    await mockView.simulateMessage({ type: 'bulkInboxAction', action: 'accept', items: [] });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(stateStore.setStates).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'devdocket.acceptAllFromInbox',
+      expect.anything(),
+    );
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
   });
 
   it('handles provider health messages through the webview message switch', async () => {

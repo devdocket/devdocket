@@ -193,13 +193,14 @@ describe('selectionModel.reconcileSelection', () => {
 });
 
 describe('selectionModel.isMultiSelectTier', () => {
-  it('returns true for the four work-item tiers', () => {
-    for (const tierId of ['ready-to-start', 'in-progress', 'paused', 'done']) {
+  it('returns true for incoming and the four work-item tiers', () => {
+    for (const tierId of ['incoming', 'ready-to-start', 'in-progress', 'paused', 'done']) {
       expect(isMultiSelectTier(tierId)).toBe(true);
     }
   });
 
-  it('returns false for incoming', () => {
-    expect(isMultiSelectTier('incoming')).toBe(false);
+  it('returns false for unknown tier ids', () => {
+    expect(isMultiSelectTier('sources')).toBe(false);
+    expect(isMultiSelectTier('unknown')).toBe(false);
   });
 });
