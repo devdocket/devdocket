@@ -2,11 +2,11 @@ import { useEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import { getSerializedEditorState } from '../shared/editorState';
 import { postMessage, setWebviewState } from '../shared/messaging';
 import type { EditorItemData, ExtensionMessage } from '../shared/types';
-import { formatRelativeTime } from '../shared/timeUtils';
 import { useThemeChangeCounter } from '../shared/theme';
 import { initialAutosaveState, reduceAutosaveState } from './autosaveState';
 import { ActivityLog } from './components/ActivityLog';
 import { ActionBar } from './components/ActionBar';
+import { AutosaveIndicator } from './components/AutosaveIndicator';
 import { CIWatchSection } from './components/CIWatchSection';
 import { EditableField } from './components/EditableField';
 import { EditorHeader } from './components/EditorHeader';
@@ -25,7 +25,6 @@ export function EditorApp() {
   const [notes, setNotes] = useState(bootstrapItem?.notes ?? '');
   const [url, setUrl] = useState(bootstrapItem?.url ?? '');
   const [autosaveState, dispatchAutosave] = useReducer(reduceAutosaveState, initialAutosaveState);
-  const [, setRelativeTimeVersion] = useState(0);
   // Re-render badges when the user switches VS Code theme.
   useThemeChangeCounter();
 
@@ -33,7 +32,6 @@ export function EditorApp() {
   const titleRef = useRef(title);
   const notesRef = useRef(notes);
   const urlRef = useRef(url);
-  const autosaveStateRef = useRef(autosaveState);
   const autosaveTimerRef = useRef<number | undefined>(undefined);
   const autosaveRequestCounterRef = useRef(0);
 
@@ -59,10 +57,6 @@ export function EditorApp() {
   useEffect(() => {
     urlRef.current = url;
   }, [url]);
-
-  useEffect(() => {
-    autosaveStateRef.current = autosaveState;
-  }, [autosaveState]);
 
   useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {
@@ -92,49 +86,12 @@ export function EditorApp() {
   }, []);
 
   useEffect(() => {
-    const handler = (event: KeyboardEvent) => {
-      if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 's') {
-        return;
-      }
-
-      const status = autosaveStateRef.current.status;
-      const hasPendingTimer = autosaveTimerRef.current !== undefined;
-      if (!hasPendingTimer && status !== 'pending' && status !== 'error') {
-        return;
-      }
-
-      event.preventDefault();
-      sendAutosaveNow();
-    };
-
-    window.addEventListener('keydown', handler);
-    return () => {
-      window.removeEventListener('keydown', handler);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (autosaveState.status !== 'saved') {
-      return;
-    }
-
-    const timer = window.setInterval(() => {
-      setRelativeTimeVersion(version => version + 1);
-    }, 30_000);
-
-    return () => {
-      window.clearInterval(timer);
-    };
-  }, [autosaveState.status, autosaveState.savedAt]);
-
-  useEffect(() => {
     return () => {
       clearAutosaveTimer();
     };
   }, []);
 
   const description = useMemo(() => item?.description ?? '', [item?.description]);
-  const autosaveIndicator = renderAutosaveIndicator();
   const autosaveError = renderAutosaveError();
 
   // This is the single click path for editor anchors. Capture-phase handling
@@ -177,6 +134,9 @@ export function EditorApp() {
           urlRef.current = value;
           scheduleAutosave();
         } : undefined}
+        statusIndicator={!item.isIncoming ? (
+          <AutosaveIndicator status={autosaveState.status} savedAt={autosaveState.savedAt} />
+        ) : undefined}
         actionButtons={
           <ActionBar
             item={item}
@@ -189,6 +149,7 @@ export function EditorApp() {
           />
         }
       />
+      {autosaveError}
       {description || !item.isIncoming ? (
         <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
           {description ? (
@@ -204,7 +165,6 @@ export function EditorApp() {
             <div class="editor-notes-field">
               <EditableField
                 label="Notes"
-                labelAccessory={autosaveIndicator}
                 value={notes}
                 multiline
                 placeholder="Add notes..."
@@ -214,7 +174,6 @@ export function EditorApp() {
                   scheduleAutosave();
                 }}
               />
-              {autosaveError}
             </div>
           )}
         </section>
@@ -286,23 +245,6 @@ export function EditorApp() {
     const requestId = `autosave-${++autosaveRequestCounterRef.current}`;
     dispatchAutosave({ type: 'send', requestId });
     postMessage({ type: 'autosave', requestId, data });
-  }
-
-  function renderAutosaveIndicator() {
-    switch (autosaveState.status) {
-      case 'pending':
-        return <span class="editor-autosave-indicator editor-autosave-indicator--pending">Unsaved changes</span>;
-      case 'saving':
-        return <span class="editor-autosave-indicator editor-autosave-indicator--saving">Saving…</span>;
-      case 'saved':
-        return autosaveState.savedAt !== undefined
-          ? <span class="editor-autosave-indicator editor-autosave-indicator--saved">Saved · {formatRelativeTime(autosaveState.savedAt)}</span>
-          : null;
-      case 'error':
-        return <span class="editor-autosave-indicator editor-autosave-indicator--error">Save failed</span>;
-      default:
-        return null;
-    }
   }
 
   function renderAutosaveError() {

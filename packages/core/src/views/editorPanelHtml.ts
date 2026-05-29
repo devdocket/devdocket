@@ -412,19 +412,59 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       font-weight: 600;
     }
 
-    .editor-field-label-accessory {
-      margin-left: auto;
+    .editor-autosave-live {
+      display: inline-flex;
+      align-items: center;
     }
 
-    .editor-autosave-indicator {
-      color: var(--vscode-descriptionForeground);
-      font-size: 12px;
-      font-weight: 400;
+    .editor-visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
       white-space: nowrap;
+      border: 0;
     }
 
-    .editor-autosave-indicator--error {
-      color: var(--vscode-errorForeground, #f14c4c);
+    .editor-autosave-dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--vscode-descriptionForeground);
+      vertical-align: middle;
+      transition: background 200ms ease, opacity 200ms ease;
+    }
+
+    .editor-autosave-dot--pending,
+    .editor-autosave-dot--saving {
+      background: var(--vscode-editorWarning-foreground, #cca700);
+    }
+
+    .editor-autosave-dot--saving {
+      animation: editor-autosave-pulse 1.2s ease-in-out infinite;
+    }
+
+    .editor-autosave-dot--saved {
+      background: var(--vscode-testing-iconPassed, #73c991);
+    }
+
+    .editor-autosave-dot--error {
+      background: var(--vscode-errorForeground, #f14c4c);
+    }
+
+    @keyframes editor-autosave-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .editor-autosave-dot--saving {
+        animation: none;
+      }
     }
 
     .editor-autosave-error {

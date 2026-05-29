@@ -25,14 +25,14 @@ describe('EditorApp autosave UI', () => {
     vi.resetModules();
   });
 
-  it('shows pending, saving, and saved states for notes autosave', async () => {
+  it('shows the autosave status dot through pending → saving → saved (then fades) for notes edits', async () => {
     vi.useFakeTimers({ now: 1000 });
     const postMessage = vi.fn();
     await renderEditor(postMessage);
 
     updateTextarea('Draft notes');
     await Promise.resolve();
-    expect(container!.textContent).toContain('Unsaved changes');
+    expectDotTone('pending');
 
     await vi.advanceTimersByTimeAsync(500);
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
@@ -40,33 +40,46 @@ describe('EditorApp autosave UI', () => {
       requestId: 'autosave-1',
       data: { notes: 'Draft notes' },
     }));
-    expect(container!.textContent).toContain('Saving…');
+    expectDotTone('saving');
 
     window.dispatchEvent(new MessageEvent('message', {
       data: { type: 'autosaveAck', requestId: 'autosave-1', savedAt: 1000 },
     }));
     await Promise.resolve();
+    expectDotTone('saved');
 
-    expect(container!.textContent).toContain('Saved ·');
+    // The saved dot quietly fades after a short visible window.
+    await vi.advanceTimersByTimeAsync(2500);
+    expect(container!.querySelector('.editor-autosave-dot')).toBeNull();
   });
 
-  it('flushes pending autosave with Ctrl+S', async () => {
+  it('does not flush autosave on Ctrl+S (shortcut removed)', async () => {
     vi.useFakeTimers();
     const postMessage = vi.fn();
     await renderEditor(postMessage);
 
-    updateTextarea('Keyboard save');
-    await vi.advanceTimersByTimeAsync(499);
-    window.dispatchEvent(new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true }));
+    // No prior typing — Ctrl+S must not trigger autosave from a clean state and must not preventDefault.
+    const event = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(false);
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'autosave' }));
 
+    // After typing, Ctrl+S still does not bypass the debounce — only the timer can fire the autosave.
+    updateTextarea('Keyboard should not save');
+    const eventWhileTyping = new KeyboardEvent('keydown', { key: 's', ctrlKey: true, bubbles: true, cancelable: true });
+    window.dispatchEvent(eventWhileTyping);
+    expect(eventWhileTyping.defaultPrevented).toBe(false);
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'autosave' }));
+
+    // The normal debounce still works (regression guard: we removed the shortcut, not the autosave).
+    await vi.advanceTimersByTimeAsync(500);
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'autosave',
-      requestId: 'autosave-1',
-      data: { notes: 'Keyboard save' },
+      data: { notes: 'Keyboard should not save' },
     }));
   });
 
-  it('shows inline errors and retries failed autosaves', async () => {
+  it('shows an item-level error banner with Retry on failure', async () => {
     vi.useFakeTimers();
     const postMessage = vi.fn();
     await renderEditor(postMessage);
@@ -79,8 +92,13 @@ describe('EditorApp autosave UI', () => {
     }));
     await Promise.resolve();
 
-    expect(container!.textContent).toContain('Save failed');
+    expectDotTone('error');
     expect(container!.textContent).toContain('Couldn’t save changes: disk full');
+
+    const banner = container!.querySelector('.editor-autosave-error');
+    expect(banner).not.toBeNull();
+    // The banner sits at the item level (a direct child of editor-app), not nested inside the notes field.
+    expect(banner!.parentElement?.classList.contains('editor-app')).toBe(true);
 
     const retry = container!.querySelector('button.editor-autosave-retry') as HTMLButtonElement | null;
     expect(retry).toBeInstanceOf(HTMLButtonElement);
@@ -93,14 +111,43 @@ describe('EditorApp autosave UI', () => {
     }));
   });
 
-  async function renderEditor(postMessage: ReturnType<typeof vi.fn>) {
+  it('autosaves manual items when editing the title, URL, or notes (single item-level indicator)', async () => {
+    vi.useFakeTimers();
+    const postMessage = vi.fn();
+    await renderEditor(postMessage, { isProviderManaged: false, title: 'Initial', url: '' });
+
+    const titleInput = container!.querySelector<HTMLInputElement>('input.editor-title-input');
+    expect(titleInput).not.toBeNull();
+    titleInput!.focus();
+    titleInput!.value = 'Updated title';
+    titleInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    await Promise.resolve();
+    expectDotTone('pending');
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({
+      type: 'autosave',
+      data: { notes: '', title: 'Updated title', url: '' },
+    }));
+
+    // Exactly one item-level dot — feedback is not duplicated per field.
+    expect(container!.querySelectorAll('.editor-autosave-dot').length).toBe(1);
+  });
+
+  function expectDotTone(tone: 'pending' | 'saving' | 'saved' | 'error') {
+    const dot = container!.querySelector('.editor-autosave-dot');
+    expect(dot, `expected an autosave dot in tone "${tone}"`).not.toBeNull();
+    expect(dot!.classList.contains(`editor-autosave-dot--${tone}`)).toBe(true);
+  }
+
+  async function renderEditor(postMessage: ReturnType<typeof vi.fn>, overrides: Partial<EditorItemData> = {}) {
     delete (window as typeof window & { __DEVDOCKET_VSCODE_API__?: unknown }).__DEVDOCKET_VSCODE_API__;
     vi.stubGlobal('acquireVsCodeApi', () => ({
       postMessage,
       getState: vi.fn(),
       setState: vi.fn(),
     }));
-    window.__DEVDOCKET_EDITOR_BOOTSTRAP__ = makeEditorItem();
+    window.__DEVDOCKET_EDITOR_BOOTSTRAP__ = makeEditorItem(overrides);
 
     const { EditorApp } = await import('../webview/editor/EditorApp');
     container = document.createElement('div');
