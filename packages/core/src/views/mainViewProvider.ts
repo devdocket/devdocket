@@ -879,9 +879,25 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (action === 'accept') {
+      // Build a per-provider externalId → ProviderItem index once so the
+      // lookup for each selected pair is O(1) instead of O(items in provider).
+      // Bulk Accept across hundreds of incoming items would otherwise be
+      // quadratic in the size of each provider's registry.
+      const providerIndexes = new Map<string, Map<string, ProviderItem>>();
+      const getProviderIndex = (providerId: string): Map<string, ProviderItem> => {
+        let index = providerIndexes.get(providerId);
+        if (!index) {
+          index = new Map();
+          for (const candidate of this.providerRegistry.getProviderItems(providerId)) {
+            index.set(candidate.externalId, candidate);
+          }
+          providerIndexes.set(providerId, index);
+        }
+        return index;
+      };
       const payloads = items
         .map(({ providerId, externalId }) => {
-          const providerItem = this.providerRegistry.getProviderItems(providerId).find(candidate => candidate.externalId === externalId);
+          const providerItem = getProviderIndex(providerId).get(externalId);
           return providerItem ? this.buildAcceptPayload(providerId, providerItem) : undefined;
         })
         .filter((item): item is ReturnType<MainViewProvider['buildAcceptPayload']> => item !== undefined);
