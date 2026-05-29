@@ -1,7 +1,7 @@
 name: Create Copilot Issue
 description: >
-  Creates a GitHub issue with dedup checking and assigns the Copilot coding agent.
-  Handles agent_assignment API with fallback to plain assignment + instructions comment.
+  Creates a GitHub issue with dedup checking and assigns the Copilot coding agent
+  through GitHub's GraphQL assignment APIs.
 
 inputs:
   issue-title:
@@ -30,17 +30,13 @@ inputs:
     required: true
   copilot-assign-token:
     description: >
-      Token with permissions for the agent_assignment API. Must be a user PAT
-      or OAuth token — GitHub App installation tokens are rejected by both the
-      agent_assignment API and the plain assignees endpoint with
-      "Assigning agents is not supported with GitHub App installation tokens".
-      Falls back to github-token if not provided, but the fallback will fail
-      the assignment step (and trigger the manual-assignment comment) if
-      github-token is an App installation token.
+      Token with permission to assign the Copilot coding agent. Must be a user
+      PAT or OAuth token that can call the suggestedActors GraphQL API; GitHub
+      App installation tokens cannot assign Copilot agents.
     required: false
     default: ''
   github-token:
-    description: GitHub token for issue creation and fallback assignment
+    description: GitHub token for issue creation
     required: true
 
 outputs:
@@ -120,6 +116,18 @@ runs:
           core.setOutput('issue_number', issue.number);
           core.setOutput('created', 'true');
 
+    - name: Validate Copilot assignment token
+      if: steps.create-issue.outputs.created == 'true'
+      shell: bash
+      env:
+        COPILOT_ASSIGN_TOKEN: ${{ inputs.copilot-assign-token }}
+      run: |
+        set -euo pipefail
+        if [ -z "${COPILOT_ASSIGN_TOKEN}" ]; then
+          echo "::error::copilot-assign-token is required to assign the Copilot coding agent. Configure COPILOT_ASSIGN_TOKEN with a user/OAuth token that can call the Copilot assignment GraphQL APIs."
+          exit 1
+        fi
+
     - name: Assign Copilot coding agent
       if: steps.create-issue.outputs.created == 'true'
       uses: actions/github-script@v7
@@ -127,57 +135,93 @@ runs:
         ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue_number }}
         CUSTOM_INSTRUCTIONS: ${{ inputs.custom-instructions }}
       with:
-        github-token: ${{ inputs.copilot-assign-token || inputs.github-token }}
+        github-token: ${{ inputs.copilot-assign-token }}
         script: |
           const owner = context.repo.owner;
           const repo = context.repo.repo;
-          const issue_number = parseInt(process.env.ISSUE_NUMBER, 10);
+          const issueNumber = parseInt(process.env.ISSUE_NUMBER, 10);
           const customInstructions = process.env.CUSTOM_INSTRUCTIONS;
+          const copilotLogins = new Set(['copilot', 'copilot-swe-agent', 'copilot-swe-agent[bot]']);
+          const graphqlHeaders = {
+            'GraphQL-Features': 'issues_copilot_assignment_api_support'
+          };
 
-          // Get the default branch name
-          const { data: repoData } = await github.rest.repos.get({ owner, repo });
-          const baseBranch = repoData.default_branch;
-
-          try {
-            await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/assignees', {
-              owner,
-              repo,
-              issue_number,
-              assignees: ['copilot-swe-agent[bot]'],
-              agent_assignment: {
-                target_repo: `${owner}/${repo}`,
-                base_branch: baseBranch,
-                custom_instructions: customInstructions,
-                custom_agent: '',
-                model: ''
-              },
-              headers: {
-                'X-GitHub-Api-Version': '2022-11-28'
+          const lookup = await github.graphql(`
+            query LookupCopilotAssignable($owner: String!, $repo: String!, $issueNumber: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $issueNumber) {
+                  id
+                }
+                suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 100) {
+                  nodes {
+                    __typename
+                    login
+                    ... on Bot {
+                      id
+                    }
+                  }
+                }
               }
-            });
-            core.info(`Assigned copilot-swe-agent[bot] to issue #${issue_number}`);
-          } catch (err) {
-            core.warning(`Assignment with agent_assignment failed: ${err.message}`);
-
-            // Fallback: try plain assignment without agent_assignment
-            let fallbackSucceeded = false;
-            try {
-              await github.rest.issues.addAssignees({
-                owner, repo, issue_number,
-                assignees: ['copilot-swe-agent[bot]']
-              });
-              core.info(`Fallback: assigned copilot-swe-agent[bot] to issue #${issue_number}`);
-              fallbackSucceeded = true;
-            } catch (err2) {
-              core.error(`Fallback assignment also failed: ${err2.message}`);
             }
+          `, { owner, repo, issueNumber, headers: graphqlHeaders });
 
-            // Post instructions as comment; include manual-assignment note if both methods failed
-            const manualNote = fallbackSucceeded
-              ? ''
-              : '\n\n> ⚠️ Automated assignment failed. A maintainer should manually assign `copilot-swe-agent[bot]` to this issue.';
-            await github.rest.issues.createComment({
-              owner, repo, issue_number,
-              body: `### 🤖 @copilot Instructions\n\n${customInstructions}${manualNote}`
-            });
+          const issue = lookup.repository.issue;
+          if (!issue?.id) {
+            throw new Error(`Could not resolve GraphQL node ID for issue #${issueNumber}`);
           }
+
+          const copilotActor = lookup.repository.suggestedActors.nodes.find(actor =>
+            actor.__typename === 'Bot' && actor.login && copilotLogins.has(actor.login.toLowerCase()) && actor.id
+          );
+          if (!copilotActor) {
+            const suggestedLogins = lookup.repository.suggestedActors.nodes.map(actor => actor.login).join(', ') || '(none)';
+            throw new Error(`Copilot was not returned by suggestedActors(CAN_BE_ASSIGNED). Suggested actors: ${suggestedLogins}. Check that copilot-assign-token is a user/OAuth token with access to assign Copilot.`);
+          }
+
+          await github.graphql(`
+            mutation AssignCopilot($assignableId: ID!, $actorIds: [ID!]!) {
+              replaceActorsForAssignable(input: { assignableId: $assignableId, actorIds: $actorIds }) {
+                assignable {
+                  ... on Issue {
+                    number
+                  }
+                }
+              }
+            }
+          `, { assignableId: issue.id, actorIds: [copilotActor.id], headers: graphqlHeaders });
+
+          const verification = await github.graphql(`
+            query VerifyCopilotAssignee($owner: String!, $repo: String!, $issueNumber: Int!) {
+              repository(owner: $owner, name: $repo) {
+                issue(number: $issueNumber) {
+                  assignees(first: 10) {
+                    nodes {
+                      id
+                      login
+                    }
+                  }
+                }
+              }
+            }
+          `, { owner, repo, issueNumber, headers: graphqlHeaders });
+
+          const assignees = verification.repository.issue.assignees.nodes;
+          if (assignees.length === 0) {
+            throw new Error(`Copilot assignment did not stick: issue #${issueNumber} still has zero assignees after replaceActorsForAssignable`);
+          }
+          // Issue.assignees surfaces Copilot as a User-shaped node whose node ID
+          // differs from the Bot ID returned by suggestedActors. Verify by login
+          // (case-insensitive) against the same set we matched on lookup.
+          if (!assignees.some(assignee => assignee.login && copilotLogins.has(assignee.login.toLowerCase()))) {
+            const assigneeLogins = assignees.map(assignee => assignee.login).join(', ');
+            throw new Error(`Copilot assignment did not stick: issue #${issueNumber} assignees are ${assigneeLogins}, expected ${copilotActor.login}`);
+          }
+
+          await github.rest.issues.createComment({
+            owner,
+            repo,
+            issue_number: issueNumber,
+            body: `### 🤖 @copilot Instructions\n\n${customInstructions}`
+          });
+
+          core.info(`Assigned ${copilotActor.login} to issue #${issueNumber} and posted Copilot instructions`);
