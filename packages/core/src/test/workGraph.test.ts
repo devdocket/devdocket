@@ -676,13 +676,64 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
 
-    it('rejects New → Paused', async () => {
+    it('allows New → Paused (pause directly from Ready to Start)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.Paused))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Paused);
+    });
+
+    it('resumeItem returns a New-paused item back to New', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      await graph.resumeItem(item.id);
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+    });
+
+    it('resumeItem returns an InProgress-paused item back to InProgress', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      await graph.resumeItem(item.id);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
+    });
+
+    it('resumeItem uses the most recent pause origin when an item was paused twice', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      // First pause from New
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      await graph.resumeItem(item.id);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+      // Then move to InProgress and pause again — resume should now return to InProgress
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      await graph.resumeItem(item.id);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
+    });
+
+    it('resumeItem rejects when the item is not paused', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await expect(graph.resumeItem(item.id)).rejects.toThrow('cannot resume');
+    });
+
+    it('resumeItem falls back to InProgress when no pause origin is found in the activity log', async () => {
+      // Simulate a legacy paused item via the store directly, then reload.
+      const legacyStore = createMockStore();
+      const now = Date.now();
+      await legacyStore.save({
+        id: 'legacy-paused',
+        title: 'Legacy paused item',
+        state: WorkItemState.Paused,
+        createdAt: now,
+        updatedAt: now,
+        activityLog: [{ timestamp: now, type: 'created' }],
+      } as any);
+      const legacyGraph = new WorkGraph(legacyStore);
+      await legacyGraph.load();
+
+      await legacyGraph.resumeItem('legacy-paused');
+      expect(legacyGraph.getItem('legacy-paused')?.state).toBe(WorkItemState.InProgress);
     });
 
     it('allows Done → New (move back to queue)', async () => {

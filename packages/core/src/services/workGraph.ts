@@ -46,7 +46,7 @@ export const MAX_ACTIVITY_DETAIL_BYTES = 8 * 1024;
 const ACTIVITY_DETAIL_TRUNCATION_SUFFIX = '…[truncated]';
 
 export const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map<WorkItemState, ReadonlySet<WorkItemState>>([
-  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.Archived])],
+  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Paused, WorkItemState.Done, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Done, new Set([WorkItemState.Archived, WorkItemState.New])],
@@ -495,6 +495,46 @@ export class WorkGraph {
   /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
     return this.withLock(() => this.doTransitionState(id, newState));
+  }
+
+  /** Resume a paused work item to the state it was paused from. */
+  async resumeItem(id: string): Promise<void> {
+    return this.withLock(() => this.doResumeItem(id));
+  }
+
+  private async doResumeItem(id: string): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) {
+      throw new Error(`Work item not found: ${id}`);
+    }
+    if (item.state !== WorkItemState.Paused) {
+      throw new Error(`Invalid state transition: cannot resume item from ${item.state}`);
+    }
+
+    await this.doTransitionState(id, WorkGraph.getResumeTargetState(item));
+  }
+
+  private static getResumeTargetState(item: Pick<WorkItem, 'id' | 'activityLog'>): WorkItemState {
+    const log = item.activityLog ?? [];
+    for (let i = log.length - 1; i >= 0; i--) {
+      const entry = log[i];
+      if (entry.type !== 'state-changed' || !entry.detail) {
+        continue;
+      }
+      const re = new RegExp(`^(${WorkItemState.New}|${WorkItemState.InProgress})\\s*→\\s*${WorkItemState.Paused}$`);
+      const match = re.exec(entry.detail.trim());
+      if (match?.[1] === WorkItemState.New) {
+        return WorkItemState.New;
+      }
+      if (match?.[1] === WorkItemState.InProgress) {
+        return WorkItemState.InProgress;
+      }
+    }
+
+    logger.warn(
+      `Could not determine resume origin for paused item ${item.id} from activity log; defaulting to ${WorkItemState.InProgress}`,
+    );
+    return WorkItemState.InProgress;
   }
 
   private async doTransitionState(id: string, newState: WorkItemState): Promise<void> {

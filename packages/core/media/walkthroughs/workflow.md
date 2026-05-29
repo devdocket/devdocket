@@ -13,10 +13,10 @@ New items discovered by providers (GitHub issues, pull requests, ADO work items,
 What you're actively working on (the **In Progress** state). Drag to reorder. Hover actions let you **✓ Complete** or **⏸ Pause**.
 
 ### ○ Ready to Start
-Your personal backlog of items waiting to be picked up. Items here are in the **New** state. Drag to reorder by priority. Click the **▶ Start** action on hover to move an item into the **In Progress** tier.
+Your personal backlog of items waiting to be picked up. Items here are in the **New** state. Drag to reorder by priority. Hover actions let you **▶ Start** (move into In Progress) or **⏸ Pause** (set aside without starting).
 
 ### ⏸ Paused
-Items you've temporarily set aside. Hover **▶ Resume** to bring one back into In Progress.
+Items you've temporarily set aside. Hover **▶ Resume** to bring one back — it returns to whichever tier it was paused from (In Progress or Ready to Start).
 
 ### ✓ Done
 Completed items. Hover **↩ Requeue** to move something back to Ready to Start, or use the **Clear** action in the header to clean things up.
