@@ -326,8 +326,24 @@ export function App() {
     if (!multiSelection) {
       return;
     }
-    const itemIds = Array.from(multiSelection.itemIds);
-    postMessage({ type: 'bulkTransition', itemIds, targetState: action.targetState });
+    if (action.kind === 'transition') {
+      const itemIds = Array.from(multiSelection.itemIds);
+      postMessage({ type: 'bulkTransition', itemIds, targetState: action.targetState });
+    } else {
+      // Inbox-tier actions operate on provider/external pairs, not WorkItem
+      // ids. Skip any selected card that's somehow missing provenance
+      // (shouldn't happen — incoming cards always carry both) so the host
+      // doesn't have to defensively re-filter.
+      const items = selectedItems.flatMap(item =>
+        item.providerId && item.externalId
+          ? [{ providerId: item.providerId, externalId: item.externalId }]
+          : [],
+      );
+      if (items.length === 0) {
+        return;
+      }
+      postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
+    }
     // Optimistically clear; the next updateItems push will re-render the
     // tiers with the items in their new home.
     setMultiSelection(null);
