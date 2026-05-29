@@ -652,6 +652,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'bulkTransition':
         await this.handleBulkTransition(message.itemIds, message.targetState);
         break;
+      case 'bulkInboxAction':
+        await this.handleBulkInboxAction(message.action, message.items);
+        break;
       case 'reorderItems':
         await this.handleReorder(message.itemIds);
         break;
@@ -846,6 +849,63 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       void vscode.window.showErrorMessage(
         `Failed to transition ${failures} item${failures === 1 ? '' : 's'} to ${formatStateLabel(targetState)}.`,
       );
+    }
+  }
+
+  /**
+   * Bulk-Accept or bulk-Dismiss a selected subset of Incoming items. Mirrors
+   * the per-item Accept / Dismiss controls but routes through the batched
+   * primitives: `devdocket.acceptAllFromInbox` for Accept (same path used by
+   * the Accept All button — handles canonical peer propagation, WorkItem
+   * creation, and read-state marking) and {@link InboxStateStore.setStates}
+   * for Dismiss (one atomic write rather than N).
+   *
+   * Items whose provider/externalId is no longer present in the live provider
+   * registry (e.g. provider refreshed mid-action) are skipped silently for
+   * Accept (the providerItem lookup returns undefined and that payload is
+   * dropped) and skipped via the inboxState batch for Dismiss (setStates only
+   * writes records that actually changed).
+   *
+   * Unlike Accept All, no modal confirmation is shown — the user has already
+   * expressed intent by selecting a specific subset and clicking the bulk
+   * action button, matching the no-confirm UX of bulkTransition.
+   */
+  private async handleBulkInboxAction(
+    action: 'accept' | 'dismiss',
+    items: ReadonlyArray<{ providerId: string; externalId: string }>,
+  ): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+
+    if (action === 'accept') {
+      const payloads = items
+        .map(({ providerId, externalId }) => {
+          const providerItem = this.providerRegistry.getProviderItems(providerId).find(candidate => candidate.externalId === externalId);
+          return providerItem ? this.buildAcceptPayload(providerId, providerItem) : undefined;
+        })
+        .filter((item): item is ReturnType<MainViewProvider['buildAcceptPayload']> => item !== undefined);
+      if (payloads.length === 0) {
+        return;
+      }
+      try {
+        const acceptedItems = await vscode.commands.executeCommand<Array<{ providerId: string; externalId: string }>>('devdocket.acceptAllFromInbox', payloads);
+        await this.readStateStore.addMany((acceptedItems ?? []).map(item => getProviderItemKey(item.providerId, item.externalId)));
+      } catch (err) {
+        logger.error('DevDocket: bulk accept failed', err);
+        void vscode.window.showErrorMessage(`Failed to accept items: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    // Dismiss: one atomic setStates write for the whole batch.
+    try {
+      await this.stateStore.setStates(
+        items.map(({ providerId, externalId }) => ({ providerId, externalId, state: 'dismissed' as const })),
+      );
+    } catch (err) {
+      logger.error('DevDocket: bulk dismiss failed', err);
+      void vscode.window.showErrorMessage(`Failed to dismiss items: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
