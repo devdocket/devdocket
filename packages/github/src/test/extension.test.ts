@@ -106,43 +106,17 @@ describe('GitHub extension activation', () => {
     vi.unstubAllGlobals();
   });
 
-  it('is a no-op when no workspace folder is open', async () => {
+  it('activates fully when no workspace folder is open', async () => {
     (workspace as any).workspaceFolders = [];
 
     await activate(mockContext);
 
-    expect(window.createOutputChannel).not.toHaveBeenCalled();
-    expect(extensions.getExtension).not.toHaveBeenCalled();
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
-    expect(mockApi.registerRunWatcher).not.toHaveBeenCalled();
-    expect(mockApi.registerPRWatcher).not.toHaveBeenCalled();
-    expect(workspace.onDidChangeConfiguration).not.toHaveBeenCalled();
-    expect(workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledTimes(1);
-    expect(mockFetch).not.toHaveBeenCalled();
-    expect(disposables).toHaveLength(1);
-  });
-
-  it('activates lazily when a workspace folder is added later', async () => {
-    (workspace as any).workspaceFolders = [];
-    let folderListener: (() => void) | undefined;
-    const folderListenerDisposable = { dispose: vi.fn() };
-    vi.mocked(workspace.onDidChangeWorkspaceFolders).mockImplementation((cb: any) => {
-      folderListener = cb;
-      return folderListenerDisposable;
-    });
-
-    await activate(mockContext);
-    expect(window.createOutputChannel).not.toHaveBeenCalled();
-    expect(folderListener).toBeDefined();
-
-    (workspace as any).workspaceFolders = [{ uri: { fsPath: '/mock/workspace' } }];
-    folderListener!();
-    await new Promise((resolve) => setImmediate(resolve));
-
-    expect(folderListenerDisposable.dispose).toHaveBeenCalledTimes(1);
     expect(window.createOutputChannel).toHaveBeenCalled();
     expect(extensions.getExtension).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalled();
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
+    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(2);
+    expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
+    expect(workspace.onDidChangeConfiguration).toHaveBeenCalled();
   });
 
   it('returns early when core extension is not found', async () => {

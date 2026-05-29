@@ -94,7 +94,6 @@ const workspace = {
     get: vi.fn((key: string, defaultValue?: any) => defaultValue),
   }),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
-  onDidChangeWorkspaceFolders: vi.fn(() => ({ dispose: vi.fn() })),
   onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
 };
 

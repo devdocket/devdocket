@@ -11,35 +11,7 @@ import { logger, setLogger } from './logger';
 
 type ConfigurableGitHubProvider = GitHubIssueProvider | GitHubPrReviewProvider | GitHubMyPrsProvider | GitHubMentionsProvider;
 
-function hasWorkspaceFolder(): boolean {
-  return !!vscode.workspace.workspaceFolders?.length;
-}
-
-function waitForWorkspaceFolder(context: vscode.ExtensionContext): boolean {
-  if (hasWorkspaceFolder()) {
-    return false;
-  }
-
-  let triggered = false;
-  const disposable = vscode.workspace.onDidChangeWorkspaceFolders(() => {
-    if (triggered || !hasWorkspaceFolder()) {
-      return;
-    }
-    triggered = true;
-    disposable.dispose();
-    activate(context).catch((err) => {
-      console.error('[DevDocket GitHub] deferred activation failed', err);
-    });
-  });
-  context.subscriptions.push(disposable);
-  return true;
-}
-
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  if (waitForWorkspaceFolder(context)) {
-    return;
-  }
-
   const log = vscode.window.createOutputChannel('DevDocket GitHub', { log: true });
   context.subscriptions.push(log);
   setLogger(log);

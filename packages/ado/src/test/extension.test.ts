@@ -89,21 +89,17 @@ describe('extension activation', () => {
     vi.unstubAllGlobals();
   });
 
-  it('is a no-op when no workspace folder is open', async () => {
+  it('activates fully when no workspace folder is open', async () => {
     (workspace as any).workspaceFolders = [];
 
     await activate(mockContext);
 
-    expect(window.createOutputChannel).not.toHaveBeenCalled();
-    expect(extensions.getExtension).not.toHaveBeenCalled();
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
-    expect(mockApi.registerRunWatcher).not.toHaveBeenCalled();
-    expect(mockApi.registerPRWatcher).not.toHaveBeenCalled();
-    expect(workspace.onDidChangeConfiguration).not.toHaveBeenCalled();
-    expect(workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledTimes(1);
-    expect(window.showWarningMessage).not.toHaveBeenCalled();
-    expect(mockFetch).not.toHaveBeenCalled();
-    expect(disposables).toHaveLength(1);
+    expect(window.createOutputChannel).toHaveBeenCalled();
+    expect(extensions.getExtension).toHaveBeenCalled();
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
+    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
+    expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
+    expect(workspace.onDidChangeConfiguration).toHaveBeenCalled();
   });
 
   it('returns early when core extension is not found', async () => {

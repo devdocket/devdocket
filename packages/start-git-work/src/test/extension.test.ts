@@ -31,17 +31,15 @@ describe('Start Git Work extension activation', () => {
     } as any);
   });
 
-  it('is a no-op when no workspace folder is open', async () => {
+  it('activates fully when no workspace folder is open', async () => {
     (workspace as any).workspaceFolders = [];
 
     await activate(mockContext);
 
-    expect(window.createOutputChannel).not.toHaveBeenCalled();
-    expect(extensions.getExtension).not.toHaveBeenCalled();
-    expect(mockApi.registerAction).not.toHaveBeenCalled();
-    expect(mockApi.registerActivityDetailRenderer).not.toHaveBeenCalled();
-    expect(mockApi.onDidTransitionState).not.toHaveBeenCalled();
-    expect(workspace.onDidChangeWorkspaceFolders).toHaveBeenCalledTimes(1);
-    expect(mockContext.subscriptions.push).toHaveBeenCalledTimes(1);
+    expect(window.createOutputChannel).toHaveBeenCalled();
+    expect(extensions.getExtension).toHaveBeenCalled();
+    expect(mockApi.registerAction).toHaveBeenCalled();
+    expect(mockApi.registerActivityDetailRenderer).toHaveBeenCalled();
+    expect(mockApi.onDidTransitionState).toHaveBeenCalled();
   });
 });
