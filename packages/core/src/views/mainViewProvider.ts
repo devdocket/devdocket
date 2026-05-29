@@ -828,6 +828,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       }
       try {
         if (item.state === WorkItemState.Paused && targetWorkState === WorkItemState.InProgress) {
+          // Mirror handleTransitionState: a Paused→InProgress request resumes
+          // the item, which routes through WorkGraph.getResumeTargetState and
+          // may land in Ready *or* InProgress depending on where each item
+          // was paused from. A single bulk gesture can therefore split the
+          // selection across tiers.
           await this.workGraph.resumeItem(itemId);
         } else {
           await this.workGraph.transitionState(itemId, targetWorkState);
