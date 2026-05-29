@@ -148,8 +148,7 @@ function selectOne(tierId: string, itemId: string): SelectionState {
  * The Incoming tier is included even though its bulk actions are inbox-state
  * mutations (Accept / Dismiss) rather than WorkItem state transitions —
  * selection semantics (click / shift-click / ctrl-click / aria-selected) are
- * identical, the action set just differs (see {@link
- * ../bulkActions.ts | bulkActions}). */
+ * identical, the action set just differs (see `bulkActions.ts`). */
 const MULTI_SELECT_TIER_IDS: ReadonlySet<string> = new Set([
   'incoming',
   'ready-to-start',
