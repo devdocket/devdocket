@@ -196,7 +196,7 @@ export function ItemCard({
       role="option"
       tabIndex={tabIndex}
       draggable={isDraggable}
-      aria-label={buildItemAriaLabel(item, isInMultiSelection)}
+      aria-label={buildItemAriaLabel(item, isInMultiSelection, isMultiSelectListbox)}
       aria-selected={isMultiSelectListbox ? isInMultiSelection : (item.isSelected ?? false)}
       aria-current={item.isSelected ? 'true' : undefined}
       onClick={(event) => onClick({ shift: event.shiftKey, toggle: event.ctrlKey || event.metaKey })}
@@ -256,13 +256,21 @@ export function ItemCard({
   );
 }
 
-function buildItemAriaLabel(item: ItemCardData, isInMultiSelection: boolean): string {
+function buildItemAriaLabel(item: ItemCardData, isInMultiSelection: boolean, isMultiSelectListbox: boolean): string {
   // aria-label fully overrides child text for screen readers, so build the
   // announcement from every visible piece of context: the title, repo
   // annotation, all badge labels (provider / type / CI / state /
   // provider-supplied), unread / urgent indicators, and any selection
   // state. Order matters — read top-to-bottom so the title is announced
   // first and qualifiers follow.
+  //
+  // "Selected" must align with `aria-selected` so screen readers don't get
+  // contradictory cues. In a multi-select listbox `aria-selected` reflects
+  // multi-selection (not editor focus), so the label should too — otherwise
+  // the currently-open editor item could be announced as "selected" while
+  // its `aria-selected` is false. The editor/preview cursor is communicated
+  // via `aria-current` instead, which is the correct semantic for "this is
+  // the focused one but not part of the selection".
   const parts: (string | undefined)[] = [];
   if (item.isUnseen) parts.push('unread');
   if (item.isUrgent) parts.push('urgent');
@@ -273,8 +281,11 @@ function buildItemAriaLabel(item: ItemCardData, isInMultiSelection: boolean): st
     parts.push(badge.label);
   }
   if (item.hasRelatedItems) parts.push('has related items');
-  if (item.isSelected) parts.push('selected');
-  if (isInMultiSelection && !item.isSelected) parts.push('selected');
+  if (isMultiSelectListbox) {
+    if (isInMultiSelection) parts.push('selected');
+  } else if (item.isSelected) {
+    parts.push('selected');
+  }
   return parts.filter((value): value is string => Boolean(value)).join(', ');
 }
 
