@@ -70,7 +70,7 @@ Clicking a non-incoming work item opens the editor in a tab. It contains:
 - A **Notes** section (auto-saving textarea) for your own notes — hidden when previewing an unaccepted incoming item.
 - A collapsible **Activity Log** that records every state transition, action invocation, version change, etc.
 
-The editor auto-saves as you type — there is no save button.
+The editor auto-saves your edits as you type. A small status dot next to the state pill signals activity: amber while there are unsaved or in-flight changes, green briefly after a successful save (then fades away), and red when a save fails. Provider items only autosave Notes; manual items autosave Title, URL, and Notes together. When a save fails, an inline error banner with a Retry button appears under the header.
 
 ### Incoming preview panel
 

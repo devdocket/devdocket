@@ -11,7 +11,9 @@ export type ExtensionMessage =
   | { type: 'updateWatches'; watches: WatchData[] }
   | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
   | { type: 'updateEditorItem'; item: EditorItemData }
-  | { type: 'updateTitle'; title: string };
+  | { type: 'updateTitle'; title: string }
+  | { type: 'autosaveAck'; requestId: string; savedAt: number }
+  | { type: 'autosaveError'; requestId: string; message: string };
 
 export type WebviewMessage =
   | { type: 'webviewReady' }
@@ -36,7 +38,7 @@ export type WebviewMessage =
   | { type: 'dismissCompletedWatches' }
   | { type: 'dismissWatch'; watchId: string }
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
-  | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } }
+  | { type: 'autosave'; requestId: string; data: { title?: string; notes?: string; url?: string } }
   | { type: 'copyToClipboard'; text: string }
   | { type: 'addWatchUrl' }
   | { type: 'markSeen'; providerId: string; externalId: string }
