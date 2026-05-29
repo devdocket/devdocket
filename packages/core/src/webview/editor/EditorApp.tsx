@@ -1,10 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useReducer, useRef, useState } from 'preact/hooks';
 import { getSerializedEditorState } from '../shared/editorState';
 import { postMessage, setWebviewState } from '../shared/messaging';
 import type { EditorItemData, ExtensionMessage } from '../shared/types';
 import { useThemeChangeCounter } from '../shared/theme';
+import { initialAutosaveState, reduceAutosaveState } from './autosaveState';
 import { ActivityLog } from './components/ActivityLog';
 import { ActionBar } from './components/ActionBar';
+import { AutosaveIndicator } from './components/AutosaveIndicator';
 import { CIWatchSection } from './components/CIWatchSection';
 import { EditableField } from './components/EditableField';
 import { EditorHeader } from './components/EditorHeader';
@@ -22,7 +24,7 @@ export function EditorApp() {
   const [title, setTitle] = useState(bootstrapItem?.title ?? '');
   const [notes, setNotes] = useState(bootstrapItem?.notes ?? '');
   const [url, setUrl] = useState(bootstrapItem?.url ?? '');
-  const [autosaveVersion, setAutosaveVersion] = useState(0);
+  const [autosaveState, dispatchAutosave] = useReducer(reduceAutosaveState, initialAutosaveState);
   // Re-render badges when the user switches VS Code theme.
   useThemeChangeCounter();
 
@@ -30,6 +32,8 @@ export function EditorApp() {
   const titleRef = useRef(title);
   const notesRef = useRef(notes);
   const urlRef = useRef(url);
+  const autosaveTimerRef = useRef<number | undefined>(undefined);
+  const autosaveRequestCounterRef = useRef(0);
 
   useEffect(() => {
     itemRef.current = item;
@@ -64,6 +68,12 @@ export function EditorApp() {
         case 'updateTitle':
           applyIncomingTitle(message.title);
           break;
+        case 'autosaveAck':
+          dispatchAutosave({ type: 'ack', requestId: message.requestId, savedAt: message.savedAt });
+          break;
+        case 'autosaveError':
+          dispatchAutosave({ type: 'error', requestId: message.requestId, message: message.message });
+          break;
         default:
           break;
       }
@@ -76,32 +86,13 @@ export function EditorApp() {
   }, []);
 
   useEffect(() => {
-    if (!item || autosaveVersion === 0) {
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      const data: { title?: string; notes?: string; url?: string } = {
-        notes: notesRef.current.trim(),
-      };
-
-      if (!item.isProviderManaged) {
-        const nextTitle = titleRef.current.trim();
-        if (nextTitle) {
-          data.title = nextTitle;
-          data.url = urlRef.current.trim();
-        }
-      }
-
-      postMessage({ type: 'autosave', data });
-    }, 500);
-
     return () => {
-      window.clearTimeout(timer);
+      clearAutosaveTimer();
     };
-  }, [autosaveVersion, item?.id, item?.isProviderManaged]);
+  }, []);
 
   const description = useMemo(() => item?.description ?? '', [item?.description]);
+  const autosaveError = renderAutosaveError();
 
   // This is the single click path for editor anchors. Capture-phase handling
   // plus stopPropagation prevents VS Code's webview anchor interception from
@@ -135,12 +126,17 @@ export function EditorApp() {
         onCopyText={text => postMessage({ type: 'copyToClipboard', text })}
         onTitleInput={!item.isProviderManaged && !item.isIncoming ? value => {
           setTitle(value);
-          setAutosaveVersion(version => version + 1);
+          titleRef.current = value;
+          scheduleAutosave();
         } : undefined}
         onUrlInput={!item.isProviderManaged && !item.isIncoming ? value => {
           setUrl(value);
-          setAutosaveVersion(version => version + 1);
+          urlRef.current = value;
+          scheduleAutosave();
         } : undefined}
+        statusIndicator={!item.isIncoming ? (
+          <AutosaveIndicator status={autosaveState.status} savedAt={autosaveState.savedAt} />
+        ) : undefined}
         actionButtons={
           <ActionBar
             item={item}
@@ -153,6 +149,7 @@ export function EditorApp() {
           />
         }
       />
+      {autosaveError}
       {description || !item.isIncoming ? (
         <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
           {description ? (
@@ -165,16 +162,19 @@ export function EditorApp() {
             </>
           ) : null}
           {item.isIncoming ? null : (
-            <EditableField
-              label="Notes"
-              value={notes}
-              multiline
-              placeholder="Add notes..."
-              onInput={value => {
-                setNotes(value);
-                setAutosaveVersion(version => version + 1);
-              }}
-            />
+            <div class="editor-notes-field">
+              <EditableField
+                label="Notes"
+                value={notes}
+                multiline
+                placeholder="Add notes..."
+                onInput={value => {
+                  setNotes(value);
+                  notesRef.current = value;
+                  scheduleAutosave();
+                }}
+              />
+            </div>
           )}
         </section>
       ) : null}
@@ -191,6 +191,74 @@ export function EditorApp() {
       <ActivityLog entries={item.activityLog} />
     </div>
   );
+
+  function scheduleAutosave() {
+    dispatchAutosave({ type: 'edit' });
+    clearAutosaveTimer();
+    autosaveTimerRef.current = window.setTimeout(() => {
+      autosaveTimerRef.current = undefined;
+      sendAutosaveNow();
+    }, 500);
+  }
+
+  function clearAutosaveTimer() {
+    if (autosaveTimerRef.current !== undefined) {
+      window.clearTimeout(autosaveTimerRef.current);
+      autosaveTimerRef.current = undefined;
+    }
+  }
+
+  function syncFocusedDraftValue() {
+    const activeElement = document.activeElement;
+    if (activeElement instanceof HTMLTextAreaElement && activeElement.classList.contains('editor-textarea')) {
+      notesRef.current = activeElement.value;
+      return;
+    }
+
+    if (activeElement instanceof HTMLInputElement && activeElement.classList.contains('editor-title-input')) {
+      titleRef.current = activeElement.value;
+      return;
+    }
+
+    if (activeElement instanceof HTMLInputElement && activeElement.classList.contains('editor-url-input')) {
+      urlRef.current = activeElement.value;
+    }
+  }
+
+  function sendAutosaveNow() {
+    clearAutosaveTimer();
+    syncFocusedDraftValue();
+    const currentItem = itemRef.current;
+    if (!currentItem || currentItem.isIncoming) {
+      return;
+    }
+
+    const data: { title?: string; notes?: string; url?: string } = {
+      notes: notesRef.current.trim(),
+    };
+
+    if (!currentItem.isProviderManaged) {
+      data.title = titleRef.current.trim();
+      data.url = urlRef.current.trim();
+    }
+
+    const requestId = `autosave-${++autosaveRequestCounterRef.current}`;
+    dispatchAutosave({ type: 'send', requestId });
+    postMessage({ type: 'autosave', requestId, data });
+  }
+
+  function renderAutosaveError() {
+    if (autosaveState.status !== 'error') {
+      return null;
+    }
+
+    return (
+      <div class="editor-autosave-error" role="alert">
+        <span>Couldn’t save changes{autosaveState.message ? `: ${autosaveState.message}` : '.'}</span>
+        <button type="button" class="editor-button editor-button--secondary editor-autosave-retry" onClick={sendAutosaveNow}>Retry</button>
+      </div>
+    );
+  }
 
   function applyIncomingItem(nextItem: EditorItemData) {
     const previousItem = itemRef.current;
