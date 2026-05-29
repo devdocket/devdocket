@@ -141,7 +141,9 @@ function selectOne(tierId: string, itemId: string): SelectionState {
   return { tierId, itemIds: new Set([itemId]), anchorId: itemId };
 }
 
-/** Tier types that support multi-select + bulk transition. */
+/** Tier IDs that support multi-select + bulk transition. Distinct from
+ * `ItemCardData['tierType']` (incoming/readyToStart/...); these are the
+ * kebab-case identifiers used to address tiers in selection state. */
 const MULTI_SELECT_TIER_IDS: ReadonlySet<string> = new Set([
   'ready-to-start',
   'in-progress',
