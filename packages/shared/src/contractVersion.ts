@@ -11,7 +11,7 @@
  * - minor: additive changes (new optional fields, new methods).
  * - major: breaking changes (removed/renamed members, required parameters).
  *
- * See `.github/instructions/api-surface.instructions.md`.
+ * See `.github/instructions/api-surface.instructions.md` § "Bumping CONTRACT_VERSION" for when to bump.
  *
  * @module
  */
