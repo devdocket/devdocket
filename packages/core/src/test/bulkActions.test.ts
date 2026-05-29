@@ -20,9 +20,9 @@ describe('bulkActions.getBulkActionsForItems', () => {
     expect(getBulkActionsForItems([item('a', 'incoming')])).toEqual([]);
   });
 
-  it('returns the tier action set for Ready to Start (start)', () => {
+  it('returns the tier action set for Ready to Start (start + pause)', () => {
     const actions = getBulkActionsForItems([item('a', 'readyToStart'), item('b', 'readyToStart')]);
-    expect(actions.map(a => a.targetState)).toEqual(['InProgress']);
+    expect(actions.map(a => a.targetState)).toEqual(['InProgress', 'Paused']);
   });
 
   it('returns the tier action set for In Progress (complete + pause)', () => {
@@ -48,8 +48,9 @@ describe('bulkActions.getBulkActionsForItems', () => {
   it('returns the intersection (by action id) if items somehow span actionable tiers', () => {
     // Defensive — multi-select never crosses tiers in normal flow, but if
     // upstream ever produces a mixed list we still want a safe answer:
-    // readyToStart actions = [start]; inProgress actions = [complete, pause].
-    // No shared action ids, so the bulk bar should be empty.
-    expect(getBulkActionsForItems([item('a', 'readyToStart'), item('b', 'inProgress')])).toEqual([]);
+    // readyToStart actions = [start, pause]; inProgress actions = [complete, pause].
+    // Shared action id 'pause' (targetState Paused), so the intersection is just pause.
+    const actions = getBulkActionsForItems([item('a', 'readyToStart'), item('b', 'inProgress')]);
+    expect(actions.map(a => a.id)).toEqual(['pause']);
   });
 });

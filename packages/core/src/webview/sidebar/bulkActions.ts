@@ -25,6 +25,7 @@ const BULK_ACTIONS_BY_TIER: Record<ItemCardData['tierType'], TierBulkConfig | un
   readyToStart: {
     actions: [
       { id: 'start', icon: '▶', label: 'Start', targetState: 'InProgress' },
+      { id: 'pause', icon: '⏸', label: 'Pause', targetState: 'Paused' },
     ],
   },
   inProgress: {
