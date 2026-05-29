@@ -272,7 +272,10 @@ export function App() {
     return selectedTier.items.filter(item => multiSelection.itemIds.has(item.id));
   }, [multiSelection, selectedTier]);
   const bulkActions = useMemo(() => getBulkActionsForItems(selectedItems), [selectedItems]);
-  const showBulkBar = multiSelection !== null && multiSelection.itemIds.size > 1;
+  // BulkActionBar is a My Work concept — the Sources tab has no concept of
+  // multi-select / bulk transition. Hide the bar (without clearing the
+  // selection) when the user navigates away so it doesn't bleed across tabs.
+  const showBulkBar = activeTab === 'myWork' && multiSelection !== null && multiSelection.itemIds.size > 1;
 
   const handleTierItemClick = (tier: TierData, itemId: string, modifiers: ClickModifiers) => {
     const clicked = tier.items.find(item => item.id === itemId);
