@@ -26,6 +26,7 @@ export type WebviewMessage =
   | { type: 'dismissItem'; providerId: string; externalId: string }
   | { type: 'transitionState'; itemId: string; targetState: string }
   | { type: 'bulkTransition'; itemIds: string[]; targetState: string }
+  | { type: 'bulkInboxAction'; action: 'accept' | 'dismiss'; items: Array<{ providerId: string; externalId: string }> }
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
   | { type: 'openWalkthrough' }

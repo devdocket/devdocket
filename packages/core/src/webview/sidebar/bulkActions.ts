@@ -1,12 +1,25 @@
 import type { ItemCardData } from '../shared/types';
 
-export interface BulkAction {
+interface BulkActionBase {
   id: string;
   label: string;
   icon: string;
-  /** Target WorkItemState string value (e.g. 'InProgress', 'Done'). */
-  targetState: string;
 }
+
+/**
+ * A bulk action attached to one or more selected cards. Two kinds:
+ *
+ * - `transition`: a WorkItem state transition (Start, Pause, Resume, Complete,
+ *   Requeue). The host routes these through `WorkGraph.transitionState` /
+ *   `resumeItem`.
+ * - `inbox`: an inbox-state mutation for provider items in the Incoming tier
+ *   (Accept or Dismiss). The host routes these through the same batched
+ *   accept-from-inbox / setStates paths used by the Accept All button and the
+ *   single-item Accept/Dismiss controls.
+ */
+export type BulkAction =
+  | (BulkActionBase & { kind: 'transition'; targetState: string })
+  | (BulkActionBase & { kind: 'inbox'; inboxAction: 'accept' | 'dismiss' });
 
 interface TierBulkConfig {
   /** Actions available for any item in this tier. */
@@ -16,32 +29,38 @@ interface TierBulkConfig {
 /**
  * Bulk actions per tier. The action set mirrors the per-item action set in
  * `ItemCard.getItemActions` so users see the same vocabulary in both places.
- * Only tiers backed by a WorkItem state are listed — Incoming items have no
- * concept of `transitionState`, so multi-select / bulk-transition is
- * deliberately not offered there.
+ *
+ * The Incoming tier maps to inbox-state mutations (Accept / Dismiss) — those
+ * items are provider references, not WorkItems, so they have no concept of
+ * `transitionState`. Every other tier maps to WorkItem state transitions.
  */
 const BULK_ACTIONS_BY_TIER: Record<ItemCardData['tierType'], TierBulkConfig | undefined> = {
-  incoming: undefined,
+  incoming: {
+    actions: [
+      { id: 'accept', icon: '✓', label: 'Accept', kind: 'inbox', inboxAction: 'accept' },
+      { id: 'dismiss', icon: '✕', label: 'Dismiss', kind: 'inbox', inboxAction: 'dismiss' },
+    ],
+  },
   readyToStart: {
     actions: [
-      { id: 'start', icon: '▶', label: 'Start', targetState: 'InProgress' },
-      { id: 'pause', icon: '⏸', label: 'Pause', targetState: 'Paused' },
+      { id: 'start', icon: '▶', label: 'Start', kind: 'transition', targetState: 'InProgress' },
+      { id: 'pause', icon: '⏸', label: 'Pause', kind: 'transition', targetState: 'Paused' },
     ],
   },
   inProgress: {
     actions: [
-      { id: 'complete', icon: '✓', label: 'Complete', targetState: 'Done' },
-      { id: 'pause', icon: '⏸', label: 'Pause', targetState: 'Paused' },
+      { id: 'complete', icon: '✓', label: 'Complete', kind: 'transition', targetState: 'Done' },
+      { id: 'pause', icon: '⏸', label: 'Pause', kind: 'transition', targetState: 'Paused' },
     ],
   },
   paused: {
     actions: [
-      { id: 'resume', icon: '▶', label: 'Resume', targetState: 'InProgress' },
+      { id: 'resume', icon: '▶', label: 'Resume', kind: 'transition', targetState: 'InProgress' },
     ],
   },
   done: {
     actions: [
-      { id: 'requeue', icon: '↩', label: 'Requeue', targetState: 'New' },
+      { id: 'requeue', icon: '↩', label: 'Requeue', kind: 'transition', targetState: 'New' },
     ],
   },
 };
@@ -69,8 +88,8 @@ export function getBulkActionsForItems(items: readonly ItemCardData[]): readonly
     return firstConfig.actions;
   }
 
-  // Defensive: cross-tier selection (shouldn't happen). Return action IDs
-  // present in every selected item's tier config.
+  // Defensive: cross-tier selection (shouldn't happen). Return actions whose
+  // id is present in every selected item's tier config.
   const actionIdSets = items.map(item => {
     const config = BULK_ACTIONS_BY_TIER[item.tierType];
     return new Set(config?.actions.map(a => a.id) ?? []);

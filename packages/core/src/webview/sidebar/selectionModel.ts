@@ -141,10 +141,17 @@ function selectOne(tierId: string, itemId: string): SelectionState {
   return { tierId, itemIds: new Set([itemId]), anchorId: itemId };
 }
 
-/** Tier IDs that support multi-select + bulk transition. Distinct from
+/** Tier IDs that support multi-select + bulk actions. Distinct from
  * `ItemCardData['tierType']` (incoming/readyToStart/...); these are the
- * kebab-case identifiers used to address tiers in selection state. */
+ * kebab-case identifiers used to address tiers in selection state.
+ *
+ * The Incoming tier is included even though its bulk actions are inbox-state
+ * mutations (Accept / Dismiss) rather than WorkItem state transitions —
+ * selection semantics (click / shift-click / ctrl-click / aria-selected) are
+ * identical, the action set just differs (see {@link
+ * ../bulkActions.ts | bulkActions}). */
 const MULTI_SELECT_TIER_IDS: ReadonlySet<string> = new Set([
+  'incoming',
   'ready-to-start',
   'in-progress',
   'paused',
