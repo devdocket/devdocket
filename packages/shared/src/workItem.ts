@@ -35,14 +35,14 @@ export interface ActivityLogEntry {
  *
  * ```
  * New ⇄ InProgress ⇄ Paused
- *  ↑↓       ↓           ↓
- *  ↑      Done  ←───────┘
+ *  ↑↕      ↓     ↗     ↓
+ *  ↑     Done  ←───────┘
  *  ↑        ↓
  *  └──── Archived
  * ```
  *
  * Valid transitions:
- * - New → InProgress | Done | Archived
+ * - New → InProgress | Paused | Done | Archived
  * - InProgress → Paused | Done | New | Archived
  * - Paused → InProgress | Done | New | Archived
  * - Done → Archived | New
@@ -50,6 +50,9 @@ export interface ActivityLogEntry {
  *
  * New and Paused may transition directly to Done (e.g. when an external
  * issue is closed or merged while the work item is still queued or paused).
+ * New may also be paused directly (set aside without starting); resuming a
+ * Paused item returns it to whichever tier it was paused from (New or
+ * InProgress), based on the most recent state-change activity.
  * InProgress and Paused may transition back to New (returning to Queue).
  * Done and Archived may also transition back to New (for re-work after
  * discovering the item was not actually complete).

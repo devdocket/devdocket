@@ -326,7 +326,10 @@ function getItemActions(
       break;
     case 'readyToStart':
       if (onTransition) {
-        actions.push({ id: 'start', icon: '▶', title: 'Start', onClick: () => onTransition(item.id, 'InProgress') });
+        actions.push(
+          { id: 'start', icon: '▶', title: 'Start', onClick: () => onTransition(item.id, 'InProgress') },
+          { id: 'pause', icon: '⏸', title: 'Pause', onClick: () => onTransition(item.id, 'Paused') },
+        );
       }
       break;
     case 'paused':
