@@ -1,5 +1,30 @@
 # DevDocket
 
+## 0.5.0
+
+### Minor Changes
+
+- [#726 Add contractVersion to DevDocket extension API](https://github.com/devdocket/devdocket/pull/726) [`9985696`](https://github.com/devdocket/devdocket/commit/99856964af8acd15f6eea7ada7729064c5f92361) - Expose `DevDocketApi.contractVersion` and a `CONTRACT_VERSION` constant on `@devdocket/shared` so provider and action extensions can perform runtime compatibility checks. Providers and actions may declare an optional `minContractVersion`; when the core extension's contract version is lower, registration is skipped with a warning (and a no-op disposable is returned) instead of throwing, allowing host extensions to degrade gracefully against older DevDocket cores.
+
+- [#731 Surface associated branch and worktree on work items](https://github.com/devdocket/devdocket/pull/731) [`fb74f3d`](https://github.com/devdocket/devdocket/commit/fb74f3de62b8525512929a91ea517bac12bd6076) - Surface associated branch/worktree on work items: sidebar cards show a branch glyph badge and the editor header gains a branch + worktree row with an "Open Worktree" quick action. Stale worktrees (folder no longer on disk) are visually distinguished. The Start Git Work extension exposes the association via a new public `registerGitWorkResolver` API so the core extension can render the badge without parsing the private `work-started` activity-log schema.
+
+- [#729 Multi-select and bulk transitions on My Work tiers](https://github.com/devdocket/devdocket/pull/729) [`fa3fe93`](https://github.com/devdocket/devdocket/commit/fa3fe9300b19a781ab586688b8a41443ba13dc0e) - Multi-select work items in the Incoming, Ready to Start, In Progress, Paused, and Done tiers and bulk-act on them with a single click. Shift-click extends a range from the anchor item, Ctrl/Cmd-click toggles individual items, and Escape clears the selection. When more than one item is selected, a floating action bar shows the actions valid for every selected item — Accept / Dismiss for Incoming, and the matching state transitions (Start, Complete, Pause, Resume, Requeue) for the other tiers.
+
+- [#725 Add low-intrusion item-level autosave indicator in the editor](https://github.com/devdocket/devdocket/pull/725) [`22634e5`](https://github.com/devdocket/devdocket/commit/22634e50d568409b2b82fd874305d1bb4d862a25) - Add a low-intrusion item-level autosave indicator in the editor: a small status dot next to the state pill (amber while unsaved/saving, green briefly after save, red on error) plus a prominent error banner with Retry. For manually created items, the indicator covers Title, URL, and Notes; for provider items it covers Notes. The previous Ctrl/Cmd+S flush shortcut has been removed.
+
+- [#728 Allow pausing items directly from Ready to Start](https://github.com/devdocket/devdocket/pull/728) [`006fdf3`](https://github.com/devdocket/devdocket/commit/006fdf3c53c5c43a6b0782c2e4ad659e9ba75969) - Allow pausing items directly from the Ready to Start tier. The ⏸ Pause hover action now appears on Ready cards in addition to In Progress cards, and Resume returns a paused item to whichever tier it was paused from (Ready to Start or In Progress).
+
+### Patch Changes
+
+- [#724 Cap WorkGraph activity detail at 8 KiB and warn on truncation](https://github.com/devdocket/devdocket/pull/724) [`46c367b`](https://github.com/devdocket/devdocket/commit/46c367b96f09d2d407fa1ff1b202a3305378d358) - Cap activity log detail strings at 8 KiB, truncating oversized entries with a clear marker and logging a warning so extensions cannot bloat persisted work item storage.
+
+- [#739 Leave Notes empty when creating a work item from a URL](https://github.com/devdocket/devdocket/pull/739) [`103bd9c`](https://github.com/devdocket/devdocket/commit/103bd9c2168772d41d929dd79cd2b4ed8fe86d36) - Stop prefilling Notes with the upstream description when creating a work item from a URL (reverses the URL-import notes seeding from the prior release). Notes now stays empty on creation; the provider description continues to be shown in the editor's description section.
+
+- [#723 Complete provider walkthrough step on first discovered item](https://github.com/devdocket/devdocket/pull/723) [`6a5c22e`](https://github.com/devdocket/devdocket/commit/6a5c22e4aec939f95f8401763d75131ad0be3174) - Complete the Getting Started provider walkthrough step only after a provider surfaces its first live item instead of immediately after installing a provider extension.
+
+- Updated dependencies [[`9985696`](https://github.com/devdocket/devdocket/commit/99856964af8acd15f6eea7ada7729064c5f92361), [`46c367b`](https://github.com/devdocket/devdocket/commit/46c367b96f09d2d407fa1ff1b202a3305378d358), [`fb74f3d`](https://github.com/devdocket/devdocket/commit/fb74f3de62b8525512929a91ea517bac12bd6076)]:
+  - @devdocket/shared@0.4.0
+
 ## 0.4.0
 
 ### Minor Changes
