@@ -688,6 +688,48 @@ describe('registerCommands', () => {
         expect.stringContaining('not found'),
       );
     });
+
+    // Regression for #736 (unread badge stuck). When the user pastes a URL,
+    // a synthetic provider item is registered for the new work item. Without
+    // marking the inbox-state row as 'accepted', the synthetic item appears
+    // as unseen in the Incoming tier and the unread badge — a phantom unread
+    // the user can't dismiss.
+    it('marks inbox state as accepted so the synthetic item does not count as unread (regression: #736)', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(stateStore.setState).toHaveBeenCalledWith(
+        'github-pr-reviews',
+        'owner/repo#42',
+        'accepted',
+      );
+      // setState must run after createItem (so we have a work item to roll
+      // back on failure) and BEFORE registerSyntheticProviderItem (so badge
+      // subscribers reacting to the synthetic-registration event already see
+      // the 'accepted' inbox-state row instead of counting a phantom unread).
+      const setStateOrder = stateStore.setState.mock.invocationCallOrder[0];
+      const createItemOrder = workGraph.createItem.mock.invocationCallOrder[0];
+      const registerSyntheticOrder = providerRegistry.registerSyntheticProviderItem.mock.invocationCallOrder[0];
+      expect(setStateOrder).toBeGreaterThan(createItemOrder);
+      expect(setStateOrder).toBeLessThan(registerSyntheticOrder);
+    });
+
+    it('rolls back the created work item if setState fails', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-rollback', providerId: 'github-pr-reviews' }));
+      stateStore.setState.mockRejectedValueOnce(new Error('disk full'));
+
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback');
+      // Rollback aborts the flow: synthetic registration and canonical-peer
+      // propagation must not run after a setState failure.
+      expect(providerRegistry.registerSyntheticProviderItem).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to update state after creating item from URL'),
+      );
+    });
   });
 
   // ── simple state-transition commands ─────────────────────────────
