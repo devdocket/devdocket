@@ -82,4 +82,31 @@ describe('ItemCard CI badge', () => {
     expect(onMoveTierFocus).toHaveBeenCalledWith(1);
     expect(tabFromBadge.defaultPrevented).toBe(true);
   });
+
+  it('treats Shift+Tab from the card as the leading edge even when a CI badge is present', () => {
+    // querySelectorAll only returns descendants, so when the card itself is
+    // the event target the card is not in `focusables`. Shift+Tab from the
+    // card must still escape to the previous tier instead of being swallowed
+    // because a focusable descendant exists.
+    const onMoveTierFocus = vi.fn(() => true);
+
+    render(
+      h(ItemCard, { item, tabIndex: 0, onClick: vi.fn(), onMoveTierFocus }),
+      document.body,
+    );
+
+    const card = document.body.querySelector('[role="option"]') as HTMLElement;
+    const ciBadge = document.body.querySelector('[role="button"]') as HTMLElement;
+    expect(ciBadge).toBeTruthy();
+
+    const shiftTabFromCard = new KeyboardEvent('keydown', {
+      key: 'Tab',
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    card.dispatchEvent(shiftTabFromCard);
+    expect(onMoveTierFocus).toHaveBeenCalledWith(-1);
+    expect(shiftTabFromCard.defaultPrevented).toBe(true);
+  });
 });

@@ -135,8 +135,13 @@ export function ItemCard({
         const target = event.target as HTMLElement;
         const idx = focusables.indexOf(target);
         const goingForward = !event.shiftKey;
+        // When the card itself is the event target (idx === -1), Tab should
+        // let the browser focus the first descendant (e.g. the CI badge) and
+        // Shift+Tab should treat the card as the leading edge so we jump to
+        // the previous tier. Otherwise we'd swallow Shift+Tab on any card
+        // that happens to have a focusable badge.
         const atEdge = idx === -1
-          ? focusables.length === 0
+          ? focusables.length === 0 || !goingForward
           : goingForward
             ? idx === focusables.length - 1
             : idx === 0;
