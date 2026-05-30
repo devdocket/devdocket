@@ -190,6 +190,18 @@ export class WatchPanelProvider implements vscode.Disposable {
         return prWatch.id;
       }
     }
+    // Fallback: the same PR may be surfaced by multiple providers (e.g., a PR
+    // is both authored by you and assigned for review). The watch row stores
+    // only one source provider id, so clicking the CI badge on a duplicate
+    // provider surface would otherwise fail to focus the matching row. Match
+    // by external id alone when the provider id didn't line up.
+    if (externalId) {
+      for (const prWatch of prWatches) {
+        if (prWatch.linkedSourceExternalId === externalId) {
+          return prWatch.id;
+        }
+      }
+    }
     return undefined;
   }
 

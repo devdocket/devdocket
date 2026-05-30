@@ -728,5 +728,32 @@ describe('WatchPanelProvider', () => {
 
       expect(getFocusWatchMessages(mockPanel)).toEqual([]);
     });
+
+    it('falls back to matching by external id when the provider id does not match a duplicate surface', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      // The watch row is linked to a provider item from `github-my-prs`, but
+      // the user clicks the CI badge on the duplicate surface in `github-pr-reviews`.
+      const watcherService = createWatcherService([createPRWatch()]);
+      const providerItems = new Map<string, any[]>([
+        ['github-my-prs', [{ externalId: 'owner/repo#42', title: 'My PR', itemType: 'pr' }]],
+      ]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        createMockWorkGraph(),
+        createMockProviderRegistry(providerItems) as any,
+      );
+
+      provider.open({
+        focusProviderId: 'github-pr-reviews',
+        focusExternalId: 'owner/repo#42',
+      });
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([
+        { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:42' },
+      ]);
+    });
   });
 });
