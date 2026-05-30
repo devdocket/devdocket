@@ -93,11 +93,25 @@ The API surface is intentionally small:
 import * as vscode from 'vscode';
 
 interface DevDocketApi {
+  /**
+   * Semver version of the implemented API contract (e.g. `"1.0.0"`).
+   * Optional at the type level: older DevDocket cores predate this
+   * field and report `undefined` here. The current core always sets it.
+   */
+  readonly contractVersion?: string;
+
   registerProvider(provider: DevDocketProvider): vscode.Disposable;
   registerAction(action: DevDocketAction): vscode.Disposable;
 
   /** Optional accessor for live provider data, used by actions that need capabilities. */
   getProviderItem?(providerId: string, externalId: string): ProviderItem | undefined;
+
+  /**
+   * Optional: append an activity log entry to a work item. The optional detail
+   * string is capped at 8 KiB (UTF-8) and larger values are truncated with
+   * `…[truncated]`.
+   */
+  addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
 
   /**
    * Optional: register a renderer that converts an activity log entry's
@@ -112,6 +126,48 @@ interface DevDocketApi {
   ): vscode.Disposable;
 }
 ```
+
+### Contract version
+
+`DevDocketApi.contractVersion` is a semver string identifying the version of the extension API contract implemented by the core extension at runtime. It is bumped:
+
+- **minor** for additive changes (new optional members, new methods),
+- **major** for breaking changes,
+- **patch** for internal fixes that do not change the surface.
+
+Providers and actions can opt into a compatibility gate by declaring
+`minContractVersion` on the registered object:
+
+```ts
+import { CONTRACT_VERSION } from '@devdocket/shared';
+
+const provider: DevDocketProvider = {
+  id: 'my-provider',
+  label: 'My Provider',
+  minContractVersion: CONTRACT_VERSION, // requires DevDocket core >= the version this build targets
+  onDidDiscoverItems: emitter.event,
+  async refresh() { /* … */ },
+};
+
+api.registerProvider(provider);
+```
+
+If `api.contractVersion` is lower than `minContractVersion`, `registerProvider` (and `registerAction`) **does not throw** — it logs a warning, skips registration, and returns a no-op `Disposable`. This lets the host extension keep working when paired with an older DevDocket core. If you need to react to incompatibility explicitly, compare versions yourself before calling `register*`:
+
+```ts
+import { isContractVersionSatisfied } from '@devdocket/shared';
+
+// `api.contractVersion` is `string | undefined`: older DevDocket cores
+// predate the field and report `undefined`. Treat that as "too old".
+if (!api.contractVersion || !isContractVersionSatisfied(api.contractVersion, '1.2.0')) {
+  vscode.window.showWarningMessage(
+    `My Provider needs DevDocket >= 1.2.0 (found ${api.contractVersion ?? 'unknown'}).`,
+  );
+  return;
+}
+```
+
+The `CONTRACT_VERSION` constant from `@devdocket/shared` corresponds to the version of the contract your build was compiled against — useful for declaring `minContractVersion: CONTRACT_VERSION` so the gate moves automatically when you upgrade.
 
 `ActivityDetailRender` is one of:
 
@@ -513,6 +569,8 @@ Action authors should use this mapping when implementing `canRun()` — for exam
 
 Activity log entries carry a free-form `detail` string. Extensions that write structured payloads (e.g. JSON encoded with their own schema) should register a renderer so the core extension can display the entry without parsing the schema itself. This keeps the core decoupled from extension-private schemas — only the writer extension knows the shape.
 
+`api.addActivity` caps each `detail` value at **8 KiB** measured as UTF-8 bytes. Larger details are truncated with the suffix `…[truncated]`, and DevDocket logs a warning instead of throwing. Keep activity details concise; store large artifacts externally and link to them from the detail text.
+
 ```ts
 api.registerActivityDetailRenderer?.('work-started', (raw) => {
   const decoded = decodeMyDetail(raw);
@@ -538,6 +596,10 @@ If the extension does not register a renderer for an activity type, the raw `det
 ### Item Count Limits
 
 Each provider is capped at **10,000 discovered items** per refresh. If a provider emits more than 10,000 items, excess items are silently truncated from the end and a warning is logged. Design your provider to stay within this limit — for example, by filtering to only relevant items in your `refresh()` implementation.
+
+### Activity Detail Limits
+
+Activity log `detail` strings written through `DevDocketApi.addActivity` are capped at **8 KiB** measured as UTF-8 bytes. Oversized details are truncated with `…[truncated]` and a warning is logged. The API call still succeeds.
 
 ### Readonly WorkItem in Actions
 

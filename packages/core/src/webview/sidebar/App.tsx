@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
+import type { ExtensionMessage, ItemCardData, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { useThemeChangeCounter } from '../shared/theme';
+import { BulkActionBar } from './components/BulkActionBar';
 import { OnboardingEmptyState } from './components/OnboardingEmptyState';
 import { SearchBox } from './components/SearchBox';
 import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
 import { TierSection } from './components/TierSection';
+import type { ClickModifiers } from './components/ItemCard';
 import { filterProviders, filterTiers } from './filter';
+import { getBulkActionsForItems, type BulkAction } from './bulkActions';
+import {
+  applySelectionClick,
+  clearSelection,
+  isMultiSelectTier,
+  reconcileSelection,
+  type SelectionState,
+} from './selectionModel';
 import {
   emptyQueries,
   hiddenSearchBoxes,
@@ -22,6 +32,7 @@ export function App() {
   const [tiersLoaded, setTiersLoaded] = useState(false);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [multiSelection, setMultiSelection] = useState<SelectionState>(null);
   const [queries, setQueries] = useState<TabQueries>(emptyQueries);
   const [appliedQueries, setAppliedQueries] = useState<TabQueries>(emptyQueries);
   const [searchBoxVisible, setSearchBoxVisible] = useState(hiddenSearchBoxes);
@@ -30,6 +41,13 @@ export function App() {
   const announcementFrameRef = useRef<number | undefined>(undefined);
   const myWorkFilterActiveRef = useRef(false);
   const lastNoResultsAnnouncementRef = useRef<TabQueries>(emptyQueries);
+  // Declared up-front (not next to its sibling refs below) because the
+  // window-level keydown handler installed in the mount effect references
+  // `multiSelectionRef.current` to read the latest selection without
+  // re-installing the listener. Keeping the declaration here avoids TS's
+  // "used before its declaration" diagnostic on the closure capture.
+  const multiSelectionRef = useRef(multiSelection);
+  multiSelectionRef.current = multiSelection;
   // Re-render on VS Code theme changes so badge / tier colors update live.
   useThemeChangeCounter();
 
@@ -152,12 +170,17 @@ export function App() {
     // Both paths coexist by design — they cover disjoint focus contexts.
     const keydownHandler = (event: KeyboardEvent) => {
       const isFindShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === 'f' || event.key === 'F');
-      if (!isFindShortcut) {
+      if (isFindShortcut) {
+        event.preventDefault();
+        event.stopPropagation();
+        postMessage({ type: 'requestToggleSearch' });
         return;
       }
-      event.preventDefault();
-      event.stopPropagation();
-      postMessage({ type: 'requestToggleSearch' });
+      if (event.key === 'Escape' && multiSelectionRef.current) {
+        // Don't preventDefault — Escape should still close any open dropdowns
+        // / clear focus / etc.; we just additionally clear the multi-select.
+        setMultiSelection(clearSelection());
+      }
     };
     window.addEventListener('keydown', keydownHandler);
 
@@ -215,6 +238,111 @@ export function App() {
   queriesRef.current = queries;
   const appliedQueriesRef = useRef(appliedQueries);
   appliedQueriesRef.current = appliedQueries;
+
+  // Reconcile the multi-selection whenever tier contents change. If items
+  // were transitioned out of the selected tier (e.g. as a result of the
+  // bulk action that user just invoked) drop them from the selection. If
+  // nothing is left, fall back to null so the bulk action bar hides.
+  useEffect(() => {
+    setMultiSelection(current => {
+      if (!current) {
+        return current;
+      }
+      const tier = tiers.find(t => t.id === current.tierId);
+      const next = reconcileSelection(current, tier ? { tierId: tier.id, itemIds: tier.items.map(i => i.id) } : undefined);
+      return next === current ? current : next;
+    });
+  }, [tiers]);
+
+  // Resolve the selected tier from the unfiltered tier list, not the
+  // visible one — multi-selection is a property of the underlying tier,
+  // not the search-filtered projection. Without this, typing into the
+  // search box could leave the bulk-action bar visible with an empty
+  // action set when the filter hides every selected card.
+  const selectedTier = multiSelection ? tiers.find(t => t.id === multiSelection.tierId) : undefined;
+  const selectedItems: ItemCardData[] = useMemo(() => {
+    if (!multiSelection || !selectedTier) {
+      return [];
+    }
+    return selectedTier.items.filter(item => multiSelection.itemIds.has(item.id));
+  }, [multiSelection, selectedTier]);
+  const bulkActions = useMemo(() => getBulkActionsForItems(selectedItems), [selectedItems]);
+  // BulkActionBar is a My Work concept — the Sources tab has no concept of
+  // multi-select / bulk transition. Hide the bar (without clearing the
+  // selection) when the user navigates away so it doesn't bleed across tabs.
+  const showBulkBar = activeTab === 'myWork' && multiSelection !== null && multiSelection.itemIds.size > 1;
+
+  const handleTierItemClick = (tier: TierData, itemId: string, modifiers: ClickModifiers) => {
+    const clicked = tier.items.find(item => item.id === itemId);
+    const supportsMultiSelect = isMultiSelectTier(tier.id);
+    const wantsMultiSelectGesture = supportsMultiSelect && (modifiers.shift || modifiers.toggle);
+
+    if (wantsMultiSelectGesture) {
+      // Modifier click on a multi-select-capable tier: update selection and
+      // do NOT open the item — keeps the modifier-click gesture purely about
+      // building a selection, matching standard list-box behavior.
+      setMultiSelection(current => applySelectionClick(
+        current,
+        itemId,
+        { tierId: tier.id, itemIds: tier.items.map(i => i.id) },
+        modifiers.shift ? 'range' : 'toggle',
+      ));
+      return;
+    }
+
+    // Plain click: on a multi-select-capable tier, replace the selection
+    // with the single clicked item (so the listbox always has an
+    // aria-selected option and shift-click has an anchor). On non-multi-select
+    // tiers (Sources) just drop any stray selection. Either way, also open
+    // the item.
+    if (supportsMultiSelect) {
+      setMultiSelection(applySelectionClick(
+        null,
+        itemId,
+        { tierId: tier.id, itemIds: tier.items.map(i => i.id) },
+        'none',
+      ));
+    } else {
+      setMultiSelection(null);
+    }
+
+    if (clicked?.tierType === 'incoming' && clicked.providerId && clicked.externalId && clicked.isUnseen) {
+      postMessage({ type: 'markSeen', providerId: clicked.providerId, externalId: clicked.externalId });
+    }
+    postMessage({
+      type: 'openItem',
+      itemId,
+      ...(clicked?.providerId ? { providerId: clicked.providerId } : {}),
+      ...(clicked?.externalId ? { externalId: clicked.externalId } : {}),
+    });
+  };
+
+  const handleBulkAction = (action: BulkAction) => {
+    if (!multiSelection) {
+      return;
+    }
+    if (action.kind === 'transition') {
+      const itemIds = Array.from(multiSelection.itemIds);
+      postMessage({ type: 'bulkTransition', itemIds, targetState: action.targetState });
+    } else {
+      // Inbox-tier actions operate on provider/external pairs, not WorkItem
+      // ids. Skip any selected card that's somehow missing provenance
+      // (shouldn't happen — incoming cards always carry both) so the host
+      // doesn't have to defensively re-filter.
+      const items = selectedItems.flatMap(item =>
+        item.providerId && item.externalId
+          ? [{ providerId: item.providerId, externalId: item.externalId }]
+          : [],
+      );
+      if (items.length === 0) {
+        return;
+      }
+      postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
+    }
+    // Optimistically clear; the next updateItems push will re-render the
+    // tiers with the items in their new home.
+    setMultiSelection(null);
+  };
 
   return (
     <div class="mission-control">
@@ -298,25 +426,8 @@ export function App() {
                     query={isMyWorkFilterActive ? myWorkQuery : undefined}
                     disableDragReorder={isMyWorkFilterActive}
                     isFilterActive={isMyWorkFilterActive}
-                    onItemClick={(id) => {
-                      // For incoming items, also mark them seen so the unread
-                      // indicator clears once the user opens the editor.
-                      const clicked = tier.items.find(item => item.id === id);
-                      if (clicked?.tierType === 'incoming' && clicked.providerId && clicked.externalId && clicked.isUnseen) {
-                        postMessage({ type: 'markSeen', providerId: clicked.providerId, externalId: clicked.externalId });
-                      }
-                      // Pass providerId/externalId along when known so the
-                      // extension can route to the preview panel without
-                      // re-parsing the legacy `${providerId}::${externalId}`
-                      // cache key (which can split incorrectly if either
-                      // side contains '::').
-                      postMessage({
-                        type: 'openItem',
-                        itemId: id,
-                        ...(clicked?.providerId ? { providerId: clicked.providerId } : {}),
-                        ...(clicked?.externalId ? { externalId: clicked.externalId } : {}),
-                      });
-                    }}
+                    onItemClick={(id, modifiers) => handleTierItemClick(tier, id, modifiers)}
+                    multiSelectionIds={multiSelection?.tierId === tier.id ? multiSelection.itemIds : undefined}
                     onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
                     onAcceptToFocus={(providerId, externalId) => postMessage({ type: 'acceptToFocus', providerId, externalId })}
                     onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
@@ -339,6 +450,14 @@ export function App() {
           </div>
         )}
       </div>
+      {showBulkBar ? (
+        <BulkActionBar
+          count={multiSelection!.itemIds.size}
+          actions={bulkActions}
+          onAction={handleBulkAction}
+          onClear={() => setMultiSelection(null)}
+        />
+      ) : null}
     </div>
   );
 }

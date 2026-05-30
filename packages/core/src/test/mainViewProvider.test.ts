@@ -111,6 +111,12 @@ function createMockWorkGraph(initialItems: WorkItem[] = []) {
         item.state = state;
       }
     }),
+    resumeItem: vi.fn(async (id: string) => {
+      const item = items.get(id);
+      if (item) {
+        item.state = WorkItemState.InProgress;
+      }
+    }),
     reorderItem: vi.fn(async (draggedId: string, beforeId: string) => {
       const orderedIds = getReadyItems().map(item => item.id).filter(id => id !== draggedId);
       const beforeIndex = orderedIds.indexOf(beforeId);
@@ -146,6 +152,11 @@ function createStateStore(initialStates: Record<string, string> = {}) {
     getState: vi.fn((providerId: string, externalId: string) => states.get(`${providerId}::${externalId}`)),
     setState: vi.fn(async (providerId: string, externalId: string, state: string) => {
       states.set(`${providerId}::${externalId}`, state);
+    }),
+    setStates: vi.fn(async (items: Array<{ providerId: string; externalId: string; state: string }>) => {
+      for (const { providerId, externalId, state } of items) {
+        states.set(`${providerId}::${externalId}`, state);
+      }
     }),
   };
 }
@@ -650,6 +661,412 @@ describe('MainViewProvider', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-99', 'dismissed');
       expect(workGraph.transitionState).toHaveBeenCalledWith('existing-item', WorkItemState.Done);
     });
+  });
+
+  it('routes a Paused → InProgress transitionState message through workGraph.resumeItem', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'paused-item', title: 'Paused item', state: WorkItemState.Paused }),
+      makeWorkItem({ id: 'ready-item', title: 'Ready item', state: WorkItemState.New }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    // Paused → InProgress should resume (delegate origin-tier decision to WorkGraph)
+    mockView.simulateMessage({ type: 'transitionState', itemId: 'paused-item', targetState: WorkItemState.InProgress });
+    // Ready → Paused should still go through transitionState (no special routing)
+    mockView.simulateMessage({ type: 'transitionState', itemId: 'ready-item', targetState: WorkItemState.Paused });
+
+    await vi.waitFor(() => {
+      expect(workGraph.resumeItem).toHaveBeenCalledWith('paused-item');
+      expect(workGraph.transitionState).not.toHaveBeenCalledWith('paused-item', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('ready-item', WorkItemState.Paused);
+    });
+  });
+
+  it('routes Paused → InProgress bulkTransition items through workGraph.resumeItem', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'paused-1', title: 'Paused 1', state: WorkItemState.Paused }),
+      makeWorkItem({ id: 'paused-2', title: 'Paused 2', state: WorkItemState.Paused }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['paused-1', 'paused-2'],
+      targetState: WorkItemState.InProgress,
+    });
+
+    await vi.waitFor(() => {
+      expect(workGraph.resumeItem).toHaveBeenCalledTimes(2);
+    });
+    expect(workGraph.resumeItem).toHaveBeenCalledWith('paused-1');
+    expect(workGraph.resumeItem).toHaveBeenCalledWith('paused-2');
+    expect(workGraph.transitionState).not.toHaveBeenCalled();
+  });
+
+  it('handles bulkTransition by dispatching transitionState once per item', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'item-a', title: 'A', state: WorkItemState.New }),
+      makeWorkItem({ id: 'item-b', title: 'B', state: WorkItemState.New }),
+      makeWorkItem({ id: 'item-c', title: 'C', state: WorkItemState.New }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['item-a', 'item-b', 'item-c'],
+      targetState: WorkItemState.InProgress,
+    });
+
+    await vi.waitFor(() => {
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+    });
+    expect(workGraph.transitionState).toHaveBeenNthCalledWith(1, 'item-a', WorkItemState.InProgress);
+    expect(workGraph.transitionState).toHaveBeenNthCalledWith(2, 'item-b', WorkItemState.InProgress);
+    expect(workGraph.transitionState).toHaveBeenNthCalledWith(3, 'item-c', WorkItemState.InProgress);
+  });
+
+  it('bulkTransition continues past per-item failures and surfaces a single error toast', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'ok-1', title: 'OK 1', state: WorkItemState.New }),
+      makeWorkItem({ id: 'ok-2', title: 'OK 2', state: WorkItemState.New }),
+    ]);
+    workGraph.transitionState.mockImplementation(async (id: string) => {
+      if (id === 'ok-2') {
+        throw new Error('boom');
+      }
+    });
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    workGraph.transitionState.mockImplementation(async (id: string) => {
+      if (id === 'ok-2') {
+        throw new Error('boom');
+      }
+    });
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['ok-1', 'ok-2', 'missing-item'],
+      targetState: WorkItemState.InProgress,
+    });
+
+    await vi.waitFor(() => {
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'Failed to transition 2 items to In Progress.',
+      );
+    });
+    expect(workGraph.transitionState).toHaveBeenCalledWith('ok-1', WorkItemState.InProgress);
+    expect(workGraph.transitionState).toHaveBeenCalledWith('ok-2', WorkItemState.InProgress);
+  });
+
+  it('bulkTransition rejects an unsupported targetState up front without invoking transitionState', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'item-a', title: 'A', state: WorkItemState.New }),
+      makeWorkItem({ id: 'item-b', title: 'B', state: WorkItemState.New }),
+    ]);
+    const provider = createProvider(workGraph, createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkTransition',
+      itemIds: ['item-a', 'item-b'],
+      targetState: 'NotAState',
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Unsupported target state: NotAState.');
+    });
+    expect(workGraph.transitionState).not.toHaveBeenCalled();
+  });
+
+  it('routes bulkInboxAction accept through devdocket.acceptAllFromInbox once for the selected subset', async () => {
+    vi.useFakeTimers();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'visible-1' },
+      { providerId: 'ado', externalId: 'other-visible' },
+    ]);
+    const readStateStore = {
+      has: () => false,
+      add: vi.fn().mockResolvedValue(true),
+      addMany: vi.fn().mockResolvedValue([]),
+      keys: () => [][Symbol.iterator](),
+    };
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [
+          { externalId: 'visible-1', title: 'Visible GitHub item' },
+          { externalId: 'hidden', title: 'Hidden GitHub item' },
+        ],
+        ado: [{ externalId: 'other-visible', title: 'Visible ADO item' }],
+      }),
+      createStateStore(),
+      undefined,
+      readStateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'visible-1' },
+      { providerId: 'ado', externalId: 'other-visible' },
+    ]);
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [
+        { providerId: 'github', externalId: 'visible-1' },
+        { providerId: 'ado', externalId: 'other-visible' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptAllFromInbox',
+        [
+          expect.objectContaining({ providerId: 'github', externalId: 'visible-1' }),
+          expect.objectContaining({ providerId: 'ado', externalId: 'other-visible' }),
+        ],
+      );
+      expect(readStateStore.addMany).toHaveBeenCalledWith([
+        'github::visible-1',
+        'ado::other-visible',
+      ]);
+    });
+    // No confirmation prompt — selecting + clicking a bulk button is the
+    // explicit intent. This mirrors bulkTransition (no modal) and differs
+    // from the Accept All button's "Accept all N items?" confirmation.
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+  });
+
+  it('bulkInboxAction accept skips items whose providerItem is no longer in the registry', async () => {
+    vi.useFakeTimers();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'present' },
+    ]);
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'present', title: 'Present item' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    (vscode.commands.executeCommand as Mock).mockResolvedValueOnce([
+      { providerId: 'github', externalId: 'present' },
+    ]);
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [
+        { providerId: 'github', externalId: 'present' },
+        { providerId: 'github', externalId: 'vanished' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptAllFromInbox',
+        [expect.objectContaining({ providerId: 'github', externalId: 'present' })],
+      );
+    });
+    const acceptCalls = (vscode.commands.executeCommand as Mock).mock.calls.filter(
+      ([cmd]: [string]) => cmd === 'devdocket.acceptAllFromInbox',
+    );
+    expect(acceptCalls).toHaveLength(1);
+    expect(acceptCalls[0][1]).toHaveLength(1);
+  });
+
+  it('bulkInboxAction accept does nothing when every requested item is missing from the registry', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({ github: [] }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [{ providerId: 'github', externalId: 'vanished' }],
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'devdocket.acceptAllFromInbox',
+      expect.anything(),
+    );
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it('bulkInboxAction accept surfaces an error toast when acceptAllFromInbox throws', async () => {
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'visible-1', title: 'Visible GitHub item' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    (vscode.commands.executeCommand as Mock).mockReset();
+    (vscode.commands.executeCommand as Mock).mockImplementation((cmd: string) => {
+      if (cmd === 'devdocket.acceptAllFromInbox') {
+        return Promise.reject(new Error('boom'));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'accept',
+      items: [{ providerId: 'github', externalId: 'visible-1' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to accept items: boom');
+    });
+  });
+
+  it('routes bulkInboxAction dismiss through stateStore.setStates in a single batched write', async () => {
+    vi.useFakeTimers();
+    const stateStore = createStateStore();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'visible-1', title: 'Visible' }],
+        ado: [{ externalId: 'other-visible', title: 'Other' }],
+      }),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'dismiss',
+      items: [
+        { providerId: 'github', externalId: 'visible-1' },
+        { providerId: 'ado', externalId: 'other-visible' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(stateStore.setStates).toHaveBeenCalledTimes(1);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'visible-1', state: 'dismissed' },
+        { providerId: 'ado', externalId: 'other-visible', state: 'dismissed' },
+      ]);
+    });
+    // Dismiss must not touch acceptAllFromInbox or the per-item setState path
+    // — the whole point of using setStates is one atomic write.
+    expect(stateStore.setState).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'devdocket.acceptAllFromInbox',
+      expect.anything(),
+    );
+  });
+
+  it('bulkInboxAction dismiss surfaces an error toast when setStates fails', async () => {
+    vi.useFakeTimers();
+    const stateStore = createStateStore();
+    stateStore.setStates.mockRejectedValueOnce(new Error('io error'));
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'visible-1', title: 'Visible' }],
+      }),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+    stateStore.setStates.mockRejectedValueOnce(new Error('io error'));
+
+    await mockView.simulateMessage({
+      type: 'bulkInboxAction',
+      action: 'dismiss',
+      items: [{ providerId: 'github', externalId: 'visible-1' }],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to dismiss items: io error');
+    });
+  });
+
+  it('bulkInboxAction with an empty items list is a silent no-op', async () => {
+    vi.useFakeTimers();
+    const stateStore = createStateStore();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({}),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'bulkInboxAction', action: 'dismiss', items: [] });
+    await mockView.simulateMessage({ type: 'bulkInboxAction', action: 'accept', items: [] });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(stateStore.setStates).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+      'devdocket.acceptAllFromInbox',
+      expect.anything(),
+    );
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
   });
 
   it('handles provider health messages through the webview message switch', async () => {

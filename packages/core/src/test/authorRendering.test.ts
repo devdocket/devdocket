@@ -213,7 +213,7 @@ describe('EditorApp author annotation', () => {
     expect(container.querySelector('h1.editor-title')?.textContent).toBe('Fix bug');
   });
 
-  it('autosaves manual notes while the title draft is empty', async () => {
+  it('autosaves manual notes and surfaces the empty title to the host', async () => {
     vi.useFakeTimers();
     const { container, postMessage } = await renderEditorWithPostMessage(makeEditorItem({
       isProviderManaged: false,
@@ -235,7 +235,11 @@ describe('EditorApp author annotation', () => {
       await vi.advanceTimersByTimeAsync(500);
     });
 
-    expect(postMessage).toHaveBeenLastCalledWith({ type: 'autosave', data: { notes: 'Draft note' } });
+    expect(postMessage).toHaveBeenLastCalledWith({
+      type: 'autosave',
+      requestId: 'autosave-1',
+      data: { notes: 'Draft note', title: '', url: '' },
+    });
   });
 
   it('posts acceptAndRunAction for incoming preview inline actions', async () => {

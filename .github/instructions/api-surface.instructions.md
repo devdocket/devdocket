@@ -41,3 +41,30 @@ Any of the following applied to an exported interface, type, class, or function 
 - If a breaking change is found and the PR description lacks migration notes, the reviewer **must** block the PR and request they be added.
 
 The `superpowers:code-reviewer` agent enforces this policy automatically; manual reviewers should follow the same checklist.
+
+## Bumping CONTRACT_VERSION
+
+The runtime contract version is the `CONTRACT_VERSION` constant in `packages/shared/src/contractVersion.ts`. It is exposed to provider extensions at runtime via `DevDocketApi.contractVersion` and is the value compared against `DevDocketProvider.minContractVersion` / `DevDocketAction.minContractVersion`. Whenever the public API surface defined above changes, this constant **must** be updated in the same PR so provider extensions can gate behavior correctly.
+
+### When to bump
+
+The bump semantics mirror the breaking-change rules above:
+
+- **patch** — pure internal/non-contract fixes (implementation bug fixes, perf improvements, refactors) that add, remove, or rename nothing observable on the API surface. In most cases these changes do **not** require a `CONTRACT_VERSION` bump at all — providers gating on a version cannot meaningfully detect a non-contract fix. Do not bump needlessly. Bump patch only when a behavioral fix is observable through the existing surface and providers might reasonably want to gate on it.
+- **minor** — any additive change to the API surface: a new optional property, a new method, a new exported type or interface, a new enum member, a new appended overload, or any new capability that providers can opt into via `minContractVersion`. Bump minor.
+- **major** — any breaking change (see "What Constitutes a Breaking Change" above). Bump major. The PR description **must** also contain a `## Migration Notes` section per the existing policy.
+
+### How to bump
+
+- Edit `CONTRACT_VERSION` in `packages/shared/src/contractVersion.ts` in the **same PR** as the surface change. Never defer to a follow-up — provider extensions cannot gate on a version that has not shipped.
+- The npm `version` field in `packages/shared/package.json` and the `.changeset/*.md` entry are managed separately by Changesets and **must not** be edited by hand. `CONTRACT_VERSION` is the *runtime contract version* the core extension advertises to provider extensions; the npm version of `@devdocket/shared` tracks the package as a whole (including internal helpers, perf fixes, and other non-contract code). They will often move together but are independent numbers — do not assume one implies the other.
+
+### Reviewer responsibility
+
+- Code review (and the `superpowers:code-reviewer` agent) **must** verify that any qualifying API surface change includes a matching `CONTRACT_VERSION` bump.
+- A missing or incorrect bump on a minor or major surface change is a **Critical** finding. Label it `[CONTRACT VERSION NOT BUMPED]`.
+- A bump that does not match the actual surface change (e.g., major bump for a purely additive change, or minor bump for a breaking change) is also a **Critical** finding under the same label.
+
+### Tests
+
+When adding a new optional capability gated on `minContractVersion`, the corresponding tests should demonstrate `isContractVersionSatisfied` returning `false` for the previous version and `true` for the new one. See the existing tests in `packages/shared/src/test/contractVersion.test.ts` for the pattern — a brief reference is sufficient, no need to duplicate the full example here.

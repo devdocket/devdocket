@@ -113,6 +113,17 @@ export interface DevDocketProvider {
    */
   refresh(token?: CancellationTokenLike, options?: ProviderRefreshOptions): Promise<void>;
   /**
+   * Optional minimum DevDocket API contract version (semver `major.minor.patch`)
+   * this provider requires. The core extension compares this against
+   * {@link DevDocketApi.contractVersion} when {@link DevDocketApi.registerProvider}
+   * is called; if the core version is lower, registration is skipped (a warning
+   * is logged and a no-op {@link Disposable} is returned) so the host extension
+   * keeps working without the provider.
+   *
+   * Leave undefined to opt out of the check.
+   */
+  readonly minContractVersion?: string;
+  /**
    * Attempt to resolve a URL into an item this provider can manage.
    *
    * Providers that support URL import should parse the URL and, if it
@@ -180,6 +191,16 @@ export interface DevDocketAction {
   /** Optional hints for richer DevDocket surfaces beyond the Run Action picker. */
   readonly presentation?: DevDocketActionPresentation;
   /**
+   * Optional minimum DevDocket API contract version (semver `major.minor.patch`)
+   * this action requires. The core extension compares this against
+   * {@link DevDocketApi.contractVersion} when {@link DevDocketApi.registerAction}
+   * is called; if the core version is lower, registration is skipped (a warning
+   * is logged and a no-op {@link Disposable} is returned).
+   *
+   * Leave undefined to opt out of the check.
+   */
+  readonly minContractVersion?: string;
+  /**
    * Determine whether this action is applicable to the given work item.
    *
    * @param item - A read-only view of the work item to test.
@@ -201,6 +222,15 @@ export interface DevDocketAction {
  * `vscode.extensions.getExtension('devdocket.devdocket')`, then activating it
  * with `await extension.activate()` (or reading `extension.exports` after activation).
  *
+ * > **Implementation note**: this interface is *implemented* only by the
+ * > DevDocket core extension. Provider/action extensions and other
+ * > third-party consumers should hold and call a `DevDocketApi` reference
+ * > but must not implement the interface themselves. To keep additions
+ * > structurally compatible with consumers that nevertheless do
+ * > implement the interface (e.g. strict mocks or test wrappers), new
+ * > members in `minor` releases of `@devdocket/shared` should be declared
+ * > optional even when the core always populates them.
+ *
  * @example
  * ```ts
  * const ext = vscode.extensions.getExtension<DevDocketApi>('devdocket.devdocket');
@@ -213,6 +243,30 @@ export interface DevDocketAction {
  * ```
  */
 export interface DevDocketApi {
+  /**
+   * Semver string identifying the DevDocket extension API contract version
+   * implemented by the core extension at runtime.
+   *
+   * Providers and actions may declare a {@link DevDocketProvider.minContractVersion}
+   * (or {@link DevDocketAction.minContractVersion}); when the core's
+   * `contractVersion` is lower, the corresponding `register*` call logs a
+   * warning and returns a no-op {@link Disposable} instead of throwing,
+   * letting the host extension degrade gracefully.
+   *
+   * Bumped according to semver: minor for additive changes, major for
+   * breaking changes. See `docs/extension-api.md` for the bump policy.
+   *
+   * Optional only at the type level so that adding this member is a
+   * non-breaking change for TypeScript consumers that structurally
+   * implement {@link DevDocketApi} (e.g. test mocks). The DevDocket
+   * core extension always sets it at runtime; an `undefined` value
+   * therefore indicates an older core that predates this field.
+   * Consumers calling the contract-version helpers in
+   * `@devdocket/shared` (e.g. {@link isContractVersionSatisfied})
+   * must guard against `undefined` themselves before passing the
+   * value through — the helpers accept `string`, not `string | undefined`.
+   */
+  readonly contractVersion?: string;
   /**
    * Register a work-item provider.
    *
@@ -266,7 +320,8 @@ export interface DevDocketApi {
    *
    * @param itemId - The work item ID to log against.
    * @param type - The activity type discriminator.
-   * @param detail - Optional human-readable detail string.
+   * @param detail - Optional human-readable detail string. DevDocket caps this
+   *   value at 8 KiB (UTF-8) and truncates larger entries with `…[truncated]`.
    */
   addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
   /**

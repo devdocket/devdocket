@@ -278,6 +278,35 @@ async function batchTransition(
   }
 }
 
+async function batchResume(
+  workGraph: WorkGraph,
+  ids: string[],
+  successMessage: (count: number) => string,
+): Promise<void> {
+  if (ids.length === 1) {
+    await workGraph.resumeItem(ids[0]);
+    return;
+  }
+  const failedIds: string[] = [];
+  for (const id of ids) {
+    try {
+      await workGraph.resumeItem(id);
+    } catch (err: unknown) {
+      failedIds.push(id);
+      logger.error(`Failed to resume item ${id}`, err);
+    }
+  }
+  const succeeded = ids.length - failedIds.length;
+  if (succeeded > 0) {
+    void vscode.window.showInformationMessage(successMessage(succeeded));
+  }
+  if (failedIds.length > 0) {
+    void vscode.window.showErrorMessage(
+      `DevDocket: Failed to resume ${failedIds.length} item(s); see Output for details`,
+    );
+  }
+}
+
 /** Shared logic for batch-accepting discovered items (Inbox or Sources). */
 interface AcceptableItem {
   providerId: string;
@@ -502,7 +531,7 @@ async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }, sel
 async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
-  await batchTransition(workGraph, ids, WorkItemState.InProgress,
+  await batchResume(workGraph, ids,
     (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`);
 }
 
@@ -959,6 +988,7 @@ export function registerCommands(
       )),
     vscode.commands.registerCommand('devdocket.browseProviderExtensions',
       wrapCommand('Failed to open Extensions view', () => browseProviderExtensions())),
+    vscode.commands.registerCommand('devdocket.providerDiscoveredFirstItem', () => undefined),
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
