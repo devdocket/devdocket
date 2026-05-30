@@ -452,9 +452,10 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '#42: Fix bug', notes: 'Description' }),
+        expect.objectContaining({ title: '#42: Fix bug', description: 'Description' }),
         expect.any(Object),
       );
+      expect(workGraph.createItem.mock.calls[0]?.[0]).not.toHaveProperty('notes');
       expect(providerRegistry.resolveUrl).toHaveBeenCalledWith(
         'https://github.com/owner/repo/pull/42',
         expect.any(AbortSignal),
@@ -474,7 +475,7 @@ describe('registerCommands', () => {
       );
     });
 
-    it('seeds notes from description and falls back to an empty string', async () => {
+    it('leaves notes empty (regression: PR/issue description must not prefill notes)', async () => {
       providerRegistry.resolveUrl.mockResolvedValueOnce({
         providerId: 'github',
         item: {
@@ -489,10 +490,9 @@ describe('registerCommands', () => {
 
       await invoke('devdocket.createItemFromUrl');
 
-      expect(workGraph.createItem).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '#43: Empty body', notes: '' }),
-        expect.any(Object),
-      );
+      const input = workGraph.createItem.mock.calls[0]?.[0];
+      expect(input).toEqual(expect.objectContaining({ title: '#43: Empty body' }));
+      expect(input).not.toHaveProperty('notes');
     });
 
     it('falls back to the entered URL when the provider item omits url', async () => {
@@ -511,9 +511,10 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
-        expect.objectContaining({ title: '#44: Missing link', notes: 'Body' }),
+        expect.objectContaining({ title: '#44: Missing link', description: 'Body' }),
         expect.objectContaining({ url: 'https://github.com/owner/repo/issues/44' }),
       );
+      expect(workGraph.createItem.mock.calls[0]?.[0]).not.toHaveProperty('notes');
     });
 
     it('does nothing when user cancels the input box', async () => {

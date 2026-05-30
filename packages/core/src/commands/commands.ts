@@ -489,7 +489,7 @@ async function handleCreateItemFromUrl(
   const group = item.group?.trim() || undefined;
   const provenanceUrl = item.url?.trim() || url.trim();
   const createdItem = await workGraph.createItem(
-    { title: item.title, notes: item.description ?? '' },
+    { title: item.title, description: item.description },
     { providerId, externalId: item.externalId, url: provenanceUrl, ...(group ? { group } : {}) },
   );
 
