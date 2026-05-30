@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import type { PRIdentifier } from '@devdocket/shared';
 import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
@@ -17,6 +16,7 @@ import { buildTierColorCss } from '../webview/shared/colors';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { toItemAuthorData } from './itemAuthorData';
+import { getPRExternalIds, isPRProviderItem, isPRWorkItem } from './prHelpers';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
@@ -1665,34 +1665,6 @@ export function computeCIBadge(runs: readonly WatchedRun[]): BadgeData | undefin
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   return isFailedConclusion(runWatch.status.conclusion);
-}
-
-const PR_EMITTING_PROVIDER_IDS = new Set([
-  'github-my-prs',
-  'github-pr-reviews',
-  'github-mentions',
-  'ado-my-prs',
-  'ado-pr-reviews',
-]);
-
-function getPRExternalIds(identifier: PRIdentifier): string[] {
-  // GitHub PR providers emit externalIds as `${owner}/${repo}#${number}`;
-  // ADO PR providers emit `${org}/${project}/${repo}/${prId}`. The two
-  // forms never collide (3-vs-4 segments, '#'-vs-'/' separator), so we
-  // emit both candidates and let the lookup map decide which one matches.
-  return [`${identifier.repo}#${identifier.prId}`, `${identifier.repo}/${identifier.prId}`];
-}
-
-function isPRWorkItem(item: WorkItem): item is WorkItem & { providerId: string; externalId: string } {
-  return Boolean(item.providerId && item.externalId && isPRCandidate(item.providerId, item.itemType));
-}
-
-function isPRProviderItem(providerId: string, item: ProviderItem): boolean {
-  return isPRCandidate(providerId, item.itemType);
-}
-
-function isPRCandidate(providerId: string, itemType: 'issue' | 'pr' | undefined): boolean {
-  return itemType === 'pr' || (itemType === undefined && PR_EMITTING_PROVIDER_IDS.has(providerId));
 }
 
 const WORK_ITEM_STATES = new Set<string>(Object.values(WorkItemState));
