@@ -453,7 +453,7 @@ describe('registerCommands', () => {
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         expect.objectContaining({ title: '#42: Fix bug', description: 'Description' }),
-        expect.any(Object),
+        expect.objectContaining({ providerId: 'github-pr-reviews', externalId: 'owner/repo#42', itemType: 'pr' }),
       );
       expect(workGraph.createItem.mock.calls[0]?.[0]).not.toHaveProperty('notes');
       expect(providerRegistry.resolveUrl).toHaveBeenCalledWith(

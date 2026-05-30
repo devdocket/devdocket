@@ -490,7 +490,7 @@ async function handleCreateItemFromUrl(
   const provenanceUrl = item.url?.trim() || url.trim();
   const createdItem = await workGraph.createItem(
     { title: item.title, description: item.description },
-    { providerId, externalId: item.externalId, url: provenanceUrl, ...(group ? { group } : {}) },
+    { providerId, externalId: item.externalId, itemType: item.itemType, url: provenanceUrl, ...(group ? { group } : {}) },
   );
 
   providerRegistry.registerSyntheticProviderItem(providerId, item);
