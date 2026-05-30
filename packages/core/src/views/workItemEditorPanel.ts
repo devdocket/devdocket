@@ -25,6 +25,11 @@ interface AutosaveData {
   url?: string;
 }
 
+interface AutosaveRequest {
+  requestId?: string;
+  data: AutosaveData;
+}
+
 interface EditorCIWatchContext {
   watch: WatchedPR;
   watchKey: string;
@@ -89,7 +94,7 @@ export class WorkItemEditorPanel {
   private disposed = false;
   private htmlInitialized = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
-  private pendingData: AutosaveData | undefined;
+  private pendingAutosave: AutosaveRequest | undefined;
   private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
   private readonly workGraphSub: vscode.Disposable;
@@ -327,18 +332,21 @@ export class WorkItemEditorPanel {
         return;
       }
       if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
-        this.pendingData = msg.data as AutosaveData;
+        this.pendingAutosave = {
+          requestId: typeof msg.requestId === 'string' ? msg.requestId : undefined,
+          data: msg.data as AutosaveData,
+        };
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
         }
         this.debounceTimer = setTimeout(() => {
           this.debounceTimer = undefined;
-          const data = this.pendingData;
-          this.pendingData = undefined;
-          if (!data) {
+          const request = this.pendingAutosave;
+          this.pendingAutosave = undefined;
+          if (!request) {
             return;
           }
-          this.enqueueSave(data);
+          this.enqueueSave(request);
         }, 300);
       }
     });
@@ -494,21 +502,23 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private async saveData(data: AutosaveData): Promise<void> {
+  private async saveData(data: AutosaveData): Promise<{ applied: boolean; rejected: string[] }> {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       throw new Error('Work item no longer exists. Your changes could not be saved.');
     }
     const managed = this.isProviderManaged(item);
     const patch: Partial<WorkItemInput> = {};
+    const rejected: string[] = [];
 
     if (!managed) {
       if ('title' in data) {
         const title = data.title?.trim() ?? '';
         if (!title) {
-          return;
+          rejected.push('Title cannot be empty');
+        } else {
+          patch.title = title;
         }
-        patch.title = title;
       }
 
       if ('url' in data) {
@@ -519,6 +529,8 @@ export class WorkItemEditorPanel {
           const safe = isSafeUrl(rawUrl);
           if (safe) {
             patch.url = safe.href;
+          } else {
+            rejected.push('URL is not a valid http(s) URL');
           }
         }
       }
@@ -528,16 +540,18 @@ export class WorkItemEditorPanel {
       patch.notes = data.notes?.trim() || undefined;
     }
 
-    if (Object.keys(patch).length === 0) {
-      return;
+    const applied = Object.keys(patch).length > 0;
+    if (!applied) {
+      return { applied, rejected };
     }
 
     if (this.disposed) {
       await this.workGraph.updateItemDuringShutdown(this.itemId, patch);
-      return;
+      return { applied, rejected };
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
+    return { applied, rejected };
   }
 
   private update(options: {
@@ -824,27 +838,54 @@ export class WorkItemEditorPanel {
   }
 
   private flushPendingData(): void {
-    const data = this.pendingData;
-    this.pendingData = undefined;
-    if (data) {
-      this.enqueueSave(data);
+    const request = this.pendingAutosave;
+    this.pendingAutosave = undefined;
+    if (request) {
+      this.enqueueSave(request);
     }
   }
 
-  private enqueueSave(data: AutosaveData): void {
+  private enqueueSave(request: AutosaveRequest): void {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await this.saveData(data);
+        const result = await this.saveData(request.data);
+        if (result.rejected.length > 0) {
+          this.postAutosaveError(request.requestId, result.rejected.join('; '));
+        } else {
+          this.postAutosaveAck(request.requestId);
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        this.postAutosaveError(request.requestId, message);
         vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }
     });
   }
 
+  private postAutosaveAck(requestId: string | undefined): void {
+    if (!requestId || this.disposed) {
+      return;
+    }
+
+    void this.panel.webview.postMessage({ type: 'autosaveAck', requestId, savedAt: Date.now() });
+  }
+
+  private postAutosaveError(requestId: string | undefined, message: string): void {
+    if (!requestId || this.disposed) {
+      return;
+    }
+
+    void this.panel.webview.postMessage({ type: 'autosaveError', requestId, message });
+  }
+
   private async handleTransitionState(itemId: string, targetState: string): Promise<void> {
     try {
-      await this.workGraph.transitionState(itemId, targetState as WorkItemState);
+      const item = this.workGraph.getItem(itemId);
+      if (item?.state === WorkItemState.Paused && targetState === WorkItemState.InProgress) {
+        await this.workGraph.resumeItem(itemId);
+      } else {
+        await this.workGraph.transitionState(itemId, targetState as WorkItemState);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(`Failed to transition work item: ${message}`);

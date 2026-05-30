@@ -97,6 +97,18 @@ function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record
       ));
       changeEmitter.fire();
     }),
+    resumeItem: vi.fn(async (id: string) => {
+      const current = items.get(id);
+      if (!current) {
+        throw new Error(`Missing item ${id}`);
+      }
+      items.set(id, appendActivityLogEntry(
+        { ...current, state: WorkItemState.InProgress },
+        'state-changed',
+        `${current.state} → ${WorkItemState.InProgress}`,
+      ));
+      changeEmitter.fire();
+    }),
     addActivity: vi.fn(async (id: string, type: ActivityType, detail?: string) => {
       const current = items.get(id);
       if (!current) {
@@ -779,14 +791,15 @@ describe('WorkItemEditorPanel', () => {
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.showWatchesQuickPick');
   });
 
-  it('debounces autosave and saves manual fields', async () => {
-    vi.useFakeTimers();
+  it('debounces autosave, saves manual fields, and acknowledges the request', async () => {
+    vi.useFakeTimers({ now: 1234 });
     const item = makeItem({ title: 'Original' });
     const workGraph = createMockWorkGraph(item);
     const { mock } = openPanel(item, workGraph);
 
     mock.simulateMessage({
       type: 'autosave',
+      requestId: 'save-1',
       data: {
         title: ' Updated title ',
         notes: ' Some notes ',
@@ -800,6 +813,11 @@ describe('WorkItemEditorPanel', () => {
       title: 'Updated title',
       notes: 'Some notes',
       url: 'https://example.com/items/1',
+    });
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveAck',
+      requestId: 'save-1',
+      savedAt: expect.any(Number),
     });
   });
 
@@ -843,6 +861,29 @@ describe('WorkItemEditorPanel', () => {
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Draft note' });
   });
 
+  it('posts autosaveError when saving fails', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    workGraph.updateItem.mockRejectedValueOnce(new Error('disk full'));
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      requestId: 'save-error',
+      data: { notes: ' Draft note ' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveError',
+      requestId: 'save-error',
+      message: 'disk full',
+    });
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith('Failed to save work item: disk full');
+  });
+
   it('only saves notes for provider-managed items', async () => {
     vi.useFakeTimers();
     const item = makeItem({ providerId: 'github', externalId: '42', title: 'Provider item' });
@@ -860,6 +901,100 @@ describe('WorkItemEditorPanel', () => {
     await vi.advanceTimersByTimeAsync(300);
 
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Draft note' });
+  });
+
+  it('posts autosaveError and does not call updateItem when the title is empty', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      requestId: 'save-empty-title',
+      data: { title: '   ' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveError',
+      requestId: 'save-empty-title',
+      message: 'Title cannot be empty',
+    });
+  });
+
+  it('posts autosaveError when the URL is unsafe', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      requestId: 'save-bad-url',
+      data: { url: 'javascript:alert(1)' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveError',
+      requestId: 'save-bad-url',
+      message: 'URL is not a valid http(s) URL',
+    });
+  });
+
+  it('persists valid fields but posts autosaveError when another field was rejected', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      requestId: 'save-partial',
+      data: { title: '', notes: ' New note ' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'New note' });
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveError',
+      requestId: 'save-partial',
+      message: 'Title cannot be empty',
+    });
+    expect(mock.panel.webview.postMessage).not.toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'autosaveAck', requestId: 'save-partial' }),
+    );
+  });
+
+  it('acks autosaves for provider-managed items even when the payload has an empty title', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ providerId: 'github', externalId: '42', title: 'Provider item' });
+    const workGraph = createMockWorkGraph(item);
+    const providerRegistry = createMockProviderRegistry({
+      github: [{ externalId: '42', title: 'Provider item', state: 'open' }],
+    });
+    const { mock } = openPanel(item, workGraph, providerRegistry);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      requestId: 'save-managed',
+      data: { title: '', notes: ' Note ' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Note' });
+    expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+      type: 'autosaveAck',
+      requestId: 'save-managed',
+      savedAt: expect.any(Number),
+    });
   });
 
   it('opens a URL exactly once when the host receives a single openUrl message', async () => {
@@ -895,6 +1030,17 @@ describe('WorkItemEditorPanel', () => {
     expect(workGraph.transitionState).toHaveBeenCalledWith(item.id, WorkItemState.Done);
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(1, 'devdocket.runAction', { id: item.id });
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(2, 'devdocket.editItem', { id: item.id });
+  });
+
+  it('routes a Paused → InProgress transitionState message through workGraph.resumeItem', async () => {
+    const item = makeItem({ state: WorkItemState.Paused });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    await mock.simulateMessage({ type: 'transitionState', itemId: item.id, targetState: WorkItemState.InProgress });
+
+    expect(workGraph.resumeItem).toHaveBeenCalledWith(item.id);
+    expect(workGraph.transitionState).not.toHaveBeenCalledWith(item.id, WorkItemState.InProgress);
   });
 
   it('opens related Sources items from the editor using explicit provenance fields', async () => {

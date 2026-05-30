@@ -16,9 +16,11 @@ interface EditorHeaderProps {
   onOpenWorktree?: () => void;
   /** Action buttons rendered on the right side of the title row (state transitions, run action, etc). */
   actionButtons?: ComponentChildren;
+  /** Optional small status affordance (e.g. autosave dot) rendered next to the state pill. */
+  statusIndicator?: ComponentChildren;
 }
 
-export function EditorHeader({ item, title, url = item.url ?? '', onCopyText, onTitleInput, onUrlInput, onOpenWorktree, actionButtons }: EditorHeaderProps) {
+export function EditorHeader({ item, title, url = item.url ?? '', onCopyText, onTitleInput, onUrlInput, onOpenWorktree, actionButtons, statusIndicator }: EditorHeaderProps) {
   // Always render an <h1> so the page has a primary heading. Editable manual
   // items keep that heading as screen-reader text and place the input beside it
   // in the header, avoiding interactive controls nested inside the heading.
@@ -100,6 +102,7 @@ export function EditorHeader({ item, title, url = item.url ?? '', onCopyText, on
         </div>
         <div class="editor-title-actions">
           <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
+          {statusIndicator}
         </div>
       </div>
       <div class="editor-pills-actions">

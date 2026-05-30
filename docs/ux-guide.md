@@ -33,8 +33,8 @@ Each tier exposes a small floating action overlay on hover. Available actions pe
 |------|---------------|
 | Incoming | **✓ Accept**, **▶ Start** (accept + go to In Progress), **✗ Dismiss** |
 | In Progress | **✓ Complete**, **⏸ Pause** |
-| Ready to Start | **▶ Start** |
-| Paused | **▶ Resume** |
+| Ready to Start | **▶ Start**, **⏸ Pause** |
+| Paused | **▶ Resume** (returns to In Progress or Ready to Start — wherever it was paused from) |
 | Done | **↩ Requeue** |
 
 The drag handle (left side of the card) appears on hover for tiers that support reordering: Ready to Start and In Progress. Drag a card up or down to change its priority within that tier.
@@ -70,7 +70,7 @@ Clicking a non-incoming work item opens the editor in a tab. It contains:
 - A **Notes** section (auto-saving textarea) for your own notes — hidden when previewing an unaccepted incoming item.
 - A collapsible **Activity Log** that records every state transition, action invocation, version change, etc.
 
-The editor auto-saves as you type — there is no save button.
+The editor auto-saves your edits as you type. A small status dot next to the state pill signals activity: amber while there are unsaved or in-flight changes, green briefly after a successful save (then fades away), and red when a save fails. Provider items only autosave Notes; manual items autosave Title, URL, and Notes together. When a save fails, an inline error banner with a Retry button appears under the header.
 
 ### Incoming preview panel
 
@@ -124,10 +124,12 @@ flowchart TD
     Manual["Manual ➕ Create Item"] --> Ready
     Ready["Ready to Start<br/>[New]"]
     Ready -- Start --> InProgress
+    Ready -- Pause --> Paused
     InProgress["In Progress<br/>[InProgress]"]
     InProgress -- Pause --> Paused
     Paused["Paused<br/>[Paused]"]
-    Paused -- Resume --> InProgress
+    Paused -- "Resume (from Ready)" --> Ready
+    Paused -- "Resume (from In Progress)" --> InProgress
     InProgress -- Complete --> Done
     Done["Done<br/>[Done] · [Archived]"]
     Done -- Requeue --> Ready

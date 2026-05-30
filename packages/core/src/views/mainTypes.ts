@@ -11,7 +11,9 @@ export type ExtensionMessage =
   | { type: 'updateWatches'; watches: WatchData[] }
   | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
   | { type: 'updateEditorItem'; item: EditorItemData }
-  | { type: 'updateTitle'; title: string };
+  | { type: 'updateTitle'; title: string }
+  | { type: 'autosaveAck'; requestId: string; savedAt: number }
+  | { type: 'autosaveError'; requestId: string; message: string };
 
 export type WebviewMessage =
   | { type: 'webviewReady' }
@@ -23,6 +25,8 @@ export type WebviewMessage =
   | { type: 'acceptAll'; items?: Array<{ providerId: string; externalId: string }> }
   | { type: 'dismissItem'; providerId: string; externalId: string }
   | { type: 'transitionState'; itemId: string; targetState: string }
+  | { type: 'bulkTransition'; itemIds: string[]; targetState: string }
+  | { type: 'bulkInboxAction'; action: 'accept' | 'dismiss'; items: Array<{ providerId: string; externalId: string }> }
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
   | { type: 'openWalkthrough' }
@@ -35,7 +39,7 @@ export type WebviewMessage =
   | { type: 'dismissCompletedWatches' }
   | { type: 'dismissWatch'; watchId: string }
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
-  | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } }
+  | { type: 'autosave'; requestId: string; data: { title?: string; notes?: string; url?: string } }
   | { type: 'copyToClipboard'; text: string }
   | { type: 'openWorktree'; itemId: string }
   | { type: 'addWatchUrl' }

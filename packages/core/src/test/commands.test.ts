@@ -77,12 +77,13 @@ function selectErrorAction(label: string): void {
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'acceptManyFromInbox' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
+  'transitionState' | 'resumeItem' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'acceptManyFromInbox' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
   const graph = {
     transitionState: vi.fn(),
+    resumeItem: vi.fn(),
     getItem: vi.fn(),
     createItem: vi.fn(async () => createWorkItem()),
     findItemByProvenance: vi.fn(),
@@ -696,7 +697,6 @@ describe('registerCommands', () => {
       ['devdocket.archiveItem', WorkItemState.Archived],
       ['devdocket.completeItem', WorkItemState.Done],
       ['devdocket.pauseItem', WorkItemState.Paused],
-      ['devdocket.resumeItem', WorkItemState.InProgress],
       ['devdocket.moveToQueue', WorkItemState.New],
     ];
 
@@ -706,6 +706,12 @@ describe('registerCommands', () => {
         expect(workGraph.transitionState).toHaveBeenCalledWith('wc-42', expectedState);
       });
     }
+
+    it('devdocket.resumeItem calls resumeItem (delegates resume target to WorkGraph)', () => {
+      invoke('devdocket.resumeItem', { id: 'wc-42' });
+      expect(workGraph.resumeItem).toHaveBeenCalledWith('wc-42');
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
 
     it('shows error when transitionState throws', async () => {
       workGraph.transitionState.mockRejectedValue(new Error('db crash'));
@@ -2516,9 +2522,9 @@ describe('registerCommands', () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
       await invoke('devdocket.resumeItem', items[0], items);
 
-      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
-      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
-      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+      expect(workGraph.resumeItem).toHaveBeenCalledTimes(2);
+      expect(workGraph.resumeItem).toHaveBeenCalledWith('wc-1');
+      expect(workGraph.resumeItem).toHaveBeenCalledWith('wc-2');
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Resumed 2 items');
     });
 
@@ -2526,7 +2532,7 @@ describe('registerCommands', () => {
       const item = { id: 'wc-1' };
       await invoke('devdocket.resumeItem', item, [item]);
 
-      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.resumeItem).toHaveBeenCalledWith('wc-1');
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
     });
   });

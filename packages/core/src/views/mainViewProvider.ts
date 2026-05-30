@@ -653,6 +653,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'transitionState':
         await this.handleTransitionState(message.itemId, message.targetState);
         break;
+      case 'bulkTransition':
+        await this.handleBulkTransition(message.itemIds, message.targetState);
+        break;
+      case 'bulkInboxAction':
+        await this.handleBulkInboxAction(message.action, message.items);
+        break;
       case 'reorderItems':
         await this.handleReorder(message.itemIds);
         break;
@@ -806,6 +812,128 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
+  /**
+   * Apply the same state transition to many items in sequence. The webview
+   * only ever sends ids that share a tier (and therefore a current state), so
+   * the per-item validation in {@link WorkGraph.transitionState} is just a
+   * defensive check — invalid transitions are logged and skipped rather than
+   * aborting the whole batch.
+   */
+  private async handleBulkTransition(itemIds: readonly string[], targetState: string): Promise<void> {
+    // Validate the target state once up front. Without this, an invalid
+    // targetState would fail per-item inside WorkGraph.transitionState, emitting
+    // N error logs and an aggregated toast for what is really a single
+    // input-validation failure from the webview.
+    if (!isWorkItemState(targetState)) {
+      logger.error(`DevDocket: bulk transition rejected — unsupported targetState ${targetState}`);
+      void vscode.window.showErrorMessage(`Unsupported target state: ${targetState}.`);
+      return;
+    }
+    const targetWorkState: WorkItemState = targetState;
+    let failures = 0;
+    for (const itemId of itemIds) {
+      const item = this.workGraph.getItem(itemId);
+      if (!item) {
+        logger.warn(`DevDocket: bulk transition skipped — item ${itemId} not found`);
+        failures += 1;
+        continue;
+      }
+      try {
+        if (item.state === WorkItemState.Paused && targetWorkState === WorkItemState.InProgress) {
+          // Mirror handleTransitionState: a Paused→InProgress request resumes
+          // the item, which routes through WorkGraph.getResumeTargetState and
+          // may land in Ready *or* InProgress depending on where each item
+          // was paused from. A single bulk gesture can therefore split the
+          // selection across tiers.
+          await this.workGraph.resumeItem(itemId);
+        } else {
+          await this.workGraph.transitionState(itemId, targetWorkState);
+        }
+      } catch (err) {
+        failures += 1;
+        logger.error(`DevDocket: bulk transition of ${itemId} to ${targetState} failed`, err);
+      }
+    }
+    if (failures > 0) {
+      void vscode.window.showErrorMessage(
+        `Failed to transition ${failures} item${failures === 1 ? '' : 's'} to ${formatStateLabel(targetState)}.`,
+      );
+    }
+  }
+
+  /**
+   * Bulk-Accept or bulk-Dismiss a selected subset of Incoming items. Mirrors
+   * the per-item Accept / Dismiss controls but routes through the batched
+   * primitives: `devdocket.acceptAllFromInbox` for Accept (same path used by
+   * the Accept All button — handles canonical peer propagation, WorkItem
+   * creation, and read-state marking) and {@link InboxStateStore.setStates}
+   * for Dismiss (one atomic write rather than N).
+   *
+   * Items whose provider/externalId is no longer present in the live provider
+   * registry (e.g. provider refreshed mid-action) are skipped silently for
+   * Accept (the providerItem lookup returns undefined and that payload is
+   * dropped) and skipped via the inboxState batch for Dismiss (setStates only
+   * writes records that actually changed).
+   *
+   * Unlike Accept All, no modal confirmation is shown — the user has already
+   * expressed intent by selecting a specific subset and clicking the bulk
+   * action button, matching the no-confirm UX of bulkTransition.
+   */
+  private async handleBulkInboxAction(
+    action: 'accept' | 'dismiss',
+    items: ReadonlyArray<{ providerId: string; externalId: string }>,
+  ): Promise<void> {
+    if (items.length === 0) {
+      return;
+    }
+
+    if (action === 'accept') {
+      // Build a per-provider externalId → ProviderItem index once so the
+      // lookup for each selected pair is O(1) instead of O(items in provider).
+      // Bulk Accept across hundreds of incoming items would otherwise be
+      // quadratic in the size of each provider's registry.
+      const providerIndexes = new Map<string, Map<string, ProviderItem>>();
+      const getProviderIndex = (providerId: string): Map<string, ProviderItem> => {
+        let index = providerIndexes.get(providerId);
+        if (!index) {
+          index = new Map();
+          for (const candidate of this.providerRegistry.getProviderItems(providerId)) {
+            index.set(candidate.externalId, candidate);
+          }
+          providerIndexes.set(providerId, index);
+        }
+        return index;
+      };
+      const payloads = items
+        .map(({ providerId, externalId }) => {
+          const providerItem = getProviderIndex(providerId).get(externalId);
+          return providerItem ? this.buildAcceptPayload(providerId, providerItem) : undefined;
+        })
+        .filter((item): item is ReturnType<MainViewProvider['buildAcceptPayload']> => item !== undefined);
+      if (payloads.length === 0) {
+        return;
+      }
+      try {
+        const acceptedItems = await vscode.commands.executeCommand<Array<{ providerId: string; externalId: string }>>('devdocket.acceptAllFromInbox', payloads);
+        await this.readStateStore.addMany((acceptedItems ?? []).map(item => getProviderItemKey(item.providerId, item.externalId)));
+      } catch (err) {
+        logger.error('DevDocket: bulk accept failed', err);
+        void vscode.window.showErrorMessage(`Failed to accept items: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
+    // Dismiss: one atomic setStates write for the whole batch.
+    try {
+      await this.stateStore.setStates(
+        items.map(({ providerId, externalId }) => ({ providerId, externalId, state: 'dismissed' as const })),
+      );
+    } catch (err) {
+      logger.error('DevDocket: bulk dismiss failed', err);
+      void vscode.window.showErrorMessage(`Failed to dismiss items: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   private async handleTransitionState(itemId: string, targetState: string): Promise<void> {
     try {
       const item = this.workGraph.getItem(itemId);
@@ -813,7 +941,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         logger.warn(`DevDocket: item ${itemId} not found for transition`);
         return;
       }
-      await this.workGraph.transitionState(itemId, targetState as WorkItemState);
+      if (item.state === WorkItemState.Paused && targetState === WorkItemState.InProgress) {
+        await this.workGraph.resumeItem(itemId);
+      } else {
+        await this.workGraph.transitionState(itemId, targetState as WorkItemState);
+      }
     } catch (err) {
       logger.error('DevDocket: transition failed', err);
       void vscode.window.showErrorMessage(`Failed to transition item: ${err instanceof Error ? err.message : String(err)}`);
@@ -1376,6 +1508,58 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 0;
     }
+    .item-card.multi-selected {
+      background: var(--vscode-list-activeSelectionBackground, rgba(64, 128, 255, 0.2));
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 0;
+    }
+    .item-card.multi-selected:hover,
+    .item-card.multi-selected:focus-within {
+      background: var(--vscode-list-activeSelectionBackground, rgba(64, 128, 255, 0.25));
+    }
+    .bulk-action-bar {
+      position: sticky;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 8px 12px;
+      margin: 8px -8px 0;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+      border-top: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
+      box-shadow: 0 -2px 6px rgba(0, 0, 0, 0.2);
+      z-index: 5;
+      flex-wrap: wrap;
+    }
+    .bulk-action-count {
+      font-weight: 600;
+    }
+    .bulk-action-buttons {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .bulk-action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      background: var(--vscode-button-secondaryBackground, transparent);
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      border: 1px solid var(--vscode-button-border, var(--vscode-widget-border, transparent));
+      border-radius: 4px;
+      cursor: pointer;
+      font: inherit;
+    }
+    .bulk-action-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-list-hoverBackground));
+    }
+    .bulk-action-btn.bulk-action-clear {
+      padding: 4px 8px;
+    }
     .item-card:hover,
     .item-card:focus-within {
       background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
@@ -1552,6 +1736,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   return isFailedConclusion(runWatch.status.conclusion);
+}
+
+const WORK_ITEM_STATES = new Set<string>(Object.values(WorkItemState));
+
+function isWorkItemState(value: string): value is WorkItemState {
+  return WORK_ITEM_STATES.has(value);
+}
+
+/**
+ * Human-readable label for a WorkItemState enum value, matching the editor
+ * webview's {@link stateLabel} helper. Used in user-facing toasts so messages
+ * read "In Progress" rather than the raw "InProgress" identifier.
+ */
+function formatStateLabel(state: string): string {
+  return state === WorkItemState.InProgress
+    ? 'In Progress'
+    : state.replace(/([a-z])([A-Z])/g, '$1 $2');
 }
 
 function areBadgesEqual(a?: BadgeData, b?: BadgeData): boolean {

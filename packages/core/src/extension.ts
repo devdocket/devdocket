@@ -334,6 +334,18 @@ function wireEvents(
     }
   }));
 
+  let completedProviderWalkthrough = false;
+  const providerWalkthroughSub = providerRegistry.onDidDiscoverFirstProviderItem(safeHandler('Error handling first provider item discovery', () => {
+    if (completedProviderWalkthrough) {
+      return;
+    }
+    completedProviderWalkthrough = true;
+    void vscode.commands.executeCommand('devdocket.providerDiscoveredFirstItem').then(
+      undefined,
+      (err: unknown) => logger.debug('Failed to mark provider walkthrough step complete', err),
+    );
+  }));
+
   const jobFailureSub = watcherService.onDidDetectJobFailure(safeHandler('Error handling job failure', ({ run, job }) => {
     const config = vscode.workspace.getConfiguration('devDocket.watches');
     const notifyOnJobFailure = config.get<boolean>('notifyOnJobFailure', true);
@@ -462,6 +474,7 @@ function wireEvents(
   return [
     discoveredSub,
     newItemsSub,
+    providerWalkthroughSub,
     jobFailureSub,
     runCompleteSub,
     autoCompleteSub,
