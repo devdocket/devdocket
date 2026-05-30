@@ -1,13 +1,13 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import type { ProviderItem, PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
+import type { PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
-import type { WorkItem } from '../models/workItem';
 import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { isFailedConclusion, toConclusionLabel } from '../webview/shared/runConclusionLabels';
+import { getPRExternalIds, isPRProviderItem, isPRWorkItem } from './prHelpers';
 import { parseProviderItemKey } from './providerItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
@@ -590,30 +590,6 @@ interface LinkedPRTarget {
   linkedItemId?: string;
   linkedSourceProviderId?: string;
   linkedSourceExternalId?: string;
-}
-
-const PR_EMITTING_PROVIDER_IDS = new Set([
-  'github-my-prs',
-  'github-pr-reviews',
-  'github-mentions',
-  'ado-my-prs',
-  'ado-pr-reviews',
-]);
-
-function getPRExternalIds(identifier: PRIdentifier): string[] {
-  return [`${identifier.repo}#${identifier.prId}`, `${identifier.repo}/${identifier.prId}`];
-}
-
-function isPRWorkItem(item: WorkItem): item is WorkItem & { providerId: string; externalId: string } {
-  return Boolean(item.providerId && item.externalId && isPRCandidate(item.providerId, item.itemType));
-}
-
-function isPRProviderItem(providerId: string, item: ProviderItem): boolean {
-  return isPRCandidate(providerId, item.itemType);
-}
-
-function isPRCandidate(providerId: string, itemType: 'issue' | 'pr' | undefined): boolean {
-  return itemType === 'pr' || (itemType === undefined && PR_EMITTING_PROVIDER_IDS.has(providerId));
 }
 
 function toPanelRunState(state: RunState): RunWatchData['state'] {

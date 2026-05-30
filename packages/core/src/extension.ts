@@ -582,7 +582,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     pr.onDidChangeProviderItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh('discovered'))),
     pr.onDidChangeProviderHealth(safeHandler('mc:health', () => mainProvider.scheduleRefresh('health'))),
     ss.onDidChange(safeHandler('mc:stateStore', () => mainProvider.scheduleRefresh('state'))),
-    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh('watchedRuns'))),
+    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => {
+      // PR sidebar badges derive from child run status, so run updates refresh the main view too.
+      mainProvider.scheduleRefresh('watchedRuns');
+    })),
     ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh('watchedPRs'))),
     readStateStore.onDidChange(safeHandler('mc:readState', () => mainProvider.scheduleRefresh('readState'))),
     pr.onDidRefreshProvider(safeHandler('mc:prune', async (providerId) => {
