@@ -89,18 +89,28 @@ jobs:
       - name: Summary
         if: always()
         env:
+          CREATE_CONCLUSION: ${{ steps.create-issue.conclusion }}
           ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue-number }}
           CREATED: ${{ steps.create-issue.outputs.created }}
           REPO: ${{ github.repository }}
           SERVER: ${{ github.server_url }}
         run: |
-          if [ -z "${ISSUE_NUMBER}" ]; then
-            echo "⚠️ Weekly performance review did not produce an issue." >> "$GITHUB_STEP_SUMMARY"
-          else
+          url=""
+          if [ -n "${ISSUE_NUMBER}" ]; then
             url="${SERVER}/${REPO}/issues/${ISSUE_NUMBER}"
-            if [ "${CREATED}" = "true" ]; then
+          fi
+          if [ "${CREATE_CONCLUSION}" = "success" ]; then
+            if [ -z "${ISSUE_NUMBER}" ]; then
+              echo "⚠️ Weekly performance review did not produce an issue." >> "$GITHUB_STEP_SUMMARY"
+            elif [ "${CREATED}" = "true" ]; then
               echo "✅ Created weekly performance review issue [#${ISSUE_NUMBER}](${url})" >> "$GITHUB_STEP_SUMMARY"
             else
               echo "ℹ️ Open weekly performance review issue already exists: [#${ISSUE_NUMBER}](${url})" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            if [ -n "${ISSUE_NUMBER}" ]; then
+              echo "❌ Weekly performance review failed after creating issue [#${ISSUE_NUMBER}](${url}) (see job logs for details)." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "❌ Weekly performance review failed before any issue was created (see job logs for details)." >> "$GITHUB_STEP_SUMMARY"
             fi
           fi
