@@ -5,6 +5,9 @@ on:
     # Every Monday at 9:00 AM UTC
     - cron: "0 9 * * 1"
   workflow_dispatch:
+concurrency:
+  group: weekly-code-review
+  cancel-in-progress: true
 permissions:
   contents: read
   issues: read
@@ -58,7 +61,7 @@ For each candidate finding, be concrete:
 
 ## Filing findings
 
-For each novel finding, request a new GitHub issue via the `create-issue` safe output. Cap this run at 8 issues. If you find more than 8, choose the 8 highest-impact concerns and skip the rest.
+For each novel finding, request a new GitHub issue by invoking the `create_issue` tool. Cap this run at 8 issues. If you find more than 8, choose the 8 highest-impact concerns and skip the rest.
 
 For each issue you request:
 
