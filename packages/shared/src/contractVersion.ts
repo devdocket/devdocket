@@ -22,7 +22,7 @@
  * Exposed at runtime as {@link DevDocketApi.contractVersion} so provider
  * extensions can perform compatibility checks before calling optional APIs.
  */
-export const CONTRACT_VERSION = '1.0.0';
+export const CONTRACT_VERSION = '1.1.0';
 
 interface ParsedVersion {
   readonly major: number;
