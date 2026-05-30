@@ -86,7 +86,7 @@ jobs:
       - name: Summary
         if: always()
         env:
-          ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue_number }}
+          ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue-number }}
           CREATED: ${{ steps.create-issue.outputs.created }}
           REPO: ${{ github.repository }}
           SERVER: ${{ github.server_url }}
