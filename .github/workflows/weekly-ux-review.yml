@@ -1,9 +1,5 @@
 name: Weekly UX Review
 
-# Authentication: this workflow runs GitHub Copilot CLI in programmatic mode.
-# COPILOT_CLI_PAT is still required for Copilot CLI requests until #621 migrates
-# this review to an agentic workflow. Issue creation via gh uses the short-lived
-# DevDocket bot GitHub App token minted below.
 on:
   # Run every Wednesday at 10:00 AM UTC (offset from implementation review)
   schedule:
@@ -18,24 +14,13 @@ concurrency:
 permissions:
   contents: read
   issues: write
+  pull-requests: read
 
 jobs:
   weekly-ux-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install Copilot CLI
-        run: npm install -g @github/copilot
+      - uses: actions/checkout@v4
 
       - name: Create GitHub App token
         id: app-token
@@ -45,27 +30,74 @@ jobs:
           private-key: ${{ secrets.DEVDOCKET_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
-      - name: Run weekly UX review
-        env:
-          # COPILOT_CLI_PAT remains only for Copilot CLI auth until #621 removes it.
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -o pipefail
-          copilot -p "$(cat .github/prompts/weekly-ux-review.md)" \
-            --model claude-opus-4.7 \
-            --allow-tool='shell(gh issue:*)' \
-            --allow-tool=read \
-            --allow-tool=create \
-            --allow-tool=write \
-            --no-ask-user | tee weekly-ux-review.log
+      - name: Build issue body
+        id: build-body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const promptContent = fs.readFileSync('.github/prompts/weekly-ux-review.md', 'utf8');
+
+            const body = [
+              '## Weekly UX Review Request',
+              '',
+              'This issue was created automatically by the scheduled Weekly UX Review workflow.',
+              '',
+              '### Task',
+              '',
+              'Review the DevDocket extension UX for friction, confusion, and mismatch with VS Code interaction conventions. Follow the methodology embedded below and open a separate GitHub issue for each substantive UX finding.',
+              '',
+              '### Review Methodology',
+              '',
+              promptContent,
+              '',
+              '---',
+              '',
+              '_Scheduled weekly UX review triggered at ' + new Date().toISOString() + '_'
+            ].join('\n');
+
+            core.setOutput('body', body);
+
+      - name: Create issue and assign Copilot agent
+        id: create-issue
+        uses: ./.github/actions/create-copilot-issue
+        with:
+          issue-title: 'Weekly UX review'
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'copilot,automated,weekly-ux-review'
+          dedup-labels: 'automated,weekly-ux-review'
+          custom-instructions: |
+            Follow the weekly UX review methodology embedded in the issue body.
+
+            Focus on substantive UX concerns:
+            - Friction in core user flows
+            - Inconsistency with VS Code interaction conventions
+            - Confusing or misleading UI states, labels, or affordances
+            - Missing feedback for long-running or destructive actions
+            - Accessibility gaps that block real usage
+
+            Skip cosmetic nits, color preferences, and personal style.
+
+            Open a separate GitHub issue for each substantive finding. If no substantive
+            UX concerns are found, close this issue with a brief explanation of what was reviewed.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
 
       - name: Summary
         if: always()
+        env:
+          ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue_number }}
+          CREATED: ${{ steps.create-issue.outputs.created }}
+          REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}
         run: |
-          count="$(grep -Eo 'WEEKLY_UX_REVIEW_ISSUES_CREATED=[0-8]' weekly-ux-review.log 2>/dev/null | tail -n 1 | cut -d= -f2 || true)"
-          if [ -z "$count" ]; then
-            echo "⚠️ Weekly UX review completed, but no issue-count marker was found." >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${ISSUE_NUMBER}" ]; then
+            echo "⚠️ Weekly UX review did not produce an issue." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Weekly UX review issues created: $count" >> "$GITHUB_STEP_SUMMARY"
+            url="${SERVER}/${REPO}/issues/${ISSUE_NUMBER}"
+            if [ "${CREATED}" = "true" ]; then
+              echo "✅ Created weekly UX review issue [#${ISSUE_NUMBER}](${url})" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "ℹ️ Open weekly UX review issue already exists: [#${ISSUE_NUMBER}](${url})" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi

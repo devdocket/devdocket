@@ -1,9 +1,5 @@
 name: Weekly Performance Review
 
-# Authentication: this workflow runs GitHub Copilot CLI in programmatic mode.
-# COPILOT_CLI_PAT is still required for Copilot CLI requests until #621 migrates
-# this review to an agentic workflow. Issue creation via gh uses the short-lived
-# DevDocket bot GitHub App token minted below.
 on:
   # Run every Thursday at 10:00 AM UTC (offset from implementation and UX reviews)
   schedule:
@@ -18,24 +14,13 @@ concurrency:
 permissions:
   contents: read
   issues: write
+  pull-requests: read
 
 jobs:
   weekly-performance-review:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Node.js environment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: 'npm'
-
-      - name: Install Copilot CLI
-        run: npm install -g @github/copilot
+      - uses: actions/checkout@v4
 
       - name: Create GitHub App token
         id: app-token
@@ -45,27 +30,77 @@ jobs:
           private-key: ${{ secrets.DEVDOCKET_BOT_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
 
-      - name: Run weekly performance review
-        env:
-          # COPILOT_CLI_PAT remains only for Copilot CLI auth until #621 removes it.
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -o pipefail
-          copilot -p "$(cat .github/prompts/weekly-performance-review.md)" \
-            --model claude-opus-4.7 \
-            --allow-tool='shell(gh issue:*)' \
-            --allow-tool=read \
-            --allow-tool=create \
-            --allow-tool=write \
-            --no-ask-user | tee weekly-performance-review.log
+      - name: Build issue body
+        id: build-body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const promptContent = fs.readFileSync('.github/prompts/weekly-performance-review.md', 'utf8');
+
+            const body = [
+              '## Weekly Performance Review Request',
+              '',
+              'This issue was created automatically by the scheduled Weekly Performance Review workflow.',
+              '',
+              '### Task',
+              '',
+              'Review the DevDocket extension for performance risks — extension host hot paths, activation cost, memory growth, expensive synchronous work, unbounded async fan-out, and webview render cost. Follow the methodology embedded below and open a separate GitHub issue for each substantive finding.',
+              '',
+              '### Review Methodology',
+              '',
+              promptContent,
+              '',
+              '---',
+              '',
+              '_Scheduled weekly performance review triggered at ' + new Date().toISOString() + '_'
+            ].join('\n');
+
+            core.setOutput('body', body);
+
+      - name: Create issue and assign Copilot agent
+        id: create-issue
+        uses: ./.github/actions/create-copilot-issue
+        with:
+          issue-title: 'Weekly performance review'
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'copilot,automated,weekly-performance-review'
+          dedup-labels: 'automated,weekly-performance-review'
+          custom-instructions: |
+            Follow the weekly performance review methodology embedded in the issue body.
+
+            Focus on substantive performance concerns:
+            - Activation-time cost in the extension host
+            - Hot paths invoked on user interaction or frequent events
+            - Memory growth, leaks, or unbounded caches
+            - Synchronous work that blocks the extension host
+            - Unbounded async fan-out (parallel network/disk operations without limits)
+            - Webview render cost or re-render storms
+            - Storage read/write patterns that scale poorly with item count
+
+            Skip micro-optimizations, theoretical concerns without evidence, and anything in cold paths.
+
+            Open a separate GitHub issue for each substantive finding. If no substantive
+            performance concerns are found, close this issue with a brief explanation of
+            what was reviewed.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ steps.app-token.outputs.token }}
 
       - name: Summary
         if: always()
+        env:
+          ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue_number }}
+          CREATED: ${{ steps.create-issue.outputs.created }}
+          REPO: ${{ github.repository }}
+          SERVER: ${{ github.server_url }}
         run: |
-          count="$(grep -Eo 'WEEKLY_PERFORMANCE_REVIEW_ISSUES_CREATED=[0-8]' weekly-performance-review.log 2>/dev/null | tail -n 1 | cut -d= -f2 || true)"
-          if [ -z "$count" ]; then
-            echo "⚠️ Weekly performance review completed, but no issue-count marker was found." >> "$GITHUB_STEP_SUMMARY"
+          if [ -z "${ISSUE_NUMBER}" ]; then
+            echo "⚠️ Weekly performance review did not produce an issue." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "Weekly performance review issues created: $count" >> "$GITHUB_STEP_SUMMARY"
+            url="${SERVER}/${REPO}/issues/${ISSUE_NUMBER}"
+            if [ "${CREATED}" = "true" ]; then
+              echo "✅ Created weekly performance review issue [#${ISSUE_NUMBER}](${url})" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "ℹ️ Open weekly performance review issue already exists: [#${ISSUE_NUMBER}](${url})" >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
