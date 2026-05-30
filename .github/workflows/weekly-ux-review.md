@@ -5,6 +5,9 @@ on:
     # Every Wednesday at 10:00 AM UTC (offset from implementation review)
     - cron: "0 10 * * 3"
   workflow_dispatch:
+concurrency:
+  group: weekly-ux-review
+  cancel-in-progress: false
 permissions:
   contents: read
   issues: read
@@ -58,7 +61,7 @@ For each candidate finding, be concrete:
 
 ## Filing findings
 
-For each novel finding, request a new GitHub issue via the `create-issue` safe output. Cap this run at 8 issues. If you find more than 8, choose the 8 highest-impact workflow-level problems and skip the rest.
+For each novel finding, request a new GitHub issue by invoking the `create_issue` tool. Cap this run at 8 issues. If you find more than 8, choose the 8 highest-impact workflow-level problems and skip the rest.
 
 For each issue you request:
 
