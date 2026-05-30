@@ -496,12 +496,10 @@ async function handleCreateItemFromUrl(
     { providerId, externalId: item.externalId, itemType: item.itemType, url: provenanceUrl, ...(group ? { group } : {}) },
   );
 
-  providerRegistry.registerSyntheticProviderItem(providerId, item);
-
-  // Mark the inbox state as 'accepted' so the synthetic provider item doesn't
-  // appear in the Incoming tier or count toward the unread badge. Without this,
-  // the synthetic item is registered but has no inbox-state row, so it's seen
-  // as 'unseen' by the tier builder and badge counter.
+  // Write the inbox state BEFORE registering the synthetic provider item so
+  // that subscribers reacting to the synthetic registration event always see
+  // an 'accepted' inbox-state row. Otherwise the badge would briefly count
+  // the synthetic item as unseen and then correct itself once setState fires.
   try {
     await stateStore.setState(providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
@@ -513,7 +511,14 @@ async function handleCreateItemFromUrl(
     handleCommandError('Failed to update state after creating item from URL', err);
     return;
   }
-  await propagateStateToCanonicalPeers({ providerId, externalId: item.externalId, canonicalId: item.canonicalId }, providerRegistry, stateStore, 'accepted');
+  await propagateStateToCanonicalPeers(
+    { providerId, externalId: item.externalId, canonicalId: item.canonicalId },
+    providerRegistry,
+    stateStore,
+    'accepted',
+  );
+
+  providerRegistry.registerSyntheticProviderItem(providerId, item);
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);

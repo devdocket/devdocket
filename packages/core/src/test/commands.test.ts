@@ -703,13 +703,15 @@ describe('registerCommands', () => {
         'owner/repo#42',
         'accepted',
       );
-      // setState should be called after the work item is created and the
-      // synthetic provider item is registered.
+      // setState must run after createItem (so we have a work item to roll
+      // back on failure) and BEFORE registerSyntheticProviderItem (so badge
+      // subscribers reacting to the synthetic-registration event already see
+      // the 'accepted' inbox-state row instead of counting a phantom unread).
       const setStateOrder = stateStore.setState.mock.invocationCallOrder[0];
       const createItemOrder = workGraph.createItem.mock.invocationCallOrder[0];
       const registerSyntheticOrder = providerRegistry.registerSyntheticProviderItem.mock.invocationCallOrder[0];
       expect(setStateOrder).toBeGreaterThan(createItemOrder);
-      expect(setStateOrder).toBeGreaterThan(registerSyntheticOrder);
+      expect(setStateOrder).toBeLessThan(registerSyntheticOrder);
     });
 
     it('rolls back the created work item if setState fails', async () => {
@@ -720,6 +722,10 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback');
+      // Rollback aborts the flow: synthetic registration and canonical-peer
+      // propagation must not run after a setState failure.
+      expect(providerRegistry.registerSyntheticProviderItem).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to update state after creating item from URL'),
       );
