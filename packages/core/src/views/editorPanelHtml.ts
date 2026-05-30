@@ -358,6 +358,60 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       justify-content: flex-end;
     }
 
+    .editor-git-work {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      padding: 6px 10px;
+      border-radius: 4px;
+      background: var(--vscode-textBlockQuote-background, rgba(127, 127, 127, 0.08));
+      font-size: 12px;
+      color: var(--vscode-foreground);
+    }
+    .editor-git-work--stale {
+      color: var(--vscode-descriptionForeground);
+    }
+    .editor-git-work-glyph {
+      color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-descriptionForeground));
+      font-size: 14px;
+      line-height: 1;
+    }
+    .editor-git-work--stale .editor-git-work-glyph {
+      color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-errorForeground));
+    }
+    .editor-git-work-branch {
+      font-family: var(--vscode-editor-font-family, monospace);
+      font-weight: 600;
+    }
+    .editor-git-work-path {
+      font-family: var(--vscode-editor-font-family, monospace);
+      color: var(--vscode-descriptionForeground);
+      word-break: break-all;
+    }
+    .editor-git-work--stale .editor-git-work-path {
+      text-decoration: line-through;
+    }
+    .editor-git-work-stale-label {
+      color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-errorForeground));
+      font-style: italic;
+    }
+    .editor-git-work-action {
+      margin-left: auto;
+      min-height: 24px;
+      padding: 2px 10px;
+      border-radius: 3px;
+      border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+      background: transparent;
+      color: var(--vscode-foreground);
+      cursor: pointer;
+      font-size: 11px;
+    }
+    .editor-git-work-action:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+
     .action-bar {
       gap: 8px;
       flex-wrap: wrap;

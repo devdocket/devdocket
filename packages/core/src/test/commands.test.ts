@@ -244,6 +244,7 @@ describe('registerCommands', () => {
       editorPanelDependencies,
       incomingPreviewPanelManager,
       vi.fn(),
+      { onDidChange: vi.fn(() => ({ dispose: vi.fn() })), resolve: vi.fn().mockResolvedValue(undefined) } as any,
     );
   });
 
@@ -271,6 +272,7 @@ describe('registerCommands', () => {
       'devdocket.editItem',
       'devdocket.openInBrowser',
       'devdocket.copyUrl',
+      'devdocket.openWorktreeForItem',
       'devdocket.runAction',
       'devdocket.moveUp',
       'devdocket.moveDown',

@@ -41,6 +41,7 @@ export type WebviewMessage =
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
   | { type: 'autosave'; requestId: string; data: { title?: string; notes?: string; url?: string } }
   | { type: 'copyToClipboard'; text: string }
+  | { type: 'openWorktree'; itemId: string }
   | { type: 'addWatchUrl' }
   | { type: 'markSeen'; providerId: string; externalId: string }
   | { type: 'crossTierDrop'; itemId: string; targetTier: string }
@@ -65,6 +66,12 @@ export interface InlineActionData {
   label: string;
 }
 
+export interface GitWorkData {
+  branch?: string;
+  worktreePath?: string;
+  worktreeExists?: boolean;
+}
+
 export interface ItemCardData {
   id: string;
   title: string;
@@ -79,6 +86,7 @@ export interface ItemCardData {
   isUrgent?: boolean;
   isSelected?: boolean;
   hasRelatedItems?: boolean;
+  gitWork?: GitWorkData;
   providerId?: string;
   externalId?: string;
 }
@@ -143,6 +151,7 @@ export interface EditorItemData {
   activityLog: EditorActivityLogEntry[];
   relatedItems: ResolvedRelatedItem[];
   ciWatch?: EditorCIWatchData;
+  gitWork?: GitWorkData;
   isIncoming?: boolean;
   providerId?: string;
   externalId?: string;
