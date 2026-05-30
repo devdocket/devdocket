@@ -120,11 +120,32 @@ export function ItemCard({
         event.preventDefault();
         onMoveFocus?.(-1);
         break;
-      case 'Tab':
-        if (!actionsOpen && onMoveTierFocus?.(event.shiftKey ? -1 : 1)) {
+      case 'Tab': {
+        if (actionsOpen) break;
+        // Let the browser handle natural Tab navigation between the card
+        // and any focusable descendants (e.g. the clickable CI badge)
+        // before treating Tab as a request to jump to the next tier.
+        // Without this, the card's keydown handler hijacks Tab on the
+        // first press and focus never reaches the badge — making the
+        // badge's advertised Enter/Space activation unreachable.
+        const card = event.currentTarget as HTMLElement;
+        const focusables = Array.from(
+          card.querySelectorAll<HTMLElement>('[tabindex="0"]'),
+        );
+        const target = event.target as HTMLElement;
+        const idx = focusables.indexOf(target);
+        const goingForward = !event.shiftKey;
+        const atEdge = idx === -1
+          ? focusables.length === 0
+          : goingForward
+            ? idx === focusables.length - 1
+            : idx === 0;
+        if (!atEdge) break;
+        if (onMoveTierFocus?.(goingForward ? 1 : -1)) {
           event.preventDefault();
         }
         break;
+      }
       case 'Enter':
         event.preventDefault();
         // Keyboard activation should always open the item, regardless of

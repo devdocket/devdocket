@@ -37,4 +37,31 @@ describe('ItemCard CI badge', () => {
     expect(postMessage).toHaveBeenCalledWith({ type: 'openWatches' });
     expect(onClick).not.toHaveBeenCalled();
   });
+
+  it('lets Tab from the card focus the CI badge before leaving the tier', () => {
+    const onMoveTierFocus = vi.fn(() => true);
+
+    render(
+      h(ItemCard, { item, tabIndex: 0, onClick: vi.fn(), onMoveTierFocus }),
+      document.body,
+    );
+
+    const card = document.body.querySelector('[role="option"]') as HTMLElement;
+    const ciBadge = document.body.querySelector('[role="button"]') as HTMLElement;
+    expect(ciBadge).toBeTruthy();
+    expect(ciBadge.tabIndex).toBe(0);
+
+    // Tab from the card itself must NOT preempt browser focus into the
+    // badge — otherwise the badge's Enter/Space activation is unreachable.
+    const tabFromCard = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    card.dispatchEvent(tabFromCard);
+    expect(tabFromCard.defaultPrevented).toBe(false);
+    expect(onMoveTierFocus).not.toHaveBeenCalled();
+
+    // Tab from the last focusable descendant (the badge) DOES jump to the next tier.
+    const tabFromBadge = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    ciBadge.dispatchEvent(tabFromBadge);
+    expect(onMoveTierFocus).toHaveBeenCalledWith(1);
+    expect(tabFromBadge.defaultPrevented).toBe(true);
+  });
 });
