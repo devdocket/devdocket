@@ -372,6 +372,22 @@ describe('MainViewProvider', () => {
       ] as any)).toEqual({ label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' });
     });
 
+    it('returns ci-warn when a run has hasWarning even if its last conclusion is success', () => {
+      // hasWarning means we lost confidence in the polled result (e.g. repeated
+      // poll failures). The watch panel, editor, and status bar all treat that
+      // as an attention state — the sidebar badge must agree.
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'success' }, hasWarning: true },
+      ] as any)).toEqual({ label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' });
+    });
+
+    it('returns ci-warn when one of several runs has hasWarning', () => {
+      expect(computeCIBadge([
+        { status: { overallState: 'completed', conclusion: 'success' } },
+        { status: { overallState: 'completed', conclusion: 'success' }, hasWarning: true },
+      ] as any)).toEqual({ label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' });
+    });
+
     it('returns undefined for empty runs', () => {
       expect(computeCIBadge([])).toBeUndefined();
     });

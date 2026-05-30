@@ -1660,7 +1660,8 @@ export function computeCIBadge(runs: readonly WatchedRun[]): BadgeData | undefin
   if (runs.some(runWatch => runWatch.status.overallState !== 'completed')) {
     return { label: '⟳ CI running', type: 'ci', variant: 'ci-running' };
   }
-  if (runs.some(runWatch => runWatch.status.conclusion === 'partial_success')) {
+  if (runs.some(runWatch => runWatch.hasWarning
+    || runWatch.status.conclusion === 'partial_success')) {
     return { label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' };
   }
   if (runs.every(runWatch => runWatch.status.conclusion === 'success')) {
