@@ -700,5 +700,33 @@ describe('WatchPanelProvider', () => {
       workGraph.fireDidChange();
       expect(getFocusWatchMessages(mockPanel)).toHaveLength(1);
     });
+
+    it('clears a buffered focus target when open() is called again without one', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const workGraph = createMockWorkGraph([{
+        id: 'work-42',
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+        itemType: 'pr',
+      }]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        workGraph as any,
+        createMockProviderRegistry() as any,
+      );
+
+      // First open buffers a target while the webview is not ready.
+      provider.open({ focusItemId: 'work-42' });
+      expect(getFocusWatchMessages(mockPanel)).toEqual([]);
+
+      // A subsequent untargeted open must drop the stale buffered target.
+      provider.open();
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([]);
+    });
   });
 });

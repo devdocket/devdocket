@@ -47,9 +47,7 @@ export class WatchPanelProvider implements vscode.Disposable {
   }
 
   open(target?: FocusWatchTarget): void {
-    if (target) {
-      this.pendingFocusTarget = target;
-    }
+    this.pendingFocusTarget = target;
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Beside);
       this.refresh();
