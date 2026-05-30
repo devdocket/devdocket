@@ -1,5 +1,17 @@
 # @devdocket/shared
 
+## 0.4.0
+
+### Minor Changes
+
+- [#726 Add contractVersion to DevDocket extension API](https://github.com/devdocket/devdocket/pull/726) [`9985696`](https://github.com/devdocket/devdocket/commit/99856964af8acd15f6eea7ada7729064c5f92361) - Expose `DevDocketApi.contractVersion` and a `CONTRACT_VERSION` constant on `@devdocket/shared` so provider and action extensions can perform runtime compatibility checks. Providers and actions may declare an optional `minContractVersion`; when the core extension's contract version is lower, registration is skipped with a warning (and a no-op disposable is returned) instead of throwing, allowing host extensions to degrade gracefully against older DevDocket cores.
+
+- [#731 Surface associated branch and worktree on work items](https://github.com/devdocket/devdocket/pull/731) [`fb74f3d`](https://github.com/devdocket/devdocket/commit/fb74f3de62b8525512929a91ea517bac12bd6076) - Surface associated branch/worktree on work items: sidebar cards show a branch glyph badge and the editor header gains a branch + worktree row with an "Open Worktree" quick action. Stale worktrees (folder no longer on disk) are visually distinguished. The Start Git Work extension exposes the association via a new public `registerGitWorkResolver` API so the core extension can render the badge without parsing the private `work-started` activity-log schema.
+
+### Patch Changes
+
+- [#724 Cap WorkGraph activity detail at 8 KiB and warn on truncation](https://github.com/devdocket/devdocket/pull/724) [`46c367b`](https://github.com/devdocket/devdocket/commit/46c367b96f09d2d407fa1ff1b202a3305378d358) - Cap activity log detail strings at 8 KiB, truncating oversized entries with a clear marker and logging a warning so extensions cannot bloat persisted work item storage.
+
 ## 0.3.0
 
 ### Minor Changes
