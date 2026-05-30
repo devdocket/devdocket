@@ -688,6 +688,42 @@ describe('registerCommands', () => {
         expect.stringContaining('not found'),
       );
     });
+
+    // Regression for #736 (unread badge stuck). When the user pastes a URL,
+    // a synthetic provider item is registered for the new work item. Without
+    // marking the inbox-state row as 'accepted', the synthetic item appears
+    // as unseen in the Incoming tier and the unread badge — a phantom unread
+    // the user can't dismiss.
+    it('marks inbox state as accepted so the synthetic item does not count as unread (regression: #736)', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(stateStore.setState).toHaveBeenCalledWith(
+        'github-pr-reviews',
+        'owner/repo#42',
+        'accepted',
+      );
+      // setState should be called after the work item is created and the
+      // synthetic provider item is registered.
+      const setStateOrder = stateStore.setState.mock.invocationCallOrder[0];
+      const createItemOrder = workGraph.createItem.mock.invocationCallOrder[0];
+      const registerSyntheticOrder = providerRegistry.registerSyntheticProviderItem.mock.invocationCallOrder[0];
+      expect(setStateOrder).toBeGreaterThan(createItemOrder);
+      expect(setStateOrder).toBeGreaterThan(registerSyntheticOrder);
+    });
+
+    it('rolls back the created work item if setState fails', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-rollback', providerId: 'github-pr-reviews' }));
+      stateStore.setState.mockRejectedValueOnce(new Error('disk full'));
+
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to update state after creating item from URL'),
+      );
+    });
   });
 
   // ── simple state-transition commands ─────────────────────────────

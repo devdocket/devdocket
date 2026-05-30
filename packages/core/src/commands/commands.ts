@@ -421,6 +421,7 @@ async function handleCreateItem(
 async function handleCreateItemFromUrl(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
   editorPanelDependencies: WorkItemEditorPanelDependencies,
@@ -455,6 +456,7 @@ async function handleCreateItemFromUrl(
       await handleRecoverableError(error, () => handleCreateItemFromUrl(
         context,
         workGraph,
+        stateStore,
         providerRegistry,
         labelCache,
         editorPanelDependencies,
@@ -495,6 +497,23 @@ async function handleCreateItemFromUrl(
   );
 
   providerRegistry.registerSyntheticProviderItem(providerId, item);
+
+  // Mark the inbox state as 'accepted' so the synthetic provider item doesn't
+  // appear in the Incoming tier or count toward the unread badge. Without this,
+  // the synthetic item is registered but has no inbox-state row, so it's seen
+  // as 'unseen' by the tier builder and badge counter.
+  try {
+    await stateStore.setState(providerId, item.externalId, 'accepted');
+  } catch (err: unknown) {
+    try {
+      await workGraph.deleteItem(createdItem.id);
+    } catch (rollbackErr: unknown) {
+      logger.error('Failed to roll back created item after setState failure', rollbackErr);
+    }
+    handleCommandError('Failed to update state after creating item from URL', err);
+    return;
+  }
+  await propagateStateToCanonicalPeers({ providerId, externalId: item.externalId, canonicalId: item.canonicalId }, providerRegistry, stateStore, 'accepted');
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
@@ -1024,7 +1043,7 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
-      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, stateStore, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.previewIncomingItem',
       wrapCommand('Failed to preview incoming item', (arg: unknown) => {
         if (!arg || typeof arg !== 'object') {

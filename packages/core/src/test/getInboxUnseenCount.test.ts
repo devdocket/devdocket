@@ -295,5 +295,37 @@ describe('getInboxUnseenCount', () => {
 
       expect(getInboxUnseenCount(registry, stateStore as any, new Set())).toBe(0);
     });
+
+    // Inverse direction: when a synthetic provider item is registered (e.g. via
+    // the Create Item from URL command), but no inbox-state row is written, the
+    // item has *no* state — which `getInboxUnseenCount` treats as 'unseen'. This
+    // is the root cause of #736: handleCreateItemFromUrl was registering the
+    // synthetic item without calling stateStore.setState('accepted'). The fix
+    // adds that call; this test documents that the registry → counter pipeline
+    // does require the state row, so the fix must be applied at every site that
+    // calls registerSyntheticProviderItem.
+    it('counts a registered synthetic provider item with no inbox-state row as unseen', () => {
+      const provider = createMockProvider('gh');
+      registry.register(provider);
+      // No discovered items yet.
+      provider.fireItems([]);
+      // Simulate the Create Item from URL flow: a synthetic provider item is
+      // injected but no inbox-state row is set.
+      registry.registerSyntheticProviderItem('gh', {
+        externalId: 'pasted-url-1',
+        title: 'Pasted from URL',
+        itemType: 'pr',
+      });
+
+      // Without setState('accepted'), this synthetic item produces a phantom
+      // unread that the user cannot dismiss. The fix in handleCreateItemFromUrl
+      // ensures setState IS called, dropping this to 0 in the real lifecycle.
+      expect(getInboxUnseenCount(registry, stateStore as any, new Set())).toBe(1);
+
+      // With the inbox-state row set to 'accepted' (which the fix now does),
+      // the badge correctly reaches 0.
+      stateStore._set('gh', 'pasted-url-1', 'accepted');
+      expect(getInboxUnseenCount(registry, stateStore as any, new Set())).toBe(0);
+    });
   });
 });
