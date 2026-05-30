@@ -544,4 +544,161 @@ describe('WatchPanelProvider', () => {
     expect(watcherService.dismissPRWatch).toHaveBeenCalledWith(prIdentifier);
     expect(watcherService.dismissWatch).toHaveBeenCalledWith(runIdentifier);
   });
+
+  describe('focus-watch plumbing', () => {
+    function getFocusWatchMessages(mockPanel: ReturnType<typeof createMockWebviewPanel>) {
+      return vi.mocked(mockPanel.panel.webview.postMessage).mock.calls
+        .map(call => call[0] as { type?: string })
+        .filter(message => message?.type === 'focusWatch');
+    }
+
+    it('posts focusWatch for a work-item target once the webview signals readiness', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const workGraph = createMockWorkGraph([{
+        id: 'work-42',
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+        itemType: 'pr',
+      }]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        workGraph as any,
+        createMockProviderRegistry() as any,
+      );
+
+      provider.open({ focusItemId: 'work-42' });
+
+      // Webview hasn't acknowledged readiness yet → no focusWatch should be sent.
+      expect(getFocusWatchMessages(mockPanel)).toEqual([]);
+
+      // Buffer flushes after watchPanelReady fires.
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([
+        { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:42' },
+      ]);
+    });
+
+    it('posts focusWatch immediately when the panel is already ready', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const workGraph = createMockWorkGraph([{
+        id: 'work-42',
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+        itemType: 'pr',
+      }]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        workGraph as any,
+        createMockProviderRegistry() as any,
+      );
+
+      provider.open();
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+      expect(getFocusWatchMessages(mockPanel)).toEqual([]);
+
+      provider.open({ focusItemId: 'work-42' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([
+        { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:42' },
+      ]);
+    });
+
+    it('resolves provider identity targets against linked source PRs', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const providerItems = new Map<string, any[]>([
+        ['github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]],
+      ]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        createMockWorkGraph(),
+        createMockProviderRegistry(providerItems) as any,
+      );
+
+      provider.open({ focusProviderId: 'github-pr-reviews', focusExternalId: 'owner/repo#42' });
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([
+        { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:42' },
+      ]);
+    });
+
+    it('does not post focusWatch when no PR watch matches the target', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        createMockWorkGraph(),
+        createMockProviderRegistry() as any,
+      );
+
+      provider.open({ focusItemId: 'unknown-work-item' });
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([]);
+      // The standard updateWatchPanel snapshot is still posted so the panel renders.
+      const update = getUpdateWatchPanelMessage(mockPanel);
+      expect(update.type).toBe('updateWatchPanel');
+      expect(update.prWatches).toHaveLength(1);
+    });
+
+    it('resolves a synthetic providerId::externalId focusItemId when no work item exists', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const providerItems = new Map<string, any[]>([
+        ['github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]],
+      ]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        createMockWorkGraph(),
+        createMockProviderRegistry(providerItems) as any,
+      );
+
+      provider.open({ focusItemId: 'github-pr-reviews::owner/repo#42' });
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+
+      expect(getFocusWatchMessages(mockPanel)).toEqual([
+        { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:42' },
+      ]);
+    });
+
+    it('clears a pending focus target after one ready-time refresh attempt', async () => {
+      const mockPanel = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+      const watcherService = createWatcherService([createPRWatch()]);
+      const workGraph = createMockWorkGraph([{
+        id: 'work-42',
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+        itemType: 'pr',
+      }]);
+      const provider = new WatchPanelProvider(
+        vscode.Uri.file('C:\\repo') as any,
+        watcherService as any,
+        workGraph as any,
+        createMockProviderRegistry() as any,
+      );
+
+      provider.open({ focusItemId: 'work-42' });
+      await mockPanel.simulateMessage({ type: 'watchPanelReady' });
+      expect(getFocusWatchMessages(mockPanel)).toHaveLength(1);
+
+      // Trigger another refresh — the focus message must not fire again.
+      workGraph.fireDidChange();
+      expect(getFocusWatchMessages(mockPanel)).toHaveLength(1);
+    });
+  });
 });

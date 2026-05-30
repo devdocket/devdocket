@@ -250,7 +250,12 @@ export function ItemCard({
                 key={`${badge.type}-${badge.variant}-${badge.label}`}
                 badge={badge}
                 onClick={badge.type === 'ci' ? () => {
-                  postMessage({ type: 'openWatches' });
+                  postMessage({
+                    type: 'openWatches',
+                    focusItemId: item.id,
+                    ...(item.providerId ? { focusProviderId: item.providerId } : {}),
+                    ...(item.externalId ? { focusExternalId: item.externalId } : {}),
+                  });
                 } : undefined}
                 tabIndex={badge.type === 'ci' ? (tabIndex === 0 ? 0 : -1) : undefined}
                 ariaLabel={badge.type === 'ci' ? `${badge.label} — open CI Watches` : undefined}

@@ -791,6 +791,23 @@ describe('WorkItemEditorPanel', () => {
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.showWatchesQuickPick');
   });
 
+  it('forwards focus identity to the watches quick pick command when supplied', async () => {
+    const item = makeItem();
+    const { mock } = openPanel(item);
+
+    await mock.simulateMessage({
+      type: 'openWatches',
+      focusItemId: item.id,
+      focusProviderId: 'github-pr',
+      focusExternalId: 'pr-42',
+    });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'devdocket.showWatchesQuickPick',
+      { focusItemId: item.id, focusProviderId: 'github-pr', focusExternalId: 'pr-42' },
+    );
+  });
+
   it('debounces autosave, saves manual fields, and acknowledges the request', async () => {
     vi.useFakeTimers({ now: 1234 });
     const item = makeItem({ title: 'Original' });

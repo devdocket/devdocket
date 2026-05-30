@@ -9,6 +9,7 @@ import { buildTierColorCss } from '../webview/shared/colors';
 import { isFailedConclusion, toConclusionLabel } from '../webview/shared/runConclusionLabels';
 import { getPRExternalIds, isPRProviderItem, isPRWorkItem } from './prHelpers';
 import { parseProviderItemKey } from './providerItemKey';
+import type { FocusWatchTarget } from './focusWatchTarget';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
 export class WatchPanelProvider implements vscode.Disposable {
@@ -17,6 +18,14 @@ export class WatchPanelProvider implements vscode.Disposable {
   private panel?: vscode.WebviewPanel;
   private panelDisposables: vscode.Disposable[] = [];
   private readonly refreshDisposables: vscode.Disposable[];
+  /**
+   * The most recent focus target requested via {@link open}. Buffered until
+   * the webview signals readiness, so a first-time open() doesn't lose the
+   * focusWatch message that races the webview JS mounting.
+   */
+  private pendingFocusTarget?: FocusWatchTarget;
+  /** True once the webview has posted `watchPanelReady` at least once for the current panel. */
+  private webviewReady = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -37,7 +46,10 @@ export class WatchPanelProvider implements vscode.Disposable {
     };
   }
 
-  open(): void {
+  open(target?: FocusWatchTarget): void {
+    if (target) {
+      this.pendingFocusTarget = target;
+    }
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Beside);
       this.refresh();
@@ -63,6 +75,7 @@ export class WatchPanelProvider implements vscode.Disposable {
 
   private attachPanel(panel: vscode.WebviewPanel): void {
     this.clearPanel();
+    this.webviewReady = false;
     this.panel = panel;
     this.panel.webview.options = this.getWebviewOptions();
     this.panel.webview.html = this.getHtml(this.panel.webview);
@@ -122,6 +135,64 @@ export class WatchPanelProvider implements vscode.Disposable {
     if (this.panel.active) {
       this.watcherService.acknowledgeAllFailures();
     }
+
+    this.maybeFlushPendingFocus(prWatches);
+  }
+
+  /**
+   * If the webview has signalled readiness and a focus target is pending,
+   * resolve it to a specific watch id and post a `focusWatch` message so the
+   * panel scrolls/highlights the matching row.
+   *
+   * The pending target is cleared after a single ready-time refresh attempt
+   * regardless of whether a match was found, to avoid focusing an arbitrary
+   * (and likely unrelated) row on a future refresh.
+   */
+  private maybeFlushPendingFocus(prWatches: readonly PRWatchData[]): void {
+    if (!this.webviewReady || !this.pendingFocusTarget || !this.panel) {
+      return;
+    }
+    const target = this.pendingFocusTarget;
+    this.pendingFocusTarget = undefined;
+    const watchId = this.resolveFocusTarget(prWatches, target);
+    if (watchId) {
+      void this.panel.webview.postMessage({ type: 'focusWatch', watchId });
+    }
+  }
+
+  /**
+   * Resolve a {@link FocusWatchTarget} to one of the rendered PR watch ids,
+   * if any. Standalone run watches have no item linkage and are not focusable
+   * via this path.
+   */
+  private resolveFocusTarget(
+    prWatches: readonly PRWatchData[],
+    target: FocusWatchTarget,
+  ): string | undefined {
+    // Normalise: a sidebar `focusItemId` may be a synthetic "providerId::externalId"
+    // key for incoming-tier items that have no work item yet. Parse that back
+    // into a provider identity when no work item exists for the id.
+    let providerId = target.focusProviderId;
+    let externalId = target.focusExternalId;
+    if (target.focusItemId && !this.workGraph.getItem(target.focusItemId)) {
+      const parsed = parseProviderItemKey(target.focusItemId);
+      if (parsed) {
+        providerId ??= parsed.providerId;
+        externalId ??= parsed.externalId;
+      }
+    }
+
+    for (const prWatch of prWatches) {
+      if (target.focusItemId && prWatch.linkedItemId === target.focusItemId) {
+        return prWatch.id;
+      }
+      if (providerId && externalId
+        && prWatch.linkedSourceProviderId === providerId
+        && prWatch.linkedSourceExternalId === externalId) {
+        return prWatch.id;
+      }
+    }
+    return undefined;
   }
 
   dispose(): void {
@@ -172,7 +243,9 @@ export class WatchPanelProvider implements vscode.Disposable {
       case 'watchPanelReady':
         // The webview has mounted and attached its message listener.
         // Re-send the current snapshot so it doesn't miss the initial refresh
-        // that may have been posted before the listener was wired.
+        // that may have been posted before the listener was wired. The
+        // `webviewReady` flag also unblocks pending focus-watch flushes.
+        this.webviewReady = true;
         this.refresh();
         break;
       default:
@@ -412,6 +485,25 @@ export class WatchPanelProvider implements vscode.Disposable {
     }
     .item-card:hover {
       background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+    /*
+     * Brief visual pulse applied when the panel is opened by clicking a CI
+     * badge on a sidebar/editor item. Helps the user immediately spot which
+     * row corresponds to the item they navigated from.
+     */
+    .item-card.watch-card-focused {
+      background: var(--vscode-list-activeSelectionBackground, var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.18)));
+      box-shadow: 0 0 0 1px var(--vscode-focusBorder);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      .item-card.watch-card-focused {
+        animation: watch-focus-pulse 1.5s ease-out;
+      }
+      @keyframes watch-focus-pulse {
+        0%   { box-shadow: 0 0 0 0 var(--vscode-focusBorder); }
+        20%  { box-shadow: 0 0 0 3px var(--vscode-focusBorder); }
+        100% { box-shadow: 0 0 0 1px var(--vscode-focusBorder); }
+      }
     }
     .item-card-main {
       flex: 1;

@@ -18,6 +18,7 @@ import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badge
 import { toItemAuthorData } from './itemAuthorData';
 import { getPRExternalIds, isPRProviderItem, isPRWorkItem } from './prHelpers';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
+import { buildFocusWatchTarget } from './focusWatchTarget';
 import type {
   BadgeData,
   ItemCardData,
@@ -614,9 +615,15 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'markSeen':
         await this.handleMarkSeen(message.providerId, message.externalId);
         break;
-      case 'openWatches':
-        await vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
+      case 'openWatches': {
+        const target = buildFocusWatchTarget(message);
+        if (target) {
+          await vscode.commands.executeCommand('devdocket.showWatchesQuickPick', target);
+        } else {
+          await vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
+        }
         break;
+      }
     }
   }
 

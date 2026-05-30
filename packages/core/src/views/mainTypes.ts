@@ -9,6 +9,7 @@ export type ExtensionMessage =
   | { type: 'toggleSearch' }
   | { type: 'updateWatches'; watches: WatchData[] }
   | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
+  | { type: 'focusWatch'; watchId: string }
   | { type: 'updateEditorItem'; item: EditorItemData }
   | { type: 'updateTitle'; title: string }
   | { type: 'autosaveAck'; requestId: string; savedAt: number }
@@ -32,7 +33,7 @@ export type WebviewMessage =
   | { type: 'browseProviderExtensions' }
   | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
-  | { type: 'openWatches' }
+  | { type: 'openWatches'; focusItemId?: string; focusProviderId?: string; focusExternalId?: string }
   | { type: 'openUrl'; url: string }
   | { type: 'openWatchUrl'; url: string }
   | { type: 'dismissCompletedWatches' }

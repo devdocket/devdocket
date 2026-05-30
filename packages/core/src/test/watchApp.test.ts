@@ -194,6 +194,54 @@ describe('WatchApp PR watch rendering', () => {
     expect(runSection.textContent).toContain('Smoke tests');
   });
 
+  it('scrolls the matching watch row into view when focusWatch arrives', async () => {
+    await mountWatchApp();
+    await sendUpdate([
+      makePRWatch({ id: 'pr:github-pr:owner/repo:1', title: 'PR one' }),
+      makePRWatch({ id: 'pr:github-pr:owner/repo:2', title: 'PR two' }),
+    ]);
+
+    const targetCard = container!.querySelector<HTMLElement>('[data-watch-id="pr:github-pr:owner/repo:2"]');
+    expect(targetCard).toBeInstanceOf(HTMLDivElement);
+    const scrollIntoView = vi.fn();
+    targetCard!.scrollIntoView = scrollIntoView;
+    // jsdom doesn't implement requestAnimationFrame consistently — stub to run synchronously.
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0; });
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:2' },
+      }));
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+    expect(targetCard!.classList.contains('watch-card-focused')).toBe(true);
+
+    // Other rows are not highlighted.
+    const otherCard = container!.querySelector<HTMLElement>('[data-watch-id="pr:github-pr:owner/repo:1"]');
+    expect(otherCard!.classList.contains('watch-card-focused')).toBe(false);
+  });
+
+  it('uses non-smooth scrolling when prefers-reduced-motion is enabled', async () => {
+    await mountWatchApp();
+    await sendUpdate([makePRWatch({ id: 'pr:github-pr:owner/repo:9', title: 'PR nine' })]);
+
+    const targetCard = container!.querySelector<HTMLElement>('[data-watch-id="pr:github-pr:owner/repo:9"]');
+    const scrollIntoView = vi.fn();
+    targetCard!.scrollIntoView = scrollIntoView;
+    vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => { cb(0); return 0; });
+    vi.stubGlobal('matchMedia', vi.fn(() => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() })));
+
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', {
+        data: { type: 'focusWatch', watchId: 'pr:github-pr:owner/repo:9' },
+      }));
+    });
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'auto', block: 'center' });
+  });
+
   async function mountWatchApp() {
     vi.stubGlobal('acquireVsCodeApi', () => ({
       postMessage: vi.fn(),

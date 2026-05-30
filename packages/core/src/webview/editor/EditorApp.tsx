@@ -187,7 +187,12 @@ export function EditorApp() {
           externalId: relatedItem.targetExternalId,
         })}
       />
-      <CIWatchSection ciWatch={item.ciWatch} onOpenWatches={() => postMessage({ type: 'openWatches' })} />
+      <CIWatchSection ciWatch={item.ciWatch} onOpenWatches={() => postMessage({
+        type: 'openWatches',
+        focusItemId: item.id,
+        ...(item.providerId ? { focusProviderId: item.providerId } : {}),
+        ...(item.externalId ? { focusExternalId: item.externalId } : {}),
+      })} />
       <ActivityLog entries={item.activityLog} />
     </div>
   );

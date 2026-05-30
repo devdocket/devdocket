@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { BadgeData, ExtensionMessage, PRWatchData, RunWatchData } from '../shared/types';
 import { postMessage, setWebviewState } from '../shared/messaging';
 import { BadgePill } from '../shared/components/BadgePill';
@@ -9,6 +9,8 @@ export function WatchApp() {
   const [prWatches, setPrWatches] = useState<PRWatchData[]>([]);
   const [runWatches, setRunWatches] = useState<RunWatchData[]>([]);
   const [expandedPRRuns, setExpandedPRRuns] = useState<Map<string, boolean>>(() => new Map());
+  const [focusedWatchId, setFocusedWatchId] = useState<string | undefined>(undefined);
+  const focusTimerRef = useRef<number | undefined>(undefined);
   // Re-render badges when the user switches VS Code theme.
   useThemeChangeCounter();
 
@@ -20,6 +22,8 @@ export function WatchApp() {
       if (message.type === 'updateWatchPanel') {
         setPrWatches(message.prWatches);
         setRunWatches(message.runWatches);
+      } else if (message.type === 'focusWatch') {
+        focusWatchRow(message.watchId, setFocusedWatchId, focusTimerRef);
       }
     };
 
@@ -99,6 +103,7 @@ export function WatchApp() {
                     tierClass={summary.failed > 0 ? 'urgent' : getPRTierClass(prWatch)}
                     url={prWatch.url}
                     watchId={prWatch.id}
+                    isFocused={focusedWatchId === prWatch.id}
                     linkedItemId={prWatch.linkedItemId}
                     linkedSourceProviderId={prWatch.linkedSourceProviderId}
                     linkedSourceExternalId={prWatch.linkedSourceExternalId}
@@ -119,6 +124,7 @@ export function WatchApp() {
                             elapsedTime={run.elapsedTime}
                             url={run.url}
                             watchId={run.id}
+                            isFocused={focusedWatchId === run.id}
                             dismissible={false}
                           />
                         ))}
@@ -144,6 +150,7 @@ export function WatchApp() {
                   elapsedTime={runWatch.elapsedTime}
                   url={runWatch.url}
                   watchId={runWatch.id}
+                  isFocused={focusedWatchId === runWatch.id}
                 />
               ))}
             </CollapsibleSection>
@@ -203,6 +210,7 @@ interface WatchCardProps {
   elapsedTime?: string;
   url?: string;
   watchId: string;
+  isFocused?: boolean;
   linkedItemId?: string;
   linkedSourceProviderId?: string;
   linkedSourceExternalId?: string;
@@ -223,6 +231,7 @@ function WatchCard({
   elapsedTime,
   url,
   watchId,
+  isFocused,
   linkedItemId,
   linkedSourceProviderId,
   linkedSourceExternalId,
@@ -266,7 +275,8 @@ function WatchCard({
 
   return (
     <div
-      class={`item-card item-card--${tierClass}`}
+      class={`item-card item-card--${tierClass}${isFocused ? ' watch-card-focused' : ''}`}
+      data-watch-id={watchId}
       role={clickable ? 'button' : undefined}
       tabIndex={clickable ? 0 : -1}
       onClick={openWatch}
@@ -465,5 +475,54 @@ function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
   // Delegate to the shared helper so all CI watch surfaces agree on what counts as a failed run.
   return isFailedConclusion(runWatch.conclusion);
+}
+
+/**
+ * Scrolls the rendered watch row with the given id into view and asks the
+ * caller to apply a brief visual emphasis (via the `watch-card-focused`
+ * class) so the user can see which row was navigated to. Honours
+ * `prefers-reduced-motion` by skipping smooth scrolling.
+ */
+function focusWatchRow(
+  watchId: string,
+  setFocused: (id: string | undefined) => void,
+  timerRef: { current: number | undefined },
+): void {
+  if (!watchId) return;
+  const reducedMotion = typeof window.matchMedia === 'function'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  // Defer to next frame so any preceding state change (e.g. an updateWatchPanel
+  // that arrived just before this focusWatch message) has rendered the target
+  // row into the DOM before we query for it.
+  const run = () => {
+    const selector = `[data-watch-id="${escapeAttrSelector(watchId)}"]`;
+    const element = document.querySelector<HTMLElement>(selector);
+    if (!element) return;
+    element.scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+    // Cancel any in-flight highlight clear from a previous focus event so a
+    // rapid second click doesn't drop the new highlight prematurely.
+    if (timerRef.current !== undefined) {
+      window.clearTimeout(timerRef.current);
+    }
+    setFocused(watchId);
+    timerRef.current = window.setTimeout(() => {
+      timerRef.current = undefined;
+      setFocused(undefined);
+    }, 1500);
+  };
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(run);
+  } else {
+    run();
+  }
+}
+
+/** Escape a value for safe use inside a CSS attribute-selector string. */
+function escapeAttrSelector(value: string): string {
+  const cssEscape = (window as unknown as { CSS?: { escape?: (input: string) => string } }).CSS?.escape;
+  if (typeof cssEscape === 'function') {
+    return cssEscape(value);
+  }
+  return value.replace(/(["\\])/g, '\\$1');
 }
 

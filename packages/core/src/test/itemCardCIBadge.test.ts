@@ -18,6 +18,8 @@ const item: ItemCardData = {
     { label: 'GitHub', type: 'provider', variant: 'github' },
     { label: '✓ CI passing', type: 'ci', variant: 'ci-pass' },
   ],
+  providerId: 'github-pr',
+  externalId: 'pr-123',
 };
 
 afterEach(() => {
@@ -27,15 +29,31 @@ afterEach(() => {
 });
 
 describe('ItemCard CI badge', () => {
-  it('opens the CI Watches panel when clicked', () => {
+  it('opens the CI Watches panel with the item identity when clicked', () => {
     const onClick = vi.fn();
 
     render(h(ItemCard, { item, tabIndex: 0, onClick }), document.body);
     const ciBadge = document.body.querySelector('[role="button"]') as HTMLElement | null;
     ciBadge?.click();
 
-    expect(postMessage).toHaveBeenCalledWith({ type: 'openWatches' });
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'openWatches',
+      focusItemId: 'item-1',
+      focusProviderId: 'github-pr',
+      focusExternalId: 'pr-123',
+    });
     expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('omits provider identity when the item has none (sidebar-only work item)', () => {
+    const onClick = vi.fn();
+    const localItem: ItemCardData = { ...item, providerId: undefined, externalId: undefined };
+
+    render(h(ItemCard, { item: localItem, tabIndex: 0, onClick }), document.body);
+    const ciBadge = document.body.querySelector('[role="button"]') as HTMLElement | null;
+    ciBadge?.click();
+
+    expect(postMessage).toHaveBeenCalledWith({ type: 'openWatches', focusItemId: 'item-1' });
   });
 
   it('lets Tab from the card focus the CI badge before leaving the tier', () => {
