@@ -352,42 +352,57 @@ export function App() {
     });
   };
 
-  const handleBulkAction = (action: BulkAction): boolean => {
+  const dispatchBulkTransition = (targetState: string): boolean => {
     if (!multiSelection) {
       return false;
     }
-    if (action.kind === 'transition') {
-      const itemIds = Array.from(multiSelection.itemIds);
-      postMessage({ type: 'bulkTransition', itemIds, targetState: action.targetState });
-    } else {
-      // Inbox-tier actions operate on provider/external pairs, not WorkItem
-      // ids. Skip any selected card that's somehow missing provenance
-      // (shouldn't happen — incoming cards always carry both) so the host
-      // doesn't have to defensively re-filter.
-      const items = selectedItems.flatMap(item =>
-        item.providerId && item.externalId
-          ? [{ providerId: item.providerId, externalId: item.externalId }]
-          : [],
-      );
-      if (items.length === 0) {
-        return false;
-      }
-      postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
+    const itemIds = Array.from(multiSelection.itemIds);
+    postMessage({ type: 'bulkTransition', itemIds, targetState });
+    capturePendingBulkFocus();
+    setMultiSelection(null);
+    return true;
+  };
+
+  const dispatchBulkInbox = (inboxAction: 'accept' | 'dismiss'): boolean => {
+    if (!multiSelection) {
+      return false;
     }
-    // Capture the focus restoration target BEFORE clearing the selection
-    // so we still have access to multiSelection's tier/anchor. The
-    // pending state is only consumed once the next `updateItems` snapshot
-    // actually shows the item leaving its origin tier — see
-    // `bulkActionHasLanded`. This avoids unrelated tier re-renders
-    // (e.g. provider refreshes) prematurely satisfying the restore.
-    //
-    // The TTL caps how long a pending can live if the host never
-    // sends a matching update (silent failure / dropped message /
-    // command rejected). Without it, a `tiers` update minutes later
-    // that happens to remove the same item id (e.g. user manually
-    // transitions it) would wrongly trip the restore and yank focus
-    // from wherever the user is at that point.
+    // Inbox-tier actions operate on provider/external pairs, not WorkItem
+    // ids. Skip any selected card that's somehow missing provenance
+    // (shouldn't happen — incoming cards always carry both) so the host
+    // doesn't have to defensively re-filter.
+    const items = selectedItems.flatMap(item =>
+      item.providerId && item.externalId
+        ? [{ providerId: item.providerId, externalId: item.externalId }]
+        : [],
+    );
+    if (items.length === 0) {
+      return false;
+    }
+    postMessage({ type: 'bulkInboxAction', action: inboxAction, items });
+    capturePendingBulkFocus();
+    setMultiSelection(null);
+    return true;
+  };
+
+  // Capture the focus restoration target BEFORE clearing the selection
+  // so we still have access to multiSelection's tier/anchor. The
+  // pending state is only consumed once the next `updateItems` snapshot
+  // actually shows the item leaving its origin tier — see
+  // `bulkActionHasLanded`. This avoids unrelated tier re-renders
+  // (e.g. provider refreshes) prematurely satisfying the restore.
+  //
+  // The TTL caps how long a pending can live if the host never
+  // sends a matching update (silent failure / dropped message /
+  // command rejected). Without it, a `tiers` update minutes later
+  // that happens to remove the same item id (e.g. user manually
+  // transitions it) would wrongly trip the restore and yank focus
+  // from wherever the user is at that point.
+  const capturePendingBulkFocus = () => {
     clearPendingBulkFocus();
+    if (!multiSelection) {
+      return;
+    }
     const next = pickBulkFocusTarget(multiSelection, tiers, document.activeElement);
     if (next) {
       pendingBulkFocusRef.current = next;
@@ -396,10 +411,26 @@ export function App() {
         pendingBulkFocusTimerRef.current = undefined;
       }, PENDING_BULK_FOCUS_TTL_MS);
     }
-    // Optimistically clear; the next updateItems push will re-render the
-    // tiers with the items in their new home.
-    setMultiSelection(null);
-    return true;
+  };
+
+  const handleBulkAction = (action: BulkAction): boolean => {
+    return action.kind === 'transition'
+      ? dispatchBulkTransition(action.targetState)
+      : dispatchBulkInbox(action.inboxAction);
+  };
+
+  // True when the per-card action button click should be treated as a
+  // bulk operation on the active multi-selection. The clicked card must
+  // itself be a member of a selection that contains more than one item;
+  // otherwise the user is acting on a single card (the standard
+  // per-card behavior) and a stray ctrl-click-toggle that left only one
+  // card selected should not change anything.
+  const shouldDispatchAsBulk = (itemId: string): boolean => {
+    return (
+      multiSelection !== null
+      && multiSelection.itemIds.size > 1
+      && multiSelection.itemIds.has(itemId)
+    );
   };
 
   // Restore focus to a stable element after a bulk action has been
@@ -510,10 +541,27 @@ export function App() {
                     isFilterActive={isMyWorkFilterActive}
                     onItemClick={(id, modifiers) => handleTierItemClick(tier, id, modifiers)}
                     multiSelectionIds={multiSelection?.tierId === tier.id ? multiSelection.itemIds : undefined}
-                    onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
+                    onAcceptItem={(providerId, externalId) => {
+                      const card = tier.items.find(item => item.providerId === providerId && item.externalId === externalId);
+                      if (card && shouldDispatchAsBulk(card.id) && dispatchBulkInbox('accept')) {
+                        return;
+                      }
+                      postMessage({ type: 'acceptItem', providerId, externalId });
+                    }}
                     onAcceptToFocus={(providerId, externalId) => postMessage({ type: 'acceptToFocus', providerId, externalId })}
-                    onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
-                    onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
+                    onDismissItem={(providerId, externalId) => {
+                      const card = tier.items.find(item => item.providerId === providerId && item.externalId === externalId);
+                      if (card && shouldDispatchAsBulk(card.id) && dispatchBulkInbox('dismiss')) {
+                        return;
+                      }
+                      postMessage({ type: 'dismissItem', providerId, externalId });
+                    }}
+                    onTransitionState={(itemId, targetState) => {
+                      if (shouldDispatchAsBulk(itemId) && dispatchBulkTransition(targetState)) {
+                        return;
+                      }
+                      postMessage({ type: 'transitionState', itemId, targetState });
+                    }}
                     onReorderItems={tier.id === 'ready-to-start' || tier.id === 'in-progress' ? (itemIds) => postMessage({ type: 'reorderItems', itemIds }) : undefined}
                     onCrossTierDrop={tier.id === 'ready-to-start' || tier.id === 'in-progress'
                       ? (itemId) => postMessage({ type: 'crossTierDrop', itemId, targetTier: tier.id })
