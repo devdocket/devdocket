@@ -356,11 +356,9 @@ export function App() {
     if (!multiSelection) {
       return;
     }
-    let dispatched = false;
     if (action.kind === 'transition') {
       const itemIds = Array.from(multiSelection.itemIds);
       postMessage({ type: 'bulkTransition', itemIds, targetState: action.targetState });
-      dispatched = true;
     } else {
       // Inbox-tier actions operate on provider/external pairs, not WorkItem
       // ids. Skip any selected card that's somehow missing provenance
@@ -375,31 +373,28 @@ export function App() {
         return;
       }
       postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
-      dispatched = true;
     }
-    if (dispatched) {
-      // Capture the focus restoration target BEFORE clearing the selection
-      // so we still have access to multiSelection's tier/anchor. The
-      // pending state is only consumed once the next `updateItems` snapshot
-      // actually shows the item leaving its origin tier — see
-      // `bulkActionHasLanded`. This avoids unrelated tier re-renders
-      // (e.g. provider refreshes) prematurely satisfying the restore.
-      //
-      // The TTL caps how long a pending can live if the host never
-      // sends a matching update (silent failure / dropped message /
-      // command rejected). Without it, a `tiers` update minutes later
-      // that happens to remove the same item id (e.g. user manually
-      // transitions it) would wrongly trip the restore and yank focus
-      // from wherever the user is at that point.
-      clearPendingBulkFocus();
-      const next = pickBulkFocusTarget(multiSelection, tiers, document.activeElement);
-      if (next) {
-        pendingBulkFocusRef.current = next;
-        pendingBulkFocusTimerRef.current = window.setTimeout(() => {
-          pendingBulkFocusRef.current = null;
-          pendingBulkFocusTimerRef.current = undefined;
-        }, PENDING_BULK_FOCUS_TTL_MS);
-      }
+    // Capture the focus restoration target BEFORE clearing the selection
+    // so we still have access to multiSelection's tier/anchor. The
+    // pending state is only consumed once the next `updateItems` snapshot
+    // actually shows the item leaving its origin tier — see
+    // `bulkActionHasLanded`. This avoids unrelated tier re-renders
+    // (e.g. provider refreshes) prematurely satisfying the restore.
+    //
+    // The TTL caps how long a pending can live if the host never
+    // sends a matching update (silent failure / dropped message /
+    // command rejected). Without it, a `tiers` update minutes later
+    // that happens to remove the same item id (e.g. user manually
+    // transitions it) would wrongly trip the restore and yank focus
+    // from wherever the user is at that point.
+    clearPendingBulkFocus();
+    const next = pickBulkFocusTarget(multiSelection, tiers, document.activeElement);
+    if (next) {
+      pendingBulkFocusRef.current = next;
+      pendingBulkFocusTimerRef.current = window.setTimeout(() => {
+        pendingBulkFocusRef.current = null;
+        pendingBulkFocusTimerRef.current = undefined;
+      }, PENDING_BULK_FOCUS_TTL_MS);
     }
     // Optimistically clear; the next updateItems push will re-render the
     // tiers with the items in their new home.
