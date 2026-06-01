@@ -55,6 +55,10 @@ Core never infers state badges from `ProviderItem.state` or `reason` strings —
 - External links via `postMessage` + `isSafeUrl()` — never call `window.open`/anchor `href` directly from webview JS.
 - Use `appendText()` for user-controlled strings in `MarkdownString`, not `appendMarkdown()` — prevents markdown injection.
 
+## Accessibility Regression Coverage
+
+Any new DevDocket sidebar tier UI or changes to `packages/core/src/webview/sidebar/**` must keep the automated accessibility harness passing. Run `cd packages/core && npx vitest run src/test/sidebarA11y.test.ts` to validate roles, accessible names, keyboard behavior, and the axe-core critical/serious scan.
+
 ## Theming
 
 Tier colors are defined in `packages/core/src/webview/shared/colors.ts` with both dark and light variants. Use `buildTierColorCss(theme)` to inject the `--tier-*` CSS custom properties at the top of any new webview that wants to use them. The CI Watches panel does this so its tier-colored cards match the sidebar.
