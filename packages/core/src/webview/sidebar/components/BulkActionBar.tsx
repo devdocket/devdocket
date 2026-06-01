@@ -4,7 +4,14 @@ import type { BulkAction } from '../bulkActions';
 interface BulkActionBarProps {
   count: number;
   actions: readonly BulkAction[];
-  onAction: (action: BulkAction) => void;
+  /**
+   * Invoked when the user activates a bulk action button. Returns
+   * `true` if the action was actually dispatched, `false` if the
+   * handler short-circuited (e.g. nothing valid to send). Only `true`
+   * suppresses the bar's own focus restore — see the comment in the
+   * mount effect for why.
+   */
+  onAction: (action: BulkAction) => boolean;
   onClear: () => void;
 }
 
@@ -66,8 +73,14 @@ export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionB
   }, []);
 
   const invokeAction = (action: BulkAction) => {
-    actionInvoked.current = true;
-    onAction(action);
+    // Only mark the bar as having invoked an action — and therefore
+    // skip its own focus restore — if the handler reports a real
+    // dispatch. Otherwise (early returns inside `handleBulkAction`,
+    // e.g. nothing valid to send) the user-driven Clear/Esc path that
+    // follows must still be able to restore focus.
+    if (onAction(action)) {
+      actionInvoked.current = true;
+    }
   };
 
   return (

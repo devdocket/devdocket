@@ -352,9 +352,9 @@ export function App() {
     });
   };
 
-  const handleBulkAction = (action: BulkAction) => {
+  const handleBulkAction = (action: BulkAction): boolean => {
     if (!multiSelection) {
-      return;
+      return false;
     }
     if (action.kind === 'transition') {
       const itemIds = Array.from(multiSelection.itemIds);
@@ -370,7 +370,7 @@ export function App() {
           : [],
       );
       if (items.length === 0) {
-        return;
+        return false;
       }
       postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
     }
@@ -399,6 +399,7 @@ export function App() {
     // Optimistically clear; the next updateItems push will re-render the
     // tiers with the items in their new home.
     setMultiSelection(null);
+    return true;
   };
 
   // Restore focus to a stable element after a bulk action has been
