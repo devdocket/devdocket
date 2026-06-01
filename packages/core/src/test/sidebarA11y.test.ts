@@ -8,7 +8,7 @@ import { ItemCard } from '../webview/sidebar/components/ItemCard';
 import { TierSection } from '../webview/sidebar/components/TierSection';
 
 interface MountedSidebar {
-  container: HTMLDivElement;
+  container: HTMLElement;
   postMessage: ReturnType<typeof vi.fn>;
 }
 
