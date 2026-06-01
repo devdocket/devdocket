@@ -1,5 +1,18 @@
 # DevDocket Start Git Work
 
+## 0.3.0
+
+### Minor Changes
+
+- [#731 Surface associated branch and worktree on work items](https://github.com/devdocket/devdocket/pull/731) [`fb74f3d`](https://github.com/devdocket/devdocket/commit/fb74f3de62b8525512929a91ea517bac12bd6076) - Surface associated branch/worktree on work items: sidebar cards show a branch glyph badge and the editor header gains a branch + worktree row with an "Open Worktree" quick action. Stale worktrees (folder no longer on disk) are visually distinguished. The Start Git Work extension exposes the association via a new public `registerGitWorkResolver` API so the core extension can render the badge without parsing the private `work-started` activity-log schema.
+
+### Patch Changes
+
+- [#727 perf: make action extensions lazy via onView activation](https://github.com/devdocket/devdocket/pull/727) [`9f7e3a9`](https://github.com/devdocket/devdocket/commit/9f7e3a9cd65b20a73d9b63894fc7677e61d33735) - The `start-git-work` and `ai-reviewer` action extensions now activate lazily via `onView:devdocket.main` instead of `onStartupFinished`. They are pure on-demand — `start-git-work` runs when a user starts work on an item, and `ai-reviewer` runs when its review action is invoked or its `@walkthrough` chat participant is mentioned (chat participants wake on mention regardless of activation events). This avoids loading them on every VS Code session for users who never open the DevDocket sidebar. The GitHub and Azure DevOps provider extensions continue to activate at startup so background incoming-item discovery and CI/PR watchers keep running whether or not the sidebar is open.
+
+- Updated dependencies [[`9985696`](https://github.com/devdocket/devdocket/commit/99856964af8acd15f6eea7ada7729064c5f92361), [`46c367b`](https://github.com/devdocket/devdocket/commit/46c367b96f09d2d407fa1ff1b202a3305378d358), [`fb74f3d`](https://github.com/devdocket/devdocket/commit/fb74f3de62b8525512929a91ea517bac12bd6076)]:
+  - @devdocket/shared@0.4.0
+
 ## 0.2.0
 
 ### Minor Changes
