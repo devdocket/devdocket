@@ -401,7 +401,8 @@ export class MainWebviewMessageHandler {
       }
 
       const currentIdSet = new Set(currentIds);
-      if (new Set(itemIds).size !== itemIds.length || currentIds.some(itemId => !itemIds.includes(itemId)) || itemIds.some(itemId => !currentIdSet.has(itemId))) {
+      const itemIdSet = new Set(itemIds);
+      if (itemIdSet.size !== itemIds.length || currentIds.some(itemId => !itemIdSet.has(itemId)) || itemIds.some(itemId => !currentIdSet.has(itemId))) {
         logger.warn(`DevDocket: reorder ignored because it included unknown ${state} item ids`);
         return;
       }
