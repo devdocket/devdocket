@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
 import {
@@ -14,7 +13,8 @@ import {
 } from '@devdocket/shared';
 import { promptGitCleanup } from './gitCleanup';
 import { decodeWorkStartedDetail, encodeWorkStartedDetail } from './workStartedDetail';
-import { getDefaultWorktreePath, validateWorktreePath } from './worktreePathResolver';
+import { getDefaultWorktreePath } from './worktreePathResolver';
+import { StartWorkPrompts } from './startWorkPrompts';
 import {
   addWorktree,
   checkout,
@@ -29,7 +29,6 @@ import {
   localBranchExists,
   normalizeBranchName,
   normalizeCloneUrl,
-  pathsEqual,
   rollbackCreatedBranch,
   runCommand,
   findWorktreeHoldingBranch,
@@ -39,14 +38,6 @@ import {
 type GetProviderItem = (providerId: string, externalId: string) => ProviderItem | undefined;
 
 type ResolvedGitWork = GitWorkInfo & { cloneUrl: string; ref: string };
-
-type WorkMode = 'checkout' | 'worktree';
-
-type RepoPathPick = vscode.QuickPickItem & (
-  | { pickKind: 'repo'; repoPath: string }
-  | { pickKind: 'paste' }
-  | { pickKind: 'browse' }
-);
 
 interface FlowCancellationState {
   currentStep: string;
@@ -67,13 +58,13 @@ export class StartWorkAction implements DevDocketAction {
     incomingPreview: true,
   } as const;
 
-  private readonly globalState: vscode.Memento;
+  private readonly prompts: StartWorkPrompts;
 
   constructor(
     globalState: vscode.Memento,
     private readonly getProviderItem: GetProviderItem = () => undefined,
   ) {
-    this.globalState = globalState;
+    this.prompts = new StartWorkPrompts(globalState);
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
@@ -96,7 +87,7 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const repoLabel = gitWork.repoLabel ?? gitWork.cloneUrl;
-    const repoPath = await this.promptForRepoPath(repoLabel);
+    const repoPath = await this.prompts.promptForRepoPath(repoLabel);
     if (!repoPath) {
       return;
     }
@@ -186,50 +177,43 @@ export class StartWorkAction implements DevDocketAction {
     let branchName = normalizeBranchName(gitWork.ref);
     const repoLabel = gitWork.repoLabel ?? gitWork.cloneUrl;
 
-    const baseBranch = await this.promptForBaseBranch(repoLabel);
+    const baseBranch = await this.prompts.promptForBaseBranch(repoLabel);
     if (!baseBranch) {
       return false;
     }
 
-    const workMode = await this.promptForWorkMode();
+    const workMode = await this.prompts.promptForWorkMode();
     if (!workMode) {
       return false;
     }
 
-    const promptForNames = this.shouldPromptForNames();
+    const promptForNames = this.prompts.shouldPromptForNames();
 
     const cancellationState: FlowCancellationState = { currentStep: workMode === 'worktree' ? 'creating worktree' : 'checking out branch' };
 
     try {
       let worktreePath: string | undefined;
       if (promptForNames) {
-        const promptedBranchName = await this.promptForBranchName(branchName, workMode);
+        const promptedBranchName = await this.prompts.promptForBranchName(branchName, workMode);
         if (promptedBranchName === undefined) {
           return false;
         }
         branchName = promptedBranchName;
 
         if (workMode === 'worktree') {
-          worktreePath = await this.promptForWorktreePath(repoPath, branchName, item, gitWork);
+          worktreePath = await this.prompts.promptForWorktreePath(repoPath, branchName, item, gitWork);
           if (worktreePath === undefined) {
             return false;
           }
         }
       }
 
-      return await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: 'Starting git work for issue',
-          cancellable: true,
-        },
-        async (progress, token) => {
+      return await this.prompts.withIssueProgress(async (progress, token) => {
           const abortController = abortFromToken(token);
           return workMode === 'worktree'
             ? this.issueWorktreeFlow(item, gitWork, repoPath, branchName, baseBranch, progress, abortController.signal, cancellationState, worktreePath)
             : this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress, abortController.signal, cancellationState);
-        },
-      );
+        });
     } catch (err: unknown) {
       if (await this.handleFlowCancellation(item, err, cancellationState)) {
         return false;
@@ -368,7 +352,7 @@ export class StartWorkAction implements DevDocketAction {
     gitWork: ResolvedGitWork,
     repoPath: string,
   ): Promise<boolean> {
-    const workMode = await this.promptForWorkMode();
+    const workMode = await this.prompts.promptForWorkMode();
     if (!workMode) {
       return false;
     }
@@ -376,16 +360,16 @@ export class StartWorkAction implements DevDocketAction {
     const upstreamBranchName = normalizeBranchName(gitWork.ref);
     let branchName = upstreamBranchName;
     let worktreePath: string | undefined;
-    if (this.shouldPromptForNames()) {
+    if (this.prompts.shouldPromptForNames()) {
       // PR branch prompts rename only the local branch; fetch still uses the upstream ref.
-      const promptedBranchName = await this.promptForBranchName(branchName, workMode);
+      const promptedBranchName = await this.prompts.promptForBranchName(branchName, workMode);
       if (promptedBranchName === undefined) {
         return false;
       }
       branchName = promptedBranchName;
 
       if (workMode === 'worktree') {
-        worktreePath = await this.promptForWorktreePath(repoPath, branchName, item, gitWork);
+        worktreePath = await this.prompts.promptForWorktreePath(repoPath, branchName, item, gitWork);
         if (worktreePath === undefined) {
           return false;
         }
@@ -395,13 +379,7 @@ export class StartWorkAction implements DevDocketAction {
     const cancellationState: FlowCancellationState = { currentStep: 'fetching PR branch' };
 
     try {
-      return await vscode.window.withProgress(
-        {
-          location: vscode.ProgressLocation.Notification,
-          title: 'Starting git work for PR',
-          cancellable: true,
-        },
-        async (progress, token) => {
+      return await this.prompts.withPrProgress(async (progress, token) => {
           const abortController = abortFromToken(token);
           this.reportStep(progress, cancellationState, 'Fetching PR branch...', 'fetching PR branch');
 
@@ -413,8 +391,7 @@ export class StartWorkAction implements DevDocketAction {
           return workMode === 'worktree'
             ? this.prWorktreeFlow(item, gitWork, repoPath, branchInfo, progress, abortController.signal, cancellationState, worktreePath)
             : this.prCheckoutFlow(item, repoPath, branchInfo, progress, abortController.signal, cancellationState);
-        },
-      );
+        });
     } catch (err: unknown) {
       if (await this.handleFlowCancellation(item, err, cancellationState)) {
         return false;
@@ -651,79 +628,6 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   /**
-   * Prompts the user to choose between checkout and worktree modes.
-   */
-  private async promptForWorkMode(): Promise<WorkMode | undefined> {
-    const choice = await vscode.window.showQuickPick(
-      [
-        { label: 'Checkout branch', value: 'checkout' as WorkMode },
-        { label: 'Create worktree', value: 'worktree' as WorkMode },
-      ],
-      {
-        placeHolder: 'How would you like to work on this?',
-        ignoreFocusOut: true,
-      },
-    );
-    return choice?.value;
-  }
-
-  private shouldPromptForNames(): boolean {
-    return vscode.workspace.getConfiguration().get<boolean>('devdocket.startGitWork.promptForNames', true);
-  }
-
-  private async promptForBranchName(proposedBranchName: string, workMode: WorkMode): Promise<string | undefined> {
-    const selectedBranchName = await vscode.window.showInputBox({
-      title: 'DevDocket: Branch name',
-      prompt: workMode === 'worktree'
-        ? 'Local branch name to use for the new worktree (created if needed)'
-        : 'Local branch name to check out (created if needed)',
-      value: proposedBranchName,
-      valueSelection: [0, proposedBranchName.length],
-      ignoreFocusOut: true,
-      validateInput: input => this.validateBranchName(input),
-    });
-    return selectedBranchName === undefined ? undefined : this.normalizePromptedBranchName(selectedBranchName);
-  }
-
-  private async promptForWorktreePath(
-    repoPath: string,
-    branchName: string,
-    item: Readonly<WorkItem>,
-    gitWork: ResolvedGitWork,
-  ): Promise<string | undefined> {
-    const defaultWorktreePath = getDefaultWorktreePath(repoPath, branchName, item, gitWork);
-    const defaultDirName = path.basename(defaultWorktreePath);
-    const selectedPath = await vscode.window.showInputBox({
-      title: 'DevDocket: Worktree path',
-      prompt: 'Filesystem path where the new worktree will be created',
-      value: defaultWorktreePath,
-      valueSelection: [defaultWorktreePath.length - defaultDirName.length, defaultWorktreePath.length],
-      ignoreFocusOut: true,
-      validateInput: input => validateWorktreePath(input, repoPath),
-    });
-    return selectedPath?.trim();
-  }
-
-  private validateBranchName(input: string): string | undefined {
-    const trimmedInput = input.trim();
-    const branchName = this.normalizePromptedBranchName(input);
-    if (branchName.length === 0) {
-      return 'Branch name is required.';
-    }
-    if (trimmedInput.startsWith('refs/') && !trimmedInput.startsWith('refs/heads/')) {
-      return 'Branch name must be a branch ref, not another refs/ namespace.';
-    }
-    if (!isValidRef(branchName)) {
-      return 'Branch name must be a valid git ref (letters, digits, ., _, /, -; no leading -, spaces, .., or control characters).';
-    }
-    return undefined;
-  }
-
-  private normalizePromptedBranchName(input: string): string {
-    return normalizeBranchName(input.trim());
-  }
-
-  /**
    * Runs user-configured post-worktree commands.
    */
   private async runPostWorktreeCommands(
@@ -812,140 +716,4 @@ export class StartWorkAction implements DevDocketAction {
     return true;
   }
 
-  /**
-   * Prompts the user for a local repo path, offering cached and open workspace repositories first.
-   * Caches the selection on success. Does not cache on cancel, empty input, or invalid path.
-   */
-  private async promptForRepoPath(repoKey: string): Promise<string | undefined> {
-    const cacheKey = `repoPath:${repoKey}`;
-    const cachedPath = this.globalState.get<string>(cacheKey)?.trim();
-    let validationMessage: string | undefined;
-
-    while (true) {
-      const selected = await vscode.window.showQuickPick(
-        this.createRepoPathPicks(cachedPath),
-        {
-          placeHolder: validationMessage ?? `Select the local repository for ${repoKey}`,
-          ignoreFocusOut: true,
-        },
-      );
-
-      if (!selected) {
-        return undefined;
-      }
-
-      const selectedPath = await this.resolveRepoPathPick(selected, cachedPath, repoKey);
-      if (selectedPath === undefined) {
-        return undefined;
-      }
-
-      const validationError = this.validateRepoPath(selectedPath);
-      if (validationError) {
-        validationMessage = validationError;
-        continue;
-      }
-
-      await this.globalState.update(cacheKey, selectedPath);
-      return selectedPath;
-    }
-  }
-
-  private createRepoPathPicks(cachedPath: string | undefined): RepoPathPick[] {
-    const picks: RepoPathPick[] = [];
-    const addRepoPath = (repoPath: string, description: string) => {
-      if (picks.some(pick => pick.pickKind === 'repo' && pathsEqual(pick.repoPath, repoPath))) {
-        return;
-      }
-      picks.push({ label: repoPath, description, pickKind: 'repo', repoPath });
-    };
-
-    if (cachedPath) {
-      addRepoPath(cachedPath, 'Last used');
-    }
-
-    for (const folder of vscode.workspace.workspaceFolders ?? []) {
-      const folderPath = folder.uri.fsPath;
-      if (fs.existsSync(path.join(folderPath, '.git'))) {
-        addRepoPath(folderPath, 'Open workspace folder');
-      }
-    }
-
-    picks.push({ label: 'Enter path manually…', description: 'Type or paste a repository path', pickKind: 'paste' });
-    picks.push({ label: 'Browse…', description: 'Choose a repository folder', pickKind: 'browse' });
-    return picks;
-  }
-
-  private async resolveRepoPathPick(
-    selected: RepoPathPick,
-    cachedPath: string | undefined,
-    repoKey: string,
-  ): Promise<string | undefined> {
-    if (selected.pickKind === 'repo') {
-      return selected.repoPath.trim();
-    }
-
-    if (selected.pickKind === 'paste') {
-      const pastedPath = await vscode.window.showInputBox({
-        prompt: `Enter the local path to the git repository for ${repoKey}`,
-        value: cachedPath ?? '',
-        ignoreFocusOut: true,
-      });
-      return pastedPath?.trim();
-    }
-
-    const selectedFolders = await vscode.window.showOpenDialog({
-      canSelectFolders: true,
-      canSelectFiles: false,
-      canSelectMany: false,
-      openLabel: 'Select Repository Folder',
-      title: `Select local repository for ${repoKey}`,
-    });
-    return selectedFolders?.[0]?.fsPath.trim();
-  }
-
-  private validateRepoPath(repoPath: string): string | undefined {
-    if (!repoPath) {
-      return 'Choose a repository folder or paste an absolute path.';
-    }
-    if (!path.isAbsolute(repoPath)) {
-      return `"${repoPath}" is not an absolute path. Choose a repository folder.`;
-    }
-    if (!fs.existsSync(path.join(repoPath, '.git'))) {
-      return `"${repoPath}" does not contain git metadata. Choose a repository folder.`;
-    }
-    return undefined;
-  }
-
-  /**
-   * Prompts the user for a base branch, pre-filling the last-used branch for this repo.
-   * Caches the selection on success. Does not cache on cancel or empty input.
-   */
-  private async promptForBaseBranch(repoKey: string): Promise<string | undefined> {
-    const cacheKey = `baseBranch:${repoKey}`;
-    const cachedBranch = this.globalState.get<string>(cacheKey);
-
-    const selectedBranch = await vscode.window.showInputBox({
-      prompt: `Enter the base branch for ${repoKey}`,
-      value: cachedBranch ?? '',
-      ignoreFocusOut: true,
-    });
-
-    if (selectedBranch === undefined) {
-      return undefined;
-    }
-
-    const trimmedBranch = selectedBranch.trim();
-    if (!trimmedBranch) {
-      void vscode.window.showErrorMessage('DevDocket: No base branch provided.');
-      return undefined;
-    }
-
-    if (!isValidRef(trimmedBranch)) {
-      void vscode.window.showErrorMessage('DevDocket: Base branch name contains invalid characters.');
-      return undefined;
-    }
-
-    await this.globalState.update(cacheKey, trimmedBranch);
-    return trimmedBranch;
-  }
 }
