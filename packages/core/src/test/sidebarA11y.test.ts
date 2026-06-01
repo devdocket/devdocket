@@ -282,6 +282,29 @@ describe('sidebar accessibility harness', () => {
     expect(document.activeElement).toBe(sourcesTab);
   });
 
+  it('does not steal focus from a destination element even after focus had entered the bar', async () => {
+    const { container } = await mountSidebar();
+    await sendItems(makeTiers());
+
+    const incomingOptions = getAllByRole(getByRole(container, 'listbox', /Incoming/), 'option');
+    incomingOptions[0].focus();
+    click(incomingOptions[0], { ctrlKey: true });
+    click(incomingOptions[1], { ctrlKey: true });
+
+    // Walk into the bar (this sets barReceivedFocus), then navigate away
+    // without activating any bar action. The bar will unmount as a side
+    // effect of the tab change; cleanup must respect that focus already
+    // moved to the Sources tab.
+    const acceptButton = getButton(container, /Accept 2 selected items/);
+    acceptButton.focus();
+    const sourcesTab = getByRole(container, 'tab', /Sources/);
+    sourcesTab.focus();
+    click(sourcesTab);
+
+    expect(container.querySelector('.bulk-action-bar')).toBeNull();
+    expect(document.activeElement).toBe(sourcesTab);
+  });
+
   it('renders onboarding empty states with heading semantics and named affordances', async () => {
     const { container } = await mountSidebar();
     await sendItems(makeTiers().map(tier => ({ ...tier, items: [] })));
