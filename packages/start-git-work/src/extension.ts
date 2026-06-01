@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { StartWorkAction } from './startWorkAction';
 import { promptGitCleanup } from './gitCleanup';
-import { renderWorkStartedActivityDetail } from './workStartedDetail';
+import { decodeWorkStartedDetail, renderWorkStartedActivityDetail } from './workStartedDetail';
 import { logger, setLogger } from './logger';
-import type { StateTransitionEvent, ActivityType, DevDocketApi } from '@devdocket/shared';
+import type { StateTransitionEvent, ActivityType, DevDocketApi, GitWorkAssociation, WorkItem } from '@devdocket/shared';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const log = vscode.window.createOutputChannel('DevDocket Start Git Work', { log: true });
@@ -45,6 +45,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     }
   }
 
+  // Register the git-work resolver. Same encapsulation principle as the
+  // activity-detail renderer: we expose the latest decoded branch/worktree
+  // for a work item without forcing the core extension to parse the
+  // versioned 'work-started' detail schema.
+  if (typeof api.registerGitWorkResolver === 'function') {
+    try {
+      const resolverDisposable = api.registerGitWorkResolver(resolveGitWorkForItem);
+      context.subscriptions.push(resolverDisposable);
+    } catch (err) {
+      logger.warn('Failed to register git-work resolver', err);
+    }
+  }
+
   // Listen for Done transitions to prompt for branch/worktree cleanup
   if (typeof api.onDidTransitionState === 'function') {
     const cleanupDisposable = api.onDidTransitionState((event: StateTransitionEvent) => {
@@ -67,4 +80,51 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 export function deactivate(): void {
   logger.info('DevDocket Start Git Work deactivated');
+}
+
+/**
+ * Resolver passed to {@link DevDocketApi.registerGitWorkResolver}: walks the
+ * work item's activity log in reverse for the most recent `'work-started'`
+ * entry, decodes its payload via the versioned {@link decodeWorkStartedDetail}
+ * helper, and returns the derived branch / worktree pair.
+ *
+ * Returns `undefined` when no entry exists or the latest entry decodes to a
+ * payload without either a branch name or a worktree path — the core UI uses
+ * `undefined` as the signal to hide the branch badge entirely.
+ *
+ * Exported for unit testing; the public consumer is the resolver registration
+ * in {@link activate}.
+ */
+export function resolveGitWorkForItem(item: Readonly<WorkItem>): GitWorkAssociation | undefined {
+  const log = item.activityLog;
+  if (!log || log.length === 0) {
+    return undefined;
+  }
+
+  for (let i = log.length - 1; i >= 0; i--) {
+    const entry = log[i];
+    if (entry.type !== 'work-started') {
+      continue;
+    }
+
+    // Intentionally bail (rather than continue scanning older entries)
+    // when the most recent 'work-started' is malformed or decodes to a
+    // payload with neither a branch nor a worktree. Falling back to an
+    // older entry would surface a stale association that no longer
+    // matches what the user most recently started, which is more
+    // misleading than simply hiding the badge.
+    const decoded = decodeWorkStartedDetail(entry.detail);
+    if (!decoded) {
+      return undefined;
+    }
+    if (!decoded.branchName && !decoded.worktreePath) {
+      return undefined;
+    }
+    return {
+      ...(decoded.branchName ? { branch: decoded.branchName } : {}),
+      ...(decoded.worktreePath ? { worktreePath: decoded.worktreePath } : {}),
+    };
+  }
+
+  return undefined;
 }

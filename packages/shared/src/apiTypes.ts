@@ -34,6 +34,36 @@ export type ActivityDetailRender =
 export type ActivityDetailRenderer = (detail: string | undefined) => ActivityDetailRender | undefined;
 
 /**
+ * Association between a work item and a local git branch / worktree that was
+ * created or checked out on its behalf, returned by a {@link GitWorkResolver}.
+ *
+ * The fields mirror the cross-extension contract Start Git Work writes to
+ * the activity log. Both are optional because some flows (e.g. an in-place
+ * checkout without a dedicated worktree) only produce one of them; resolvers
+ * MUST return `undefined` instead of `{}` when neither is known.
+ */
+export interface GitWorkAssociation {
+  /** Local git branch name created or checked out for this work item. */
+  readonly branch?: string;
+  /** Absolute filesystem path of the worktree, when one was created. */
+  readonly worktreePath?: string;
+}
+
+/**
+ * Resolves the current git-work association for a {@link WorkItem}.
+ *
+ * The schema of the underlying `'work-started'` activity log entry's `detail`
+ * payload is owned by the Start Git Work extension; this resolver bridges that
+ * private schema to a small, stable shape the core extension renders in the
+ * sidebar and editor. Returning `undefined` means "no associated branch /
+ * worktree to surface" — the UI hides the badge in that case.
+ *
+ * Implementations should be cheap and synchronous: the core calls this every
+ * time it rebuilds card / editor data.
+ */
+export type GitWorkResolver = (item: Readonly<WorkItem>) => GitWorkAssociation | undefined;
+
+/**
  * Event payload emitted when a work item changes lifecycle state.
  *
  * The {@link oldState} and {@link newState} fields are plain strings (e.g.
@@ -344,6 +374,23 @@ export interface DevDocketApi {
    * @returns A {@link Disposable} that unregisters the renderer.
    */
   registerActivityDetailRenderer?(type: ActivityType, render: ActivityDetailRenderer): Disposable;
+  /**
+   * Register a resolver that maps a {@link WorkItem} to its current local
+   * git-work association (branch / worktree).
+   *
+   * The `'work-started'` activity log entry's `detail` payload is owned by
+   * the Start Git Work extension and is intentionally private to it. This
+   * resolver hook lets that extension expose just the derived branch /
+   * worktree fields to the core UI without forcing the core to parse the
+   * schema itself.
+   *
+   * Only one resolver may be registered at a time. Attempting to register
+   * a second resolver throws.
+   *
+   * @param resolver - The resolver function.
+   * @returns A {@link Disposable} that unregisters the resolver.
+   */
+  registerGitWorkResolver?(resolver: GitWorkResolver): Disposable;
   /**
    * Register a PR watcher for tracking pull request pipelines.
    *
