@@ -1,4 +1,5 @@
 import type { ProviderItem } from '../api/types';
+import type { ProviderHealthStatus } from '../services/providerRegistry';
 import type { RelatedItemsIndex } from '../services/relatedItems';
 import type { CIBadgeLookup } from './ciBadgeLookup';
 import type { SourceGroupData, SourceItemData, SourceProviderData } from './mainTypes';
@@ -9,7 +10,7 @@ export interface SourcesSnapshotBuilderOptions {
   allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>;
   getInboxState(providerId: string, externalId: string): string | undefined;
   getProviderLabel(providerId: string): string;
-  getProviderHealth(providerId: string): { status: string };
+  getProviderHealth(providerId: string): Pick<ProviderHealthStatus, 'status'>;
   relatedItemsIndex: RelatedItemsIndex;
   ciBadgeLookup: CIBadgeLookup;
 }
