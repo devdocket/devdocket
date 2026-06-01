@@ -14,6 +14,7 @@ import {
 } from '@devdocket/shared';
 import { promptGitCleanup } from './gitCleanup';
 import { decodeWorkStartedDetail, encodeWorkStartedDetail } from './workStartedDetail';
+import { getDefaultWorktreePath, validateWorktreePath } from './worktreePathResolver';
 import {
   addWorktree,
   checkout,
@@ -251,7 +252,7 @@ export class StartWorkAction implements DevDocketAction {
     cancellationState: FlowCancellationState,
     promptedWorktreePath?: string,
   ): Promise<boolean> {
-    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
+    const worktreePath = promptedWorktreePath ?? getDefaultWorktreePath(repoPath, branchName, item, gitWork);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
@@ -458,7 +459,7 @@ export class StartWorkAction implements DevDocketAction {
     promptedWorktreePath?: string,
   ): Promise<boolean> {
     const { branchName, sourceRef, trackingRef } = branchInfo;
-    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
+    const worktreePath = promptedWorktreePath ?? getDefaultWorktreePath(repoPath, branchName, item, gitWork);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
@@ -690,7 +691,7 @@ export class StartWorkAction implements DevDocketAction {
     item: Readonly<WorkItem>,
     gitWork: ResolvedGitWork,
   ): Promise<string | undefined> {
-    const defaultWorktreePath = this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
+    const defaultWorktreePath = getDefaultWorktreePath(repoPath, branchName, item, gitWork);
     const defaultDirName = path.basename(defaultWorktreePath);
     const selectedPath = await vscode.window.showInputBox({
       title: 'DevDocket: Worktree path',
@@ -698,7 +699,7 @@ export class StartWorkAction implements DevDocketAction {
       value: defaultWorktreePath,
       valueSelection: [defaultWorktreePath.length - defaultDirName.length, defaultWorktreePath.length],
       ignoreFocusOut: true,
-      validateInput: input => this.validateWorktreePath(input, repoPath),
+      validateInput: input => validateWorktreePath(input, repoPath),
     });
     return selectedPath?.trim();
   }
@@ -720,35 +721,6 @@ export class StartWorkAction implements DevDocketAction {
 
   private normalizePromptedBranchName(input: string): string {
     return normalizeBranchName(input.trim());
-  }
-
-  private validateWorktreePath(input: string, repoPath: string): string | undefined {
-    const trimmedInput = input.trim();
-    if (trimmedInput.length === 0) {
-      return 'Worktree path is required.';
-    }
-    if (!path.isAbsolute(trimmedInput)) {
-      return 'Worktree path must be absolute.';
-    }
-
-    const resolvedPath = path.resolve(trimmedInput);
-    const parentPath = path.dirname(resolvedPath);
-    if (!fs.existsSync(parentPath)) {
-      return `Parent directory "${parentPath}" does not exist.`;
-    }
-    if (fs.existsSync(resolvedPath)) {
-      return `Worktree path "${resolvedPath}" already exists.`;
-    }
-    if (this.isPathInsideOrEqual(parentPath, repoPath)) {
-      return 'Worktree parent directory must not be inside the source repository.';
-    }
-
-    return undefined;
-  }
-
-  private isPathInsideOrEqual(candidatePath: string, containerPath: string): boolean {
-    const relative = path.relative(path.resolve(containerPath), path.resolve(candidatePath));
-    return relative === '' || (relative.length > 0 && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
   }
 
   /**
@@ -838,75 +810,6 @@ export class StartWorkAction implements DevDocketAction {
 
     void vscode.window.showInformationMessage(`DevDocket: ${detail}`);
     return true;
-  }
-
-  private getDefaultWorktreePath(
-    repoPath: string,
-    ref: string,
-    item: Readonly<WorkItem>,
-    gitWork: ResolvedGitWork,
-  ): string {
-    return path.join(path.dirname(repoPath), this.toWorktreeDirName(repoPath, ref, item, gitWork));
-  }
-
-  private toWorktreeDirName(
-    repoPath: string,
-    ref: string,
-    item: Readonly<WorkItem>,
-    gitWork: ResolvedGitWork,
-  ): string {
-    const itemNumber = this.workItemNumber(item.externalId ?? item.id);
-    if (itemNumber) {
-      const repoBaseName = this.sourceRepoBaseName(gitWork, repoPath);
-      return `${repoBaseName}-${gitWork.kind}-${itemNumber}`;
-    }
-
-    const repoBaseName = path.basename(repoPath);
-    const refSuffix = this.toWorktreePathSuffix(ref);
-    const identitySuffix = this.worktreeFallbackIdentity(item);
-    return identitySuffix ? `${repoBaseName}-${refSuffix}-${identitySuffix}` : `${repoBaseName}-${refSuffix}`;
-  }
-
-  private worktreeFallbackIdentity(item: Readonly<WorkItem>): string | undefined {
-    const identity = [item.providerId, item.externalId ?? item.id].filter(Boolean).join(':');
-    return identity ? this.shortStableHash(identity) : undefined;
-  }
-
-  private shortStableHash(value: string): string {
-    let hash = 0x811c9dc5;
-    for (const char of value) {
-      hash ^= char.charCodeAt(0);
-      hash = Math.imul(hash, 0x01000193) >>> 0;
-    }
-    return hash.toString(36).padStart(6, '0').slice(0, 6);
-  }
-
-  private workItemNumber(externalId: string | undefined): string | undefined {
-    return externalId?.trim().match(/(?:#|!)(\d+)$/)?.[1]
-      ?? externalId?.trim().match(/(?:^|[\/\\_-])(\d+)$/)?.[1];
-  }
-
-  private sourceRepoBaseName(gitWork: ResolvedGitWork, repoPath: string): string {
-    const candidate = this.repoBaseNameFromLabel(gitWork.repoLabel)
-      ?? this.repoBaseNameFromCloneUrl(gitWork.cloneUrl)
-      ?? path.basename(repoPath);
-    return this.toWorktreePathSuffix(candidate);
-  }
-
-  private repoBaseNameFromLabel(repoLabel: string | undefined): string | undefined {
-    return repoLabel?.split(/[\\/]/).filter(Boolean).at(-1);
-  }
-
-  private repoBaseNameFromCloneUrl(cloneUrl: string): string | undefined {
-    try {
-      return new URL(cloneUrl).pathname.split('/').filter(Boolean).at(-1)?.replace(/\.git$/i, '');
-    } catch {
-      return cloneUrl.match(/^git@[^:]+:(.+)$/)?.[1].split('/').filter(Boolean).at(-1)?.replace(/\.git$/i, '');
-    }
-  }
-
-  private toWorktreePathSuffix(ref: string): string {
-    return ref.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
   }
 
   /**
