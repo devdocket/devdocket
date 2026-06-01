@@ -450,7 +450,17 @@ export function App() {
       return;
     }
     const target = resolveBulkFocusTarget(pending, tiers, document);
-    target?.focus();
+    if (target) {
+      // `focus()` alone uses the browser default scroll behavior, which
+      // can scroll the destination tier to the very top of the sidebar
+      // viewport (block: 'start') — leaving the bulk-acted card under
+      // adjacent tiers' headers. Explicitly scroll with block: 'nearest'
+      // so the destination card is revealed with minimal disruption to
+      // what's already visible. Pair with `preventScroll: true` on
+      // `focus()` so the two scroll mechanisms don't fight each other.
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    }
   }, [tiers]);
 
   // Cancel any in-flight pending focus when the component unmounts so

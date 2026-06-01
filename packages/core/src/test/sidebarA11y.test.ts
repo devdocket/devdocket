@@ -348,6 +348,60 @@ describe('sidebar accessibility harness', () => {
     expect(document.activeElement).toBe(movedCard);
   });
 
+  it('scrolls the destination card into view after a cross-tier bulk action so the user can see where the items landed', async () => {
+    const { container } = await mountSidebar();
+    await sendItems(makeTiers());
+
+    const incomingOptions = getAllByRole(getByRole(container, 'listbox', /Incoming/), 'option');
+    incomingOptions[0].focus();
+    click(incomingOptions[0], { ctrlKey: true });
+    click(incomingOptions[1], { ctrlKey: true });
+
+    const acceptButton = getButton(container, /Accept 2 selected items/);
+    acceptButton.focus();
+    click(acceptButton);
+
+    // Spy on `scrollIntoView` for the destination card BEFORE the
+    // post-action `updateItems` lands. jsdom defines `scrollIntoView` as
+    // a no-op so a vi.fn spy is sufficient to verify the call shape.
+    // `block: 'nearest'` is the load-bearing option here — without it,
+    // `.focus()`'s default scroll behavior pushes the destination tier to
+    // the very top of the sidebar and hides surrounding context (#747
+    // follow-up).
+    const updatedTiers = makeTiers().map(tier => {
+      if (tier.id === 'incoming') {
+        return { ...tier, items: [] };
+      }
+      if (tier.id === 'ready-to-start') {
+        return {
+          ...tier,
+          items: [
+            makeItem({ id: 'github::inc-1', title: 'Review provider a11y report', tierType: 'readyToStart', providerId: 'github', externalId: 'inc-1' }),
+            makeItem({ id: 'ado::inc-2', title: 'Triage keyboard regression', tierType: 'readyToStart', providerId: 'ado', externalId: 'inc-2' }),
+            ...tier.items,
+          ],
+        };
+      }
+      return tier;
+    });
+    // Install the spy on Element.prototype.scrollIntoView so it captures
+    // the call regardless of which element the layout effect picks.
+    const scrollSpy = vi.fn();
+    const originalScroll = (Element.prototype as { scrollIntoView?: (...args: unknown[]) => void }).scrollIntoView;
+    (Element.prototype as { scrollIntoView: (...args: unknown[]) => void }).scrollIntoView = scrollSpy;
+    try {
+      await sendItems(updatedTiers);
+    } finally {
+      (Element.prototype as { scrollIntoView: ((...args: unknown[]) => void) | undefined }).scrollIntoView = originalScroll;
+    }
+
+    const movedCard = document.querySelector<HTMLElement>('[data-item-id="github::inc-1"]');
+    expect(scrollSpy).toHaveBeenCalledWith({ block: 'nearest', inline: 'nearest' });
+    // Verify scrollIntoView was invoked on the moved card itself (i.e.
+    // the resolver picked the actioned item, not a tier-header fallback).
+    expect(scrollSpy.mock.instances.some(instance => instance === movedCard)).toBe(true);
+  });
+
   it('does not restore focus when an unrelated updateItems lands before the bulk action result', async () => {
     const { container } = await mountSidebar();
     await sendItems(makeTiers());
