@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, ItemCardData, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { useThemeChangeCounter } from '../shared/theme';
@@ -11,6 +11,13 @@ import { TierSection } from './components/TierSection';
 import type { ClickModifiers } from './components/ItemCard';
 import { filterProviders, filterTiers } from './filter';
 import { getBulkActionsForItems, type BulkAction } from './bulkActions';
+import {
+  bulkActionHasLanded,
+  pickBulkFocusTarget,
+  resolveBulkFocusTarget,
+  shouldRestoreBulkFocus,
+  type PendingBulkFocus,
+} from './bulkActionFocus';
 import {
   applySelectionClick,
   clearSelection,
@@ -25,6 +32,13 @@ import {
   type SidebarTab,
   type TabQueries,
 } from './searchVisibility';
+
+// Upper bound for how long a pending bulk-action focus restore can wait
+// for its matching `updateItems` to land. Two seconds covers typical
+// extension round-trips (~100ms) with comfortable margin while keeping
+// the window short enough that an unrelated tier update minutes later
+// cannot trigger a stale restore. See `pendingBulkFocusRef` and #747.
+const PENDING_BULK_FOCUS_TTL_MS = 2000;
 
 export function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('myWork');
@@ -41,6 +55,27 @@ export function App() {
   const announcementFrameRef = useRef<number | undefined>(undefined);
   const myWorkFilterActiveRef = useRef(false);
   const lastNoResultsAnnouncementRef = useRef<TabQueries>(emptyQueries);
+  // Tracks an in-flight bulk action so the post-`updateItems` layout
+  // effect can refocus a sensible element (the moved card, the tier it
+  // landed in, or the origin tier as a fallback) instead of leaving
+  // focus on `document.body`. See `bulkActionFocus.ts` for the
+  // resolution chain. Issue #747.
+  //
+  // Single-slot design: a second bulk action issued before the first
+  // lands overwrites the first's pending state. That's intentional —
+  // last action wins for focus precedence, matching the user's most
+  // recent intent. The TTL below bounds how long a forgotten pending
+  // can hang around if the host never sends a matching update (silent
+  // failure / dropped message / network error).
+  const pendingBulkFocusRef = useRef<PendingBulkFocus | null>(null);
+  const pendingBulkFocusTimerRef = useRef<number | undefined>(undefined);
+  const clearPendingBulkFocus = () => {
+    pendingBulkFocusRef.current = null;
+    if (pendingBulkFocusTimerRef.current !== undefined) {
+      window.clearTimeout(pendingBulkFocusTimerRef.current);
+      pendingBulkFocusTimerRef.current = undefined;
+    }
+  };
   // Declared up-front (not next to its sibling refs below) because the
   // window-level keydown handler installed in the mount effect references
   // `multiSelectionRef.current` to read the latest selection without
@@ -317,9 +352,9 @@ export function App() {
     });
   };
 
-  const handleBulkAction = (action: BulkAction) => {
+  const handleBulkAction = (action: BulkAction): boolean => {
     if (!multiSelection) {
-      return;
+      return false;
     }
     if (action.kind === 'transition') {
       const itemIds = Array.from(multiSelection.itemIds);
@@ -335,14 +370,61 @@ export function App() {
           : [],
       );
       if (items.length === 0) {
-        return;
+        return false;
       }
       postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
+    }
+    // Capture the focus restoration target BEFORE clearing the selection
+    // so we still have access to multiSelection's tier/anchor. The
+    // pending state is only consumed once the next `updateItems` snapshot
+    // actually shows the item leaving its origin tier — see
+    // `bulkActionHasLanded`. This avoids unrelated tier re-renders
+    // (e.g. provider refreshes) prematurely satisfying the restore.
+    //
+    // The TTL caps how long a pending can live if the host never
+    // sends a matching update (silent failure / dropped message /
+    // command rejected). Without it, a `tiers` update minutes later
+    // that happens to remove the same item id (e.g. user manually
+    // transitions it) would wrongly trip the restore and yank focus
+    // from wherever the user is at that point.
+    clearPendingBulkFocus();
+    const next = pickBulkFocusTarget(multiSelection, tiers, document.activeElement);
+    if (next) {
+      pendingBulkFocusRef.current = next;
+      pendingBulkFocusTimerRef.current = window.setTimeout(() => {
+        pendingBulkFocusRef.current = null;
+        pendingBulkFocusTimerRef.current = undefined;
+      }, PENDING_BULK_FOCUS_TTL_MS);
     }
     // Optimistically clear; the next updateItems push will re-render the
     // tiers with the items in their new home.
     setMultiSelection(null);
+    return true;
   };
+
+  // Restore focus to a stable element after a bulk action has been
+  // reflected in the tiers snapshot. Run as a layout effect so the
+  // browser never paints a frame with focus on `document.body` after a
+  // bulk action — see issue #747.
+  useLayoutEffect(() => {
+    const pending = pendingBulkFocusRef.current;
+    if (!pending) {
+      return;
+    }
+    if (!bulkActionHasLanded(pending, tiers)) {
+      return;
+    }
+    clearPendingBulkFocus();
+    if (!shouldRestoreBulkFocus(pending, document.activeElement)) {
+      return;
+    }
+    const target = resolveBulkFocusTarget(pending, tiers, document);
+    target?.focus();
+  }, [tiers]);
+
+  // Cancel any in-flight pending focus when the component unmounts so
+  // the timer can't fire after the webview tears down.
+  useEffect(() => clearPendingBulkFocus, []);
 
   return (
     <div class="mission-control">

@@ -226,6 +226,7 @@ export function ItemCard({
       class={`item-card item-card--${getTierClassName(item.tierType)} ${item.isUrgent ? 'urgent' : ''} ${item.isSelected ? 'selected' : ''} ${isInMultiSelection ? 'multi-selected' : ''} ${actionsOpen ? 'actions-open' : ''} ${isDragging ? 'dragging' : ''}`.trim()}
       role="option"
       tabIndex={tabIndex}
+      data-item-id={item.id}
       draggable={isDraggable}
       aria-label={buildItemAriaLabel(item, isInMultiSelection, isMultiSelectListbox)}
       aria-selected={isMultiSelectListbox ? isInMultiSelection : (item.isSelected ?? false)}

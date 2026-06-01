@@ -4,20 +4,34 @@ import type { BulkAction } from '../bulkActions';
 interface BulkActionBarProps {
   count: number;
   actions: readonly BulkAction[];
-  onAction: (action: BulkAction) => void;
+  /**
+   * Invoked when the user activates a bulk action button. Returns
+   * `true` if the action was actually dispatched, `false` if the
+   * handler short-circuited (e.g. nothing valid to send). Only `true`
+   * suppresses the bar's own focus restore — see the comment in the
+   * mount effect for why.
+   */
+  onAction: (action: BulkAction) => boolean;
   onClear: () => void;
 }
 
 export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionBarProps) {
   // Capture the element that had focus before the bar mounted so we can
   // restore focus to it after the bar unmounts. Restoration is gated on
-  // TWO conditions to avoid stealing focus from wherever the user actually
-  // navigated to:
+  // THREE conditions to avoid stealing focus from wherever the user
+  // actually navigated to AND to avoid an audible double-announcement
+  // when App will handle focus itself after `updateItems` (see #747):
   //
-  //   1. Focus must have entered the bar at some point while mounted
+  //   1. The bar must NOT have invoked an action — when a bulk action
+  //      was activated, App's pending-bulk-focus layout effect will
+  //      refocus to the actioned item's new home after the next
+  //      `updateItems`. Restoring here too would cause AT to announce
+  //      two focus events back-to-back. The Esc / Clear path leaves
+  //      `actionInvoked` false, so we still serve it.
+  //   2. Focus must have entered the bar at some point while mounted
   //      (`barReceivedFocus`), so the bar isn't restoring focus for
   //      unmounts that the user wasn't interacting with.
-  //   2. At cleanup time, focus must EITHER still be inside the bar
+  //   3. At cleanup time, focus must EITHER still be inside the bar
   //      (the bar's own button activation removed it / the cleanup runs
   //      before browser focus fallback) OR have been dropped to
   //      `document.body` (browser fallback after the focused element was
@@ -26,6 +40,7 @@ export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionB
   const barRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
   const barReceivedFocus = useRef(false);
+  const actionInvoked = useRef(false);
   useEffect(() => {
     const candidate = document.activeElement;
     if (candidate instanceof HTMLElement && !candidate.closest('.bulk-action-bar')) {
@@ -38,6 +53,9 @@ export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionB
     bar?.addEventListener('focusin', onFocusIn);
     return () => {
       bar?.removeEventListener('focusin', onFocusIn);
+      if (actionInvoked.current) {
+        return;
+      }
       if (!barReceivedFocus.current) {
         return;
       }
@@ -53,6 +71,17 @@ export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionB
       }
     };
   }, []);
+
+  const invokeAction = (action: BulkAction) => {
+    // Only mark the bar as having invoked an action — and therefore
+    // skip its own focus restore — if the handler reports a real
+    // dispatch. Otherwise (early returns inside `handleBulkAction`,
+    // e.g. nothing valid to send) the user-driven Clear/Esc path that
+    // follows must still be able to restore focus.
+    if (onAction(action)) {
+      actionInvoked.current = true;
+    }
+  };
 
   return (
     <div
@@ -70,7 +99,7 @@ export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionB
             class="bulk-action-btn"
             title={`${action.label} ${count} item${count === 1 ? '' : 's'}`}
             aria-label={`${action.label} ${count} selected item${count === 1 ? '' : 's'}`}
-            onClick={() => onAction(action)}
+            onClick={() => invokeAction(action)}
           >
             <span aria-hidden="true">{action.icon}</span>
             <span>{action.label}</span>
