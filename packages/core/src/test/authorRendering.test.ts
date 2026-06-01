@@ -85,7 +85,7 @@ describe('author view-model plumbing', () => {
       author: { displayName: 'Octocat', handle: 'octocat', avatarUrl: 'https://example.test/avatar.png' },
     };
 
-    const card = (provider as any).buildIncomingCardData('github', providerItem, new Map(), undefined, new Map()) as ItemCardData;
+    const card = (provider as any).buildIncomingCardData('github', providerItem, new Map(), undefined, { byWorkItemId: new Map(), byProviderItemKey: new Map() }) as ItemCardData;
 
     expect(card.author).toEqual({ displayName: 'Octocat', handle: 'octocat' });
   });

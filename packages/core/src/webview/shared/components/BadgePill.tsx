@@ -4,10 +4,49 @@ import { isLightTheme, providerBadgeColors, stateBadgeColors, ciBadgeColors } fr
 
 interface BadgePillProps {
   badge: BadgeData;
+  onClick?: () => void;
+  /**
+   * Forwarded to the focusable button element. Defaults to `0`. Sidebar
+   * cards implement a roving-tabindex listbox, so the parent passes `-1`
+   * for non-active cards to keep only the active card's badge in the Tab
+   * order.
+   */
+  tabIndex?: number;
+  /** Required for the clickable variant so the action is announced. */
+  ariaLabel?: string;
 }
 
-export function BadgePill({ badge }: BadgePillProps) {
+export function BadgePill({ badge, onClick, tabIndex = 0, ariaLabel }: BadgePillProps) {
   const colors = getBadgeColors(badge);
+
+  if (onClick) {
+    const handleClick: JSX.MouseEventHandler<HTMLSpanElement> = (event) => {
+      event.stopPropagation();
+      onClick();
+    };
+    const handleKeyDown: JSX.KeyboardEventHandler<HTMLSpanElement> = (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ' && event.key !== 'Spacebar') {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      onClick();
+    };
+
+    return (
+      <span
+        class="badge-pill badge-pill--clickable"
+        style={colors}
+        role="button"
+        tabIndex={tabIndex}
+        aria-label={ariaLabel ?? badge.label}
+        onClick={handleClick}
+        onKeyDown={handleKeyDown}
+      >
+        {badge.label}
+      </span>
+    );
+  }
 
   return (
     <span class="badge-pill" style={colors}>

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'preact/hooks';
+import { postMessage } from '../../shared/messaging';
 import { formatProviderAnnotation } from '../../shared/providerAnnotation';
 import type { GitWorkData, ItemCardData } from '../../shared/types';
 import { BadgePill } from './BadgePill';
@@ -119,11 +120,37 @@ export function ItemCard({
         event.preventDefault();
         onMoveFocus?.(-1);
         break;
-      case 'Tab':
-        if (!actionsOpen && onMoveTierFocus?.(event.shiftKey ? -1 : 1)) {
+      case 'Tab': {
+        if (actionsOpen) break;
+        // Let the browser handle natural Tab navigation between the card
+        // and any focusable descendants (e.g. the clickable CI badge)
+        // before treating Tab as a request to jump to the next tier.
+        // Without this, the card's keydown handler hijacks Tab on the
+        // first press and focus never reaches the badge — making the
+        // badge's advertised Enter/Space activation unreachable.
+        const card = event.currentTarget as HTMLElement;
+        const focusables = Array.from(
+          card.querySelectorAll<HTMLElement>('[tabindex="0"]'),
+        );
+        const target = event.target as HTMLElement;
+        const idx = focusables.indexOf(target);
+        const goingForward = !event.shiftKey;
+        // When the card itself is the event target (idx === -1), Tab should
+        // let the browser focus the first descendant (e.g. the CI badge) and
+        // Shift+Tab should treat the card as the leading edge so we jump to
+        // the previous tier. Otherwise we'd swallow Shift+Tab on any card
+        // that happens to have a focusable badge.
+        const atEdge = idx === -1
+          ? focusables.length === 0 || !goingForward
+          : goingForward
+            ? idx === focusables.length - 1
+            : idx === 0;
+        if (!atEdge) break;
+        if (onMoveTierFocus?.(goingForward ? 1 : -1)) {
           event.preventDefault();
         }
         break;
+      }
       case 'Enter':
         event.preventDefault();
         // Keyboard activation should always open the item, regardless of
@@ -225,7 +252,20 @@ export function ItemCard({
         {item.badges.length > 0 ? (
           <div class="badge-row">
             {item.badges.map(badge => (
-              <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
+              <BadgePill
+                key={`${badge.type}-${badge.variant}-${badge.label}`}
+                badge={badge}
+                onClick={badge.type === 'ci' ? () => {
+                  postMessage({
+                    type: 'openWatches',
+                    focusItemId: item.id,
+                    ...(item.providerId ? { focusProviderId: item.providerId } : {}),
+                    ...(item.externalId ? { focusExternalId: item.externalId } : {}),
+                  });
+                } : undefined}
+                tabIndex={badge.type === 'ci' ? (tabIndex === 0 ? 0 : -1) : undefined}
+                ariaLabel={badge.type === 'ci' ? `${badge.label} — open CI Watches` : undefined}
+              />
             ))}
           </div>
         ) : null}

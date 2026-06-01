@@ -3,6 +3,7 @@ import { WatcherService, type WatchedRun, type WatchedPR } from '../services/wat
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import type { WatchPanelProvider } from '../views/watchPanelProvider';
+import { coerceFocusWatchTarget } from '../views/focusWatchTarget';
 import { isSafeUrl } from '../utils/url';
 import { wrapCommand, handleCommandError } from './commandUtils';
 import { classifyWatchUrl, WATCH_URL_PLACEHOLDER, type WatchUrlClassification } from './watchUrlClassifier';
@@ -249,6 +250,6 @@ export function registerWatchCommands(
     vscode.commands.registerCommand('devdocket.openWatchUrl',
       wrapCommand('Failed to open watch URL', (arg: unknown) => handleOpenWatchUrl(arg))),
     vscode.commands.registerCommand('devdocket.showWatchesQuickPick',
-      wrapCommand('Failed to show watch panel', () => watchPanelProvider.open())),
+      wrapCommand('Failed to show watch panel', (arg?: unknown) => watchPanelProvider.open(coerceFocusWatchTarget(arg)))),
   );
 }

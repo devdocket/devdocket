@@ -16,6 +16,7 @@ import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badge
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { toItemAuthorData } from './itemAuthorData';
 import { parseProviderItemKey } from './providerItemKey';
+import { buildFocusWatchTarget } from './focusWatchTarget';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
 
@@ -316,7 +317,12 @@ export class WorkItemEditorPanel {
         return;
       }
       if (msg?.type === 'openWatches') {
-        void vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
+        const target = buildFocusWatchTarget(msg);
+        if (target) {
+          void vscode.commands.executeCommand('devdocket.showWatchesQuickPick', target);
+        } else {
+          void vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
+        }
         return;
       }
       if (msg?.type === 'openWorktree' && typeof msg.itemId === 'string' && msg.itemId.length > 0) {
