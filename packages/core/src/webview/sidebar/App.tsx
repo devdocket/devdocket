@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, ItemCardData, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { useThemeChangeCounter } from '../shared/theme';
@@ -11,6 +11,13 @@ import { TierSection } from './components/TierSection';
 import type { ClickModifiers } from './components/ItemCard';
 import { filterProviders, filterTiers } from './filter';
 import { getBulkActionsForItems, type BulkAction } from './bulkActions';
+import {
+  bulkActionHasLanded,
+  pickBulkFocusTarget,
+  resolveBulkFocusTarget,
+  shouldRestoreBulkFocus,
+  type PendingBulkFocus,
+} from './bulkActionFocus';
 import {
   applySelectionClick,
   clearSelection,
@@ -41,6 +48,12 @@ export function App() {
   const announcementFrameRef = useRef<number | undefined>(undefined);
   const myWorkFilterActiveRef = useRef(false);
   const lastNoResultsAnnouncementRef = useRef<TabQueries>(emptyQueries);
+  // Tracks an in-flight bulk action so the post-`updateItems` layout
+  // effect can refocus a sensible element (the moved card, the tier it
+  // landed in, or the origin tier as a fallback) instead of leaving
+  // focus on `document.body`. See `bulkActionFocus.ts` for the
+  // resolution chain. Issue #747.
+  const pendingBulkFocusRef = useRef<PendingBulkFocus | null>(null);
   // Declared up-front (not next to its sibling refs below) because the
   // window-level keydown handler installed in the mount effect references
   // `multiSelectionRef.current` to read the latest selection without
@@ -321,9 +334,11 @@ export function App() {
     if (!multiSelection) {
       return;
     }
+    let dispatched = false;
     if (action.kind === 'transition') {
       const itemIds = Array.from(multiSelection.itemIds);
       postMessage({ type: 'bulkTransition', itemIds, targetState: action.targetState });
+      dispatched = true;
     } else {
       // Inbox-tier actions operate on provider/external pairs, not WorkItem
       // ids. Skip any selected card that's somehow missing provenance
@@ -338,11 +353,41 @@ export function App() {
         return;
       }
       postMessage({ type: 'bulkInboxAction', action: action.inboxAction, items });
+      dispatched = true;
+    }
+    if (dispatched) {
+      // Capture the focus restoration target BEFORE clearing the selection
+      // so we still have access to multiSelection's tier/anchor. The
+      // pending state is only consumed once the next `updateItems` snapshot
+      // actually shows the item leaving its origin tier — see
+      // `bulkActionHasLanded`. This avoids unrelated tier re-renders
+      // (e.g. provider refreshes) prematurely satisfying the restore.
+      pendingBulkFocusRef.current = pickBulkFocusTarget(multiSelection, tiers, document.activeElement);
     }
     // Optimistically clear; the next updateItems push will re-render the
     // tiers with the items in their new home.
     setMultiSelection(null);
   };
+
+  // Restore focus to a stable element after a bulk action has been
+  // reflected in the tiers snapshot. Run as a layout effect so the
+  // browser never paints a frame with focus on `document.body` after a
+  // bulk action — see issue #747.
+  useLayoutEffect(() => {
+    const pending = pendingBulkFocusRef.current;
+    if (!pending) {
+      return;
+    }
+    if (!bulkActionHasLanded(pending, tiers)) {
+      return;
+    }
+    pendingBulkFocusRef.current = null;
+    if (!shouldRestoreBulkFocus(pending, document.activeElement)) {
+      return;
+    }
+    const target = resolveBulkFocusTarget(pending, tiers, document);
+    target?.focus();
+  }, [tiers]);
 
   return (
     <div class="mission-control">
