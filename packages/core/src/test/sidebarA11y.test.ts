@@ -275,8 +275,12 @@ async function mountSidebar(): Promise<MountedSidebar> {
   }));
 
   const { App } = await import('../webview/sidebar/App');
-  const container = document.createElement('div');
-  document.body.appendChild(container);
+  // Mount directly into document.body so the afterEach() `render(null,
+  // document.body)` actually unmounts the App and fires its useEffect
+  // cleanups (window 'message' / 'keydown' listeners registered in
+  // sidebar/App.tsx). Mounting into an inner <div> would leave those
+  // listeners attached across tests and cause cross-test leakage.
+  const container = document.body;
   await act(async () => {
     render(h(App, {}), container);
   });
