@@ -1,13 +1,10 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { logger } from './logger';
 import { decodeWorkStartedDetail, type WorkStartedDetail } from './workStartedDetail';
+import { GIT_METADATA_TIMEOUT, runGit } from './gitOps';
 import type { WorkItem, ActivityType } from '@devdocket/shared';
-
-const execFileAsync = promisify(execFile);
 
 async function pathExists(p: string): Promise<boolean> {
   try {
@@ -80,7 +77,7 @@ async function checkCleanupState(item: Readonly<WorkItem>): Promise<CleanupState
 
   if (info.branchName) {
     try {
-      await execFileAsync('git', ['show-ref', '--verify', '--quiet', '--', `refs/heads/${info.branchName}`], { cwd: repoPath, timeout: 30_000 });
+      await runGit(repoPath, ['show-ref', '--verify', '--quiet', '--', `refs/heads/${info.branchName}`], GIT_METADATA_TIMEOUT);
       branchExists = true;
     } catch (err) {
       if ((err as { code?: number | string }).code === 1) {
@@ -148,7 +145,7 @@ export async function promptGitCleanup(
 
   if (worktreeExists && worktreePath && repoPath) {
     try {
-      await execFileAsync('git', ['worktree', 'remove', '--', worktreePath], { cwd: repoPath, timeout: 30_000 });
+      await runGit(repoPath, ['worktree', 'remove', '--', worktreePath], GIT_METADATA_TIMEOUT);
       logger.info('Removed worktree for work item');
       cleaned.push(`worktree`);
     } catch (err) {
@@ -162,7 +159,7 @@ export async function promptGitCleanup(
   // Skip branch deletion if worktree removal failed — branch is likely still checked out
   if (branchExists && branchName && repoPath && worktreeRemoved) {
     try {
-      await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: 30_000 });
+      await runGit(repoPath, ['branch', '-d', '--', branchName], GIT_METADATA_TIMEOUT);
       logger.info(`Deleted branch: ${branchName}`);
       cleaned.push(`branch ${branchName}`);
     } catch (err) {
