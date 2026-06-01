@@ -63,11 +63,32 @@ describe('sidebar accessibility harness', () => {
     expect(getByRole(container, 'tab', /Sources/).getAttribute('aria-selected')).toBe('true');
     expect(getByRole(container, 'tabpanel', /Sources/)).toBeTruthy();
     expect(getByRole(container, 'group', /^GitHub$/)).toBeTruthy();
-    expect(getByRole(container, 'group', /Assigned, 2 items/)).toBeTruthy();
+    expect(getByRole(container, 'group', /Assigned, 3 items/)).toBeTruthy();
     expect(getButton(container, /Provider GitHub unhealthy — show details/)).toBeTruthy();
-    expect(getButton(container, /Fix source import, available, GitHub, Issue/)).toBeTruthy();
+
+    // SourceItem must expose its inbox-state variant in the accessible name so
+    // screen-reader users can distinguish available / accepted / dismissed
+    // rows. Regressions that drop the variant segment must fail here.
+    const available = getButton(container, /Fix source import, available, GitHub, Issue/);
+    const accepted = getButton(container, /Accepted PR review, accepted, has related items, Pull Request/);
+    const dismissed = getButton(container, /Dismissed bug report, dismissed, Issue/);
+    expect(available.tagName).toBe('BUTTON');
+    expect(accepted.tagName).toBe('BUTTON');
+    expect(dismissed.tagName).toBe('BUTTON');
+
+    // SourceItem rows are native <button>s so Enter/Space activation is the
+    // browser default; verify a click (the synthesized event for both) reaches
+    // the message handler with the expected payload.
+    postMessage.mockClear();
+    click(available);
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'openSourceItem',
+      providerId: 'github',
+      externalId: 'src-1',
+    });
 
     assertInteractiveElementsHaveNames(container);
+    await expectNoSeriousOrCriticalAxeViolations(container);
   });
 
   it('labels and focuses search boxes when search is toggled', async () => {
@@ -292,13 +313,21 @@ async function expectNoSeriousOrCriticalAxeViolations(container: Element): Promi
     runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
     resultTypes: ['violations'],
     rules: {
-      // The sidebar intentionally nests action buttons inside focusable listbox
-      // options so each card can expose both a selectable row and its direct
-      // actions. Keyboard tests above cover reachable controls and Escape/Tab
-      // behavior that axe cannot model in jsdom.
+      // The sidebar's card pattern (focusable listbox row + nested per-card
+      // action buttons) is a well-known WCAG anti-pattern: NVDA/JAWS do not
+      // expose interactive descendants of role="option" as activatable
+      // controls. We disable axe's `nested-interactive` rule globally because
+      // the alternative (a non-nested layout) would lose the load-bearing
+      // per-card actions surface — see issue #743 for the rationale. The
+      // keyboard tests in this file cover reachability and Escape/Tab focus
+      // behavior that axe cannot model in jsdom, but they do NOT compensate
+      // for the screen-reader semantics. A follow-up should track designing
+      // an SR-friendly equivalent (e.g. a separate `aria-activedescendant`
+      // tree) before relying on this harness as a full a11y proxy.
       'nested-interactive': { enabled: false },
       // axe's color-contrast rule requires canvas text measurement, which
-      // jsdom does not implement. This harness gates structural WCAG issues.
+      // jsdom does not implement. This harness gates structural WCAG issues;
+      // contrast is verified visually during design review.
       'color-contrast': { enabled: false },
     },
   });
@@ -453,6 +482,9 @@ function makeSources(): SourceProviderData[] {
         { providerId: 'github', externalId: 'src-2', title: 'Accepted PR review', badges: [
           { label: 'Pull Request', type: 'type', variant: 'pull-request' },
         ], isAccepted: true, isDismissed: false, hasRelatedItems: true },
+        { providerId: 'github', externalId: 'src-3', title: 'Dismissed bug report', badges: [
+          { label: 'Issue', type: 'type', variant: 'issue' },
+        ], isAccepted: false, isDismissed: true },
       ],
     }],
   }];
