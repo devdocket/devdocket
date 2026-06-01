@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'preact/hooks';
 import type { BulkAction } from '../bulkActions';
 
 interface BulkActionBarProps {
@@ -8,6 +9,25 @@ interface BulkActionBarProps {
 }
 
 export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionBarProps) {
+  // Capture the element that had focus before the bar mounted so we can
+  // restore focus to it after the bar unmounts. Without this, keyboard
+  // users who activate a bulk action (focus on a bar button) get dropped
+  // to document.body when the bar disappears, breaking the
+  // "return to where I was" expectation for screen-reader users.
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const candidate = document.activeElement;
+    if (candidate instanceof HTMLElement && !candidate.closest('.bulk-action-bar')) {
+      previouslyFocused.current = candidate;
+    }
+    return () => {
+      const target = previouslyFocused.current;
+      if (target && target.isConnected) {
+        target.focus();
+      }
+    };
+  }, []);
+
   return (
     <div
       class="bulk-action-bar"

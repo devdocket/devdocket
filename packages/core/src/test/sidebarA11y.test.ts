@@ -239,7 +239,15 @@ describe('sidebar accessibility harness', () => {
     const count = toolbar.querySelector('.bulk-action-count');
     expect(count?.getAttribute('aria-live')).toBe('polite');
     expect(count?.textContent).toBe('2 selected');
-    click(getButton(container, /Accept 2 selected items/));
+    // Move focus onto the bulk-action button before activating it so that the
+    // subsequent focus-restoration assertion below actually validates the
+    // keyboard-user path: in jsdom a synthesized click does not change focus,
+    // so without this explicit focus() the toolbar's unmount cannot prove it
+    // restored focus to the originating option.
+    const acceptButton = getButton(container, /Accept 2 selected items/);
+    acceptButton.focus();
+    expect(document.activeElement).toBe(acceptButton);
+    click(acceptButton);
     expect(postMessage).toHaveBeenCalledWith({
       type: 'bulkInboxAction',
       action: 'accept',
