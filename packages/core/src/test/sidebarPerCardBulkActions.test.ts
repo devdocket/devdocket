@@ -134,6 +134,11 @@ describe('per-card actions on a multi-selection', () => {
       itemIds: expect.arrayContaining(['ready-1', 'ready-2']),
       targetState: 'InProgress',
     });
+    // Exact-length assertion catches a regression where a future bug
+    // accidentally widens the bulk payload (e.g. by leaking ready-3 from
+    // the rendered tier instead of the actual selection).
+    const bulkCall = postMessage.mock.calls.find(call => call[0]?.type === 'bulkTransition');
+    expect(bulkCall?.[0].itemIds).toHaveLength(2);
     expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'transitionState' }));
   });
 
@@ -186,6 +191,86 @@ describe('per-card actions on a multi-selection', () => {
       targetState: 'InProgress',
     });
     expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'bulkTransition' }));
+  });
+
+  it('does not bulk-dispatch when an Incoming card whose id matches a selected work-item id is acted on while the multi-selection lives on a different tier', async () => {
+    // Cross-tier id collision: `buildIncomingCardData` sets the card id to
+    // `existingWorkItem?.id ?? providerItemKey`, so an incoming card whose
+    // backing provider item already has a work item can legitimately have
+    // the same id as a card in a work-item tier. Without a tier-match
+    // guard, `shouldDispatchAsBulk` would treat a click on that Incoming
+    // card as "act on the In Progress selection" and post a
+    // `bulkInboxAction` carrying the In Progress provenance, while the
+    // actually-clicked Incoming card receives no action.
+    const collidingTiers: TierData[] = [
+      {
+        id: 'incoming',
+        name: 'Incoming',
+        icon: '↓',
+        collapsed: false,
+        items: [
+          { id: 'wi-42', title: 'Resurfaced incoming', badges: [], tierType: 'incoming', providerId: 'github', externalId: 'inc-42' },
+        ],
+      },
+      {
+        id: 'in-progress',
+        name: 'In Progress',
+        icon: '▶',
+        collapsed: false,
+        items: [
+          { id: 'wi-42', title: 'In progress 42', badges: [], tierType: 'inProgress' },
+          { id: 'wi-77', title: 'In progress 77', badges: [], tierType: 'inProgress' },
+        ],
+      },
+    ];
+
+    const postMessage = vi.fn();
+    vi.stubGlobal('acquireVsCodeApi', () => ({
+      postMessage,
+      getState: vi.fn(),
+      setState: vi.fn(),
+    }));
+    const { App } = await import('../webview/sidebar/App');
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    await act(async () => {
+      render(h(App, {}), container!);
+    });
+    await act(async () => {
+      window.dispatchEvent(new MessageEvent('message', { data: { type: 'updateItems', tiers: collidingTiers } }));
+    });
+
+    const inProgressCards = Array.from(
+      container.querySelector('[data-tier-id="in-progress"]')!.querySelectorAll<HTMLElement>('[role="option"]'),
+    );
+    expect(inProgressCards).toHaveLength(2);
+
+    await act(async () => {
+      inProgressCards[0].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+    });
+    await act(async () => {
+      inProgressCards[1].dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, ctrlKey: true }));
+    });
+
+    postMessage.mockClear();
+
+    const incomingCard = container.querySelector<HTMLElement>(
+      '[data-tier-id="incoming"] [role="option"]',
+    );
+    expect(incomingCard).toBeTruthy();
+    const acceptButton = Array.from(incomingCard!.querySelectorAll<HTMLButtonElement>('.item-action-btn'))
+      .find(btn => /^Accept \(/.test(btn.getAttribute('aria-label') ?? ''));
+    expect(acceptButton).toBeTruthy();
+    await act(async () => {
+      acceptButton!.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    });
+
+    expect(postMessage).toHaveBeenCalledWith({
+      type: 'acceptItem',
+      providerId: 'github',
+      externalId: 'inc-42',
+    });
+    expect(postMessage).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'bulkInboxAction' }));
   });
 });
 

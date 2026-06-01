@@ -542,22 +542,58 @@ export function App() {
                     onItemClick={(id, modifiers) => handleTierItemClick(tier, id, modifiers)}
                     multiSelectionIds={multiSelection?.tierId === tier.id ? multiSelection.itemIds : undefined}
                     onAcceptItem={(providerId, externalId) => {
+                      // Per-card actions act on the entire active multi-selection
+                      // when the clicked card is part of it (matching list-box
+                      // intuition: any selected member's action applies to all).
+                      // The bar at the bottom is the explicit bulk surface, but
+                      // we deliberately promote per-card buttons too so the user
+                      // can act on the selection from wherever they're already
+                      // focused. The tier-match guard avoids a cross-tier id
+                      // collision: incoming cards can have an `id` equal to a
+                      // work-item id when the same provider item already has a
+                      // work item, so the predicate alone is insufficient.
                       const card = tier.items.find(item => item.providerId === providerId && item.externalId === externalId);
-                      if (card && shouldDispatchAsBulk(card.id) && dispatchBulkInbox('accept')) {
+                      if (
+                        card
+                        && multiSelection?.tierId === tier.id
+                        && shouldDispatchAsBulk(card.id)
+                        && dispatchBulkInbox('accept')
+                      ) {
                         return;
                       }
                       postMessage({ type: 'acceptItem', providerId, externalId });
                     }}
-                    onAcceptToFocus={(providerId, externalId) => postMessage({ type: 'acceptToFocus', providerId, externalId })}
+                    onAcceptToFocus={(providerId, externalId) =>
+                      // Intentionally NOT promoted to a bulk operation: "accept
+                      // and focus in the editor" carries a single-item intent
+                      // and there is no bulk equivalent in the bar (bulk Accept
+                      // covers the multi-card case). Single-item dispatch is
+                      // the right behavior even when a multi-selection is
+                      // active.
+                      postMessage({ type: 'acceptToFocus', providerId, externalId })
+                    }
                     onDismissItem={(providerId, externalId) => {
                       const card = tier.items.find(item => item.providerId === providerId && item.externalId === externalId);
-                      if (card && shouldDispatchAsBulk(card.id) && dispatchBulkInbox('dismiss')) {
+                      if (
+                        card
+                        && multiSelection?.tierId === tier.id
+                        && shouldDispatchAsBulk(card.id)
+                        && dispatchBulkInbox('dismiss')
+                      ) {
                         return;
                       }
                       postMessage({ type: 'dismissItem', providerId, externalId });
                     }}
                     onTransitionState={(itemId, targetState) => {
-                      if (shouldDispatchAsBulk(itemId) && dispatchBulkTransition(targetState)) {
+                      // Tier-match guard is defense-in-depth: work-item ids are
+                      // unique across the work-item tiers (a single WorkItem can
+                      // only be in one state), but mirroring the inbox gate keeps
+                      // the dispatch rule uniform.
+                      if (
+                        multiSelection?.tierId === tier.id
+                        && shouldDispatchAsBulk(itemId)
+                        && dispatchBulkTransition(targetState)
+                      ) {
                         return;
                       }
                       postMessage({ type: 'transitionState', itemId, targetState });
