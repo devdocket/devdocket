@@ -400,6 +400,23 @@ export class ProviderRegistry {
         }
 
         this.registerSyntheticProviderItem(provider.id, resolved);
+
+        // Self-heal legacy data: items created via the URL-paste flow before
+        // the unread-badge fix (issue #736) never had an inbox-state row
+        // written. Without one, rehydration re-creates a synthetic provider
+        // item with no state → counted as 'unseen' by the badge forever.
+        // If we have an imported work item AND no inbox-state row, write
+        // 'accepted' to bring legacy data in line with the post-fix invariant.
+        if (this.stateStore.getState(provider.id, importedItem.externalId) === undefined) {
+          try {
+            await this.stateStore.setState(provider.id, importedItem.externalId, 'accepted');
+          } catch (err) {
+            logger.debug(
+              `Failed to self-heal inbox state for rehydrated item ${provider.id}:${importedItem.externalId}`,
+              err,
+            );
+          }
+        }
       } catch (error) {
         this.rehydratedImportedItems.get(provider.id)?.delete(importedItem.externalId);
         logger.debug(`Failed to rehydrate URL-imported item ${provider.id}:${importedItem.externalId}`, error);

@@ -283,6 +283,68 @@ describe('ProviderRegistry', () => {
     );
   });
 
+  it('self-heals legacy items with no inbox-state row by writing accepted during rehydration (regression: #736)', async () => {
+    // Pre-fix, handleCreateItemFromUrl created an imported work item without
+    // writing an inbox-state row. After upgrade, rehydration re-registers the
+    // synthetic provider item and — without self-heal — the item appears as
+    // 'unseen' in the badge forever.
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Legacy import',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        itemType: 'issue' as const,
+      })),
+    };
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    expect(stateStore.getState('gh', 'owner/repo#42')).toBeUndefined();
+    reg.register(provider);
+    await vi.waitFor(() => expect(stateStore.getState('gh', 'owner/repo#42')).toBe('accepted'));
+  });
+
+  it('does not overwrite an existing inbox-state row during rehydration', async () => {
+    const provider = {
+      ...createMockProvider('gh'),
+      resolveUrl: vi.fn(async () => ({
+        title: '#42: Already dismissed',
+        url: 'https://example.com/42',
+        externalId: 'owner/repo#42',
+        itemType: 'issue' as const,
+      })),
+    };
+    // Simulate a user who had already dismissed this item before rehydration.
+    stateStore._set('gh', 'owner/repo#42', 'dismissed');
+
+    const reg = new ProviderRegistry(
+      stateStore,
+      undefined,
+      () => WorkItemState.InProgress,
+      undefined,
+      () => [{
+        providerId: 'gh',
+        externalId: 'owner/repo#42',
+        url: 'https://example.com/42',
+      }],
+    );
+
+    reg.register(provider);
+    await vi.waitFor(() => expect(provider.resolveUrl).toHaveBeenCalledTimes(1));
+    // Self-heal must NOT clobber an explicit prior state.
+    expect(stateStore.getState('gh', 'owner/repo#42')).toBe('dismissed');
+  });
+
   it('skips rehydration when resolveUrl returns a different externalId', async () => {
     const provider = {
       ...createMockProvider('gh'),
