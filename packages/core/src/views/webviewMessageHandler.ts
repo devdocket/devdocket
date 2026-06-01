@@ -147,6 +147,10 @@ export class MainWebviewMessageHandler {
   }
 
   private async handleMarkSeen(providerId: string, externalId: string): Promise<void> {
+    if (typeof providerId !== 'string' || typeof externalId !== 'string' || !providerId || !externalId) {
+      logger.warn('DevDocket: markSeen ignored due to invalid providerId/externalId payload');
+      return;
+    }
     try {
       await this.options.readStateStore.add(getProviderItemKey(providerId, externalId));
     } catch (err) {
