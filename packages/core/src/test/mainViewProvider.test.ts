@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { MainViewProvider, computeCIBadge } from '../views/mainViewProvider';
+import { buildSidebarBadges } from '../views/tierSnapshotBuilder';
 
 type MessageHandler = (message: unknown) => void | Promise<void>;
 
@@ -326,16 +327,11 @@ describe('MainViewProvider', () => {
   });
 
   it('builds non-CI badges when no watches exist', () => {
-    const provider = createProvider(
-      createMockWorkGraph(),
-      createProviderRegistry({ github: [] }),
-      createStateStore(),
-    );
-
-    const badges = (provider as any).buildBadges(
+    const badges = buildSidebarBadges(
       'github',
       { externalId: 'pr-1', title: 'PR item', itemType: 'pr', url: 'https://github.com/org/repo/pull/1' },
       undefined,
+      providerId => providerId,
     );
 
     expect(badges).toEqual([

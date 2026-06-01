@@ -4,8 +4,8 @@ import { act } from 'preact/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { MainViewProvider } from '../views/mainViewProvider';
 import type { EditorItemData, ItemCardData } from '../views/mainTypes';
+import { buildIncomingCardData } from '../views/tierSnapshotBuilder';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { ItemCard } from '../webview/sidebar/components/ItemCard';
 
@@ -54,17 +54,6 @@ function renderCard(item: ItemCardData): HTMLDivElement {
   return container;
 }
 
-function createMainViewProvider(): MainViewProvider {
-  return new MainViewProvider(
-    {} as any,
-    {} as any,
-    { getProviderLabel: () => 'GitHub' } as any,
-    {} as any,
-    { has: () => false } as any,
-    { getActiveWatches: () => [], getActivePRWatches: () => [] } as any,
-  );
-}
-
 afterEach(() => {
   render(null, document.body);
   document.body.innerHTML = '';
@@ -77,7 +66,6 @@ afterEach(() => {
 
 describe('author view-model plumbing', () => {
   it('copies provider author onto incoming card data', () => {
-    const provider = createMainViewProvider();
     const providerItem: ProviderItem = {
       externalId: 'owner/repo#1',
       title: '#1: Fix bug',
@@ -85,7 +73,12 @@ describe('author view-model plumbing', () => {
       author: { displayName: 'Octocat', handle: 'octocat', avatarUrl: 'https://example.test/avatar.png' },
     };
 
-    const card = (provider as any).buildIncomingCardData('github', providerItem, new Map(), undefined, { byWorkItemId: new Map(), byProviderItemKey: new Map() }) as ItemCardData;
+    const card = buildIncomingCardData('github', providerItem, {
+      relatedItemsIndex: new Map(),
+      ciBadgeLookup: { byWorkItemId: new Map(), byProviderItemKey: new Map() },
+      hasRead: () => false,
+      getProviderLabel: () => 'GitHub',
+    }) as ItemCardData;
 
     expect(card.author).toEqual({ displayName: 'Octocat', handle: 'octocat' });
   });
