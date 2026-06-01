@@ -148,9 +148,13 @@ export function shouldRestoreBulkFocus(pending: PendingBulkFocus, activeElement:
 }
 
 function escapeAttributeSelector(value: string): string {
-  // `CSS.escape` exists in Chromium (VS Code webviews) but not in
-  // older jsdom. Hand-escape the characters that matter inside an
-  // attribute-value selector — quotes and backslashes — which is enough
-  // for the item/tier ids we ship.
+  // Prefer the browser's `CSS.escape` when available (always present in
+  // Chromium and in modern jsdom). Fall back to a hand-roll that escapes
+  // the characters that matter inside a quoted attribute-value selector —
+  // double-quotes and backslashes — so we still produce a valid selector
+  // for the (currently unseen) case of an item id containing those.
+  if (typeof CSS !== 'undefined' && typeof CSS.escape === 'function') {
+    return CSS.escape(value);
+  }
   return value.replace(/["\\]/g, '\\$&');
 }
