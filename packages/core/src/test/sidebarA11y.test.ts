@@ -260,6 +260,28 @@ describe('sidebar accessibility harness', () => {
     expect(document.activeElement).toBe(incomingOptions[0]);
   });
 
+  it('does not steal focus when the bulk action bar unmounts because the user navigated away', async () => {
+    const { container } = await mountSidebar();
+    await sendItems(makeTiers());
+
+    const incomingOptions = getAllByRole(getByRole(container, 'listbox', /Incoming/), 'option');
+    incomingOptions[0].focus();
+    click(incomingOptions[0], { ctrlKey: true });
+    click(incomingOptions[1], { ctrlKey: true });
+    expect(getByRole(container, 'toolbar', /Bulk actions/)).toBeTruthy();
+
+    // Simulate the user switching tabs: focus moves to the Sources tab button
+    // and the bulk action bar unmounts as a side effect of activeTab changing.
+    // The bar must NOT yank focus back to the previously-selected option in
+    // the (now hidden) My Work panel.
+    const sourcesTab = getByRole(container, 'tab', /Sources/);
+    sourcesTab.focus();
+    click(sourcesTab);
+
+    expect(container.querySelector('.bulk-action-bar')).toBeNull();
+    expect(document.activeElement).toBe(sourcesTab);
+  });
+
   it('renders onboarding empty states with heading semantics and named affordances', async () => {
     const { container } = await mountSidebar();
     await sendItems(makeTiers().map(tier => ({ ...tier, items: [] })));

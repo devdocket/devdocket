@@ -10,19 +10,28 @@ interface BulkActionBarProps {
 
 export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionBarProps) {
   // Capture the element that had focus before the bar mounted so we can
-  // restore focus to it after the bar unmounts. Without this, keyboard
-  // users who activate a bulk action (focus on a bar button) get dropped
-  // to document.body when the bar disappears, breaking the
-  // "return to where I was" expectation for screen-reader users.
+  // restore focus to it after the bar unmounts — but ONLY when focus had
+  // actually entered the bar (e.g. user activated a bar button). If the bar
+  // unmounts because the user navigated elsewhere (e.g. clicked the Sources
+  // tab) and focus never reached the bar, stealing focus back to a hidden
+  // My Work option would be unexpected.
+  const barRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const barReceivedFocus = useRef(false);
   useEffect(() => {
     const candidate = document.activeElement;
     if (candidate instanceof HTMLElement && !candidate.closest('.bulk-action-bar')) {
       previouslyFocused.current = candidate;
     }
+    const onFocusIn = () => {
+      barReceivedFocus.current = true;
+    };
+    const bar = barRef.current;
+    bar?.addEventListener('focusin', onFocusIn);
     return () => {
+      bar?.removeEventListener('focusin', onFocusIn);
       const target = previouslyFocused.current;
-      if (target && target.isConnected) {
+      if (barReceivedFocus.current && target && target.isConnected) {
         target.focus();
       }
     };
@@ -30,6 +39,7 @@ export function BulkActionBar({ count, actions, onAction, onClear }: BulkActionB
 
   return (
     <div
+      ref={barRef}
       class="bulk-action-bar"
       role="toolbar"
       aria-label="Bulk actions"
