@@ -3,6 +3,8 @@ import * as crypto from 'node:crypto';
 import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
+import { resolveGitWorkData } from '../services/gitWorkData';
+import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
@@ -62,6 +64,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     private readonly stateStore: InboxStateStore,
     private readonly readStateStore: ReadStateStore,
     private readonly watcherService: WatcherService,
+    private readonly gitWorkResolverRegistry?: GitWorkResolverRegistry,
   ) {}
 
   /**
@@ -435,6 +438,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       hasRelatedItems: item.providerId && item.externalId
         ? this.hasResolvedRelatedItems(item.providerId, item.externalId, relatedItemsIndex)
         : false,
+      gitWork: resolveGitWorkData(this.gitWorkResolverRegistry, item),
       providerId: item.providerId,
       externalId: item.externalId,
     };
@@ -696,6 +700,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'markSeen':
         await this.handleMarkSeen(message.providerId, message.externalId);
+        break;
+      case 'openWorktree':
+        if (typeof message.itemId === 'string' && message.itemId.length > 0) {
+          await vscode.commands.executeCommand('devdocket.openWorktreeForItem', { id: message.itemId });
+        }
         break;
     }
   }
@@ -1655,6 +1664,16 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-descriptionForeground);
       line-height: 1.2;
       flex-shrink: 0;
+    }
+    .git-work-indicator {
+      color: var(--vscode-gitDecoration-modifiedResourceForeground, var(--vscode-descriptionForeground));
+      line-height: 1.2;
+      flex-shrink: 0;
+      font-size: 12px;
+    }
+    .git-work-indicator--stale {
+      color: var(--vscode-gitDecoration-deletedResourceForeground, var(--vscode-errorForeground));
+      opacity: 0.75;
     }
     .badge-row {
       display: flex;

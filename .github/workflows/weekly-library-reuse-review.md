@@ -1,6 +1,29 @@
+---
+description: "Scheduled review of the DevDocket codebase for custom code that overlaps with well-maintained npm packages or platform APIs."
+on:
+  schedule:
+    # Every Friday at 10:00 AM UTC
+    - cron: "0 10 * * 5"
+  workflow_dispatch:
+concurrency:
+  group: weekly-library-reuse-review
+  cancel-in-progress: true
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+engine: copilot
+safe-outputs:
+  create-issue:
+    title-prefix: "[Library Review] "
+    labels: [library-reuse-review, automated, go:needs-research]
+    max: 8
+    deduplicate-by-title: true
+---
+
 # Weekly Library Reuse Review
 
-You are GitHub Copilot CLI running in programmatic mode from the scheduled Weekly Library Reuse Review workflow for the DevDocket VS Code extension.
+You are an AI coding agent running from the scheduled Weekly Library Reuse Review GitHub Agentic Workflow for the DevDocket VS Code extension.
 
 ## Objective
 
@@ -10,7 +33,7 @@ Act as a senior Node.js / TypeScript engineer reviewing this codebase for **cust
 
 1. Use your built-in knowledge of the Node.js standard library (Node 20+), the browser/Web Platform APIs available in VS Code webviews, and the VS Code extension API. Prefer platform APIs over npm dependencies wherever feasible.
 2. Use your built-in knowledge of the npm ecosystem to evaluate candidate packages' maintenance health, popularity, license, and bundle-size impact.
-3. If `AGENTS.md` exists, read it for project architecture, conventions, and GitHub posting safety rules.
+3. If `AGENTS.md` exists, read it for project architecture and conventions.
 4. Inspect the repository enough to understand the monorepo layout (`packages/core`, `packages/shared`, `packages/github`, `packages/ado`, `packages/start-git-work`, `packages/ai-reviewer`), the shared utility surface in `packages/shared/src/**`, and the existing direct dependencies in each package's `package.json`.
 
 ## Review scope
@@ -54,38 +77,11 @@ For each candidate finding, be concrete:
 - **Recommendation** — one of: **replace** (drop-in or near-drop-in), **wrap** (adopt the library behind the existing helper's signature), or **leave** (record the analysis but do not migrate; explain why).
 - **Migration sketch** — rough mechanical steps and risk classification (drop-in vs. behavioral diff).
 
-## Deduplication before filing
+## Filing findings
 
-Before creating an issue for any finding, search existing open and recently closed issues. Use a short, stable title prefix and search both open and closed issues with `gh issue list --search ... --state all --limit 200`.
+For each novel finding, request a new GitHub issue by invoking the `create_issue` tool. The workflow automatically prepends `[Library Review] `, applies the labels `library-reuse-review`, `automated`, and `go:needs-research`, and dedups against existing issues with the same prefixed title, so you do not need to add the prefix, labels, or perform manual dedup yourself. Cap this run at 8 issues. If you find more than 8, choose the 8 highest-impact opportunities (largest amount of custom code retired, or biggest correctness/maintenance win) and skip the rest. If you find zero qualifying opportunities, request no issues — do not file a junk "nothing found" issue.
 
-Use titles with this format:
-
-`[Library Review] <short finding statement>`
-
-For each candidate, run a search similar to:
-
-`gh issue list --search "\"[Library Review] <short finding statement>\" in:title label:library-reuse-review" --state all --limit 200`
-
-If an existing issue title has the same short prefix or clearly covers the same library-reuse opportunity, skip filing a duplicate, even if the issue is closed.
-
-## Filing issues
-
-Create zero pull requests. Do not create branches, commits, or PRs. Findings are filed only as GitHub issues.
-
-File one issue per novel finding, with labels `library-reuse-review` and `go:needs-research`. Cap this run at 8 created issues. If you find more than 8, choose the 8 highest-impact opportunities (largest amount of custom code retired, or biggest correctness/maintenance win) and skip the rest. If you find zero qualifying opportunities, file no issues and report a count of 0 — do not file a junk "nothing found" issue.
-
-Follow the repository's backtick-safety convention when posting text to GitHub:
-
-1. Use the allowlisted file-write tool to write the full issue body to a temporary body file before calling `gh`; do not build the body with shell heredocs, `echo`, Python, or inline shell strings.
-2. Pass that file with `--body-file`.
-3. Reuse or overwrite the body file as needed; do not require deletion when no cleanup tool is available.
-4. Never pass Markdown containing backticks through `--body`, `--fill`, inline shell arguments, Python strings, or PowerShell strings.
-
-Use a command shape like:
-
-`gh issue create --title "[Library Review] <short finding statement>" --body-file <tmpfile> --label library-reuse-review --label go:needs-research`
-
-Each issue body should include:
+For each issue you request, use these sections in this order:
 
 - `## Finding` — the custom code and its location (file:line references).
 - `## Candidate libraries` — concrete npm packages and/or platform APIs, with weekly downloads, last publish, license, and bundle-size impact estimate.
@@ -94,8 +90,8 @@ Each issue body should include:
 - `## Risk or downside` — explicit warning if the candidate library is poorly maintained, has known CVEs, has an incompatible license, or would bloat the extension bundle meaningfully. If none, say so.
 - `## Recommendation` — replace / wrap / leave, with one-line justification.
 
-## Summary
+Do not create pull requests, branches, or commits.
 
-At the end, report the count of issues created. Print a final machine-readable line exactly like this, replacing `<count>` with an integer from 0 to 8:
+## Wrap-up
 
-`WEEKLY_LIBRARY_REUSE_REVIEW_ISSUES_CREATED=<count>`
+Conclude with a short plain-text summary of how many issues you requested and any concerns that did not meet the quality bar.

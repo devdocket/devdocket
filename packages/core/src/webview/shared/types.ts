@@ -5,6 +5,7 @@ export type {
   EditorCIWatchData,
   EditorItemData,
   ExtensionMessage,
+  GitWorkData,
   ItemAuthorData,
   ItemCardData,
   SourceGroupData,

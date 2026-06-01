@@ -8,6 +8,7 @@ import { ProviderRegistry, type ProviderRefreshProgress } from '../services/prov
 import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { ReadStateStore } from '../storage/readStateStore';
+import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
 import { WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
 import { IncomingPreviewPanel, type IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
 import { type InboxItem, type SourceItemNode, type SourcesElement } from './commandItemTypes';
@@ -489,8 +490,8 @@ async function handleCreateItemFromUrl(
   const group = item.group?.trim() || undefined;
   const provenanceUrl = item.url?.trim() || url.trim();
   const createdItem = await workGraph.createItem(
-    { title: item.title, notes: item.description ?? '' },
-    { providerId, externalId: item.externalId, url: provenanceUrl, ...(group ? { group } : {}) },
+    { title: item.title, description: item.description },
+    { providerId, externalId: item.externalId, itemType: item.itemType, url: provenanceUrl, ...(group ? { group } : {}) },
   );
 
   providerRegistry.registerSyntheticProviderItem(providerId, item);
@@ -580,6 +581,36 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
   if (!opened) {
     void vscode.window.showWarningMessage('Failed to open URL in the browser.');
   }
+}
+
+async function handleOpenWorktreeForItem(
+  workGraph: WorkGraph,
+  gitWorkResolverRegistry: GitWorkResolverRegistry,
+  item?: { id?: string },
+): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showWarningMessage('DevDocket: Select an item to open its worktree.');
+    return;
+  }
+  const workItem = workGraph.getItem(item.id);
+  if (!workItem) {
+    void vscode.window.showWarningMessage('DevDocket: Work item not found.');
+    return;
+  }
+  const resolved = gitWorkResolverRegistry.resolve(workItem);
+  const worktreePath = resolved?.worktreePath;
+  if (!worktreePath) {
+    void vscode.window.showWarningMessage('This item has no associated worktree.');
+    return;
+  }
+  // VS Code's openFolder accepts a Uri. We don't pre-check existence here so
+  // VS Code can surface its own "folder does not exist" UX, which matches the
+  // experience of opening any other folder by path.
+  await vscode.commands.executeCommand(
+    'vscode.openFolder',
+    vscode.Uri.file(worktreePath),
+    { forceNewWindow: true },
+  );
 }
 
 async function handleCopyUrl(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
@@ -972,6 +1003,7 @@ export function registerCommands(
   editorPanelDependencies: WorkItemEditorPanelDependencies,
   incomingPreviewPanelManager: IncomingPreviewPanelManager,
   toggleMainSearch: () => void,
+  gitWorkResolverRegistry: GitWorkResolverRegistry,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',
@@ -1022,6 +1054,8 @@ export function registerCommands(
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.openWorktreeForItem',
+      wrapCommand('Failed to open worktree', (item) => handleOpenWorktreeForItem(workGraph, gitWorkResolverRegistry, item))),
     vscode.commands.registerCommand('devdocket.copyUrl',
       wrapCommand('Failed to copy URL', (item) => handleCopyUrl(workGraph, item))),
     vscode.commands.registerCommand('devdocket.runAction',

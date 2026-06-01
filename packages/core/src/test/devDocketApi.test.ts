@@ -3,6 +3,7 @@ import { DevDocketProvider, DevDocketAction, ProviderItem, CONTRACT_VERSION } fr
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
+import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WorkGraph } from '../services/workGraph';
@@ -72,6 +73,7 @@ describe('DevDocketApiImpl', () => {
   let prWatcherRegistry: PRWatcherRegistry;
   let workGraph: WorkGraph;
   let activityDetailRendererRegistry: ActivityDetailRendererRegistry;
+  let gitWorkResolverRegistry: GitWorkResolverRegistry;
 
   beforeEach(async () => {
     const stateStore = createMockStateStore();
@@ -82,7 +84,8 @@ describe('DevDocketApiImpl', () => {
     workGraph = new WorkGraph(createMockStore());
     await workGraph.load();
     activityDetailRendererRegistry = new ActivityDetailRendererRegistry();
-    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph, activityDetailRendererRegistry);
+    gitWorkResolverRegistry = new GitWorkResolverRegistry();
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph, activityDetailRendererRegistry, gitWorkResolverRegistry);
   });
 
   describe('registerProvider', () => {
