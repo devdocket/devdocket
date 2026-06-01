@@ -172,7 +172,7 @@ export async function getStatusPorcelain(repoPath: string, signal?: AbortSignal)
 
 export async function localBranchExists(branchName: string, repoPath: string, signal?: AbortSignal): Promise<boolean> {
   try {
-    await runGit(repoPath, ['rev-parse', '--verify', `refs/heads/${branchName}`], GIT_METADATA_TIMEOUT, signal);
+    await runGit(repoPath, ['rev-parse', '--verify', '--', `refs/heads/${branchName}`], GIT_METADATA_TIMEOUT, signal);
     return true;
   } catch (err) {
     if (isAbortError(err)) {

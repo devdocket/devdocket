@@ -526,7 +526,7 @@ describe('StartWorkAction', () => {
         ['remote', '-v'],
         ['remote', 'add', 'devdocket-fork-contributor', 'https://example.com/contributor/repo.git'],
         ['fetch', 'devdocket-fork-contributor', '+refs/heads/feature/topic:refs/remotes/devdocket-fork-contributor/feature/topic'],
-        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['rev-parse', '--verify', '--', 'refs/heads/feature/topic'],
         ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'devdocket-fork-contributor/feature/topic'],
       ]);
     });
@@ -543,7 +543,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['remote', '-v'],
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
-        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['rev-parse', '--verify', '--', 'refs/heads/feature/topic'],
         ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'origin/feature/topic'],
       ]);
     });
@@ -745,7 +745,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['remote', '-v'],
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
-        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['rev-parse', '--verify', '--', 'refs/heads/feature/topic'],
         ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'origin/feature/topic'],
       ]);
     });
@@ -871,7 +871,7 @@ describe('StartWorkAction', () => {
         ['remote', '-v'],
         ['remote', 'add', 'devdocket-fork-MyProject-myrepo', 'https://dev.azure.com/myorg/MyProject/_git/myrepo'],
         ['fetch', 'devdocket-fork-MyProject-myrepo', '+refs/heads/users/me/fix:refs/remotes/devdocket-fork-MyProject-myrepo/users/me/fix'],
-        ['rev-parse', '--verify', 'refs/heads/users/me/fix'],
+        ['rev-parse', '--verify', '--', 'refs/heads/users/me/fix'],
         ['worktree', 'add', '--detach', path.join('/mock', 'myrepo-pr-1'), 'devdocket-fork-MyProject-myrepo/users/me/fix'],
       ]);
     });
@@ -1070,7 +1070,7 @@ describe('StartWorkAction', () => {
         ['remote', '-v'],
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['status', '--porcelain'],
-        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['rev-parse', '--verify', '--', 'refs/heads/feature/topic'],
         ['worktree', 'list', '--porcelain'],
         ['checkout', 'feature/topic'],
       ]);
