@@ -281,7 +281,7 @@ export function TierSection({
   };
 
   return (
-    <section class="tier-section">
+    <section class="tier-section" data-tier-id={tier.id}>
       <div class="tier-header">
         <button
           type="button"
