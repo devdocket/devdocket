@@ -18,13 +18,6 @@ import {
   shouldRestoreBulkFocus,
   type PendingBulkFocus,
 } from './bulkActionFocus';
-
-// Upper bound for how long a pending bulk-action focus restore can wait
-// for its matching `updateItems` to land. Two seconds covers typical
-// extension round-trips (~100ms) with comfortable margin while keeping
-// the window short enough that an unrelated tier update minutes later
-// cannot trigger a stale restore. See `pendingBulkFocusRef` and #747.
-const PENDING_BULK_FOCUS_TTL_MS = 2000;
 import {
   applySelectionClick,
   clearSelection,
@@ -39,6 +32,13 @@ import {
   type SidebarTab,
   type TabQueries,
 } from './searchVisibility';
+
+// Upper bound for how long a pending bulk-action focus restore can wait
+// for its matching `updateItems` to land. Two seconds covers typical
+// extension round-trips (~100ms) with comfortable margin while keeping
+// the window short enough that an unrelated tier update minutes later
+// cannot trigger a stale restore. See `pendingBulkFocusRef` and #747.
+const PENDING_BULK_FOCUS_TTL_MS = 2000;
 
 export function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('myWork');
