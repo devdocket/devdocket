@@ -1,40 +1,23 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import type { ProviderItem } from '../api/types';
-import { type WorkItem, WorkItemState } from '../models/workItem';
-import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
-import { resolveGitWorkData } from '../services/gitWorkData';
-import { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
+import { buildRelatedItemsIndex, type RelatedItemsIndex } from '../services/relatedItems';
 import { getInboxUnseenCount } from '../services/inboxBadge';
-import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { buildRelatedItemsIndex, getRelatedItemsIndexKey, type RelatedItemsIndex } from '../services/relatedItems';
-import { WatcherService, type WatchedRun } from '../services/watcherService';
+import { WatcherService } from '../services/watcherService';
 import { WorkGraph } from '../services/workGraph';
 import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
-import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
-import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
-import { toItemAuthorData } from './itemAuthorData';
-import { getPRExternalIds, isPRProviderItem, isPRWorkItem } from './prHelpers';
-import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
-import { buildFocusWatchTarget } from './focusWatchTarget';
-import type {
-  BadgeData,
-  ItemCardData,
-  SourceGroupData,
-  SourceItemData,
-  SourceProviderData,
-  TierData,
-  WebviewMessage,
-} from './mainTypes';
+import type { GitWorkResolverRegistry } from '../services/gitWorkResolverRegistry';
+import type { ProviderItem } from '../api/types';
+import type { CIBadgeLookup } from './ciBadgeLookup';
+import { buildCIBadgeLookup } from './ciBadgeLookup';
+import type { SourceProviderData, TierData, WebviewMessage } from './mainTypes';
+import { buildSourcesData } from './sourcesSnapshotBuilder';
+import { buildTierData } from './tierSnapshotBuilder';
+import { MainWebviewMessageHandler } from './webviewMessageHandler';
 
-interface CIBadgeLookup {
-  byWorkItemId: Map<string, BadgeData>;
-  byProviderItemKey: Map<string, BadgeData>;
-}
+export { computeCIBadge } from './ciBadgeLookup';
 
 export type RefreshReason =
   | 'workGraph'
@@ -56,6 +39,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private pendingRefreshReasons = new Set<RefreshReason>();
   private webviewReady = false;
   private disposed = false;
+  private readonly messageHandler: MainWebviewMessageHandler;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -65,7 +49,17 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     private readonly readStateStore: ReadStateStore,
     private readonly watcherService: WatcherService,
     private readonly gitWorkResolverRegistry?: GitWorkResolverRegistry,
-  ) {}
+  ) {
+    this.messageHandler = new MainWebviewMessageHandler({
+      workGraph: this.workGraph,
+      providerRegistry: this.providerRegistry,
+      stateStore: this.stateStore,
+      readStateStore: this.readStateStore,
+      getCurrentTiers: () => this.buildCurrentTierData(),
+      onWebviewReady: () => this.handleWebviewReady(),
+      toggleSearch: () => this.toggleSearch(),
+    });
+  }
 
   /**
    * Cancel any pending debounced refresh and stop accepting new ones. The
@@ -99,7 +93,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.html = this.getHtml(webviewView.webview);
     webviewView.webview.onDidReceiveMessage((message: WebviewMessage) => {
-      void this.handleMessage(message);
+      void this.messageHandler.handleMessage(message);
     });
 
     if (this.webviewReadyTimer) {
@@ -107,8 +101,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     this.webviewReadyTimer = setTimeout(() => {
       if (!this.webviewReady && this.view === webviewView && !this.disposed) {
-        this.webviewReady = true;
-        this.scheduleRefresh('discovered');
+        this.handleWebviewReady();
       }
       this.webviewReadyTimer = undefined;
     }, MainViewProvider.WEBVIEW_READY_TIMEOUT_MS);
@@ -140,6 +133,15 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'toggleSearch' });
   }
 
+  private handleWebviewReady(): void {
+    this.webviewReady = true;
+    if (this.webviewReadyTimer) {
+      clearTimeout(this.webviewReadyTimer);
+      this.webviewReadyTimer = undefined;
+    }
+    this.scheduleRefresh('discovered');
+  }
+
   private refresh(reasons: ReadonlySet<RefreshReason>): void {
     if (!this.view) {
       return;
@@ -154,18 +156,18 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
 
     const allProviderItems = this.providerRegistry.getAllProviderItems();
-    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
+    const relatedItemsIndex = this.buildRelatedItemsIndex(allProviderItems);
     const ciBadgeLookup = this.buildCIBadgeLookup(allProviderItems);
 
     // My Work renders unread markers, tier state/order, related-item markers, and CI badges.
     void this.view.webview.postMessage({
       type: 'updateItems',
-      tiers: this.buildTierData(allProviderItems, relatedItemsIndex, ciBadgeLookup),
+      tiers: this.buildTierSnapshot(allProviderItems, relatedItemsIndex, ciBadgeLookup),
     });
     if (this.shouldRefreshSources(reasons)) {
       void this.view.webview.postMessage({
         type: 'updateSources',
-        providers: this.buildSourcesData(allProviderItems, relatedItemsIndex, ciBadgeLookup),
+        providers: this.buildSourcesSnapshot(allProviderItems, relatedItemsIndex, ciBadgeLookup),
       });
     }
     this.updateBadge();
@@ -197,792 +199,55 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private buildTierData(
+  private buildCurrentTierData(): TierData[] {
+    const allProviderItems = this.providerRegistry.getAllProviderItems();
+    return this.buildTierSnapshot(
+      allProviderItems,
+      this.buildRelatedItemsIndex(allProviderItems),
+      this.buildCIBadgeLookup(allProviderItems),
+    );
+  }
+
+  private buildRelatedItemsIndex(allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>): RelatedItemsIndex {
+    return buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
+  }
+
+  private buildCIBadgeLookup(allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>): CIBadgeLookup {
+    return buildCIBadgeLookup(this.workGraph.getAll(), allProviderItems, this.watcherService);
+  }
+
+  private buildTierSnapshot(
     allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
     ciBadgeLookup: CIBadgeLookup,
   ): TierData[] {
-    const hiddenCanonicalKeys = buildCanonicalHiddenSet(
+    return buildTierData({
       allProviderItems,
-      (providerId, externalId) => this.stateStore.getState(providerId, externalId),
-    );
-    const providerItemMap = this.buildProviderItemMap(allProviderItems);
-
-    const incomingItems: ItemCardData[] = [];
-    for (const [providerId, items] of allProviderItems) {
-      for (const providerItem of items) {
-        const inboxState = this.stateStore.getState(providerId, providerItem.externalId);
-        if (inboxState !== undefined && inboxState !== 'unseen') {
-          continue;
-        }
-
-        const key = getProviderItemKey(providerId, providerItem.externalId);
-        if (hiddenCanonicalKeys.has(key)) {
-          continue;
-        }
-
-        incomingItems.push(
-          this.buildIncomingCardData(
-            providerId,
-            providerItem,
-            relatedItemsIndex,
-            this.workGraph.findItemByProvenance(providerId, providerItem.externalId),
-            ciBadgeLookup,
-          ),
-        );
-      }
-    }
-    incomingItems.reverse();
-
-    const inProgressItems = this.workGraph
-      .getItemsByState(WorkItemState.InProgress)
-      .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
-        || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
-        || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'inProgress', providerItemMap, relatedItemsIndex, ciBadgeLookup));
-
-    const readyToStartItems = this.workGraph
-      .getItemsByState(WorkItemState.New)
-      .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
-        || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
-        || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'readyToStart', providerItemMap, relatedItemsIndex, ciBadgeLookup));
-
-    const pausedItems = this.workGraph
-      .getItemsByState(WorkItemState.Paused)
-      .sort((a, b) => a.updatedAt - b.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'paused', providerItemMap, relatedItemsIndex, ciBadgeLookup));
-
-    const doneItems = this.workGraph
-      .getItemsByState(WorkItemState.Done, WorkItemState.Archived)
-      .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'done', providerItemMap, relatedItemsIndex, ciBadgeLookup));
-
-    return [
-      { id: 'incoming', name: 'Incoming', icon: '↓', items: incomingItems, collapsed: false },
-      { id: 'in-progress', name: 'In Progress', icon: '▶', items: inProgressItems, collapsed: false },
-      { id: 'ready-to-start', name: 'Ready to Start', icon: '○', items: readyToStartItems, collapsed: false },
-      { id: 'paused', name: 'Paused', icon: '⏸', items: pausedItems, collapsed: false },
-      { id: 'done', name: 'Done', icon: '✓', items: doneItems, collapsed: true },
-    ].filter(tier => tier.items.length > 0);
+      getInboxState: (providerId, externalId) => this.stateStore.getState(providerId, externalId),
+      hasRead: key => this.readStateStore.has(key),
+      getProviderLabel: providerId => this.providerRegistry.getProviderLabel(providerId),
+      getItemsByState: (...states) => this.workGraph.getItemsByState(...states),
+      findItemByProvenance: (providerId, externalId) => this.workGraph.findItemByProvenance(providerId, externalId),
+      relatedItemsIndex,
+      ciBadgeLookup,
+      gitWorkResolverRegistry: this.gitWorkResolverRegistry,
+    });
   }
 
-  private buildSourcesData(
+  private buildSourcesSnapshot(
     allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
     ciBadgeLookup: CIBadgeLookup,
   ): SourceProviderData[] {
-    return Array.from(allProviderItems)
-      .map(([providerId, items]) => {
-        const groups = new Map<string, SourceItemData[]>();
-
-        for (const item of items) {
-          const groupName = item.group?.trim() || 'Ungrouped';
-          const state = this.stateStore.getState(providerId, item.externalId);
-          const groupItems = groups.get(groupName) ?? [];
-          groupItems.push({
-            externalId: item.externalId,
-            providerId,
-            title: item.title,
-            badges: this.buildBadges(providerId, item, ciBadgeLookup.byProviderItemKey.get(getProviderItemKey(providerId, item.externalId))),
-            url: item.url,
-            hasRelatedItems: this.hasResolvedRelatedItems(providerId, item.externalId, relatedItemsIndex),
-            isAccepted: state === 'accepted',
-            isDismissed: state === 'dismissed',
-          });
-          groups.set(groupName, groupItems);
-        }
-
-        const sortedGroups: SourceGroupData[] = Array.from(groups.entries())
-          .map(([name, groupItems]) => ({
-            name,
-            items: groupItems.sort((a, b) => a.title.localeCompare(b.title)),
-          }))
-          .sort((a, b) => a.name.localeCompare(b.name));
-
-        return {
-          providerId,
-          label: this.providerRegistry.getProviderLabel(providerId),
-          isHealthy: this.providerRegistry.getProviderHealth(providerId).status !== 'unhealthy',
-          groups: sortedGroups,
-        };
-      })
-      .sort((a, b) => a.label.localeCompare(b.label));
+    return buildSourcesData({
+      allProviderItems,
+      getInboxState: (providerId, externalId) => this.stateStore.getState(providerId, externalId),
+      getProviderLabel: providerId => this.providerRegistry.getProviderLabel(providerId),
+      getProviderHealth: providerId => this.providerRegistry.getProviderHealth(providerId),
+      relatedItemsIndex,
+      ciBadgeLookup,
+    });
   }
-
-  private buildProviderItemMap(allProviderItems: Iterable<[string, readonly ProviderItem[]]>): Map<string, ProviderItem> {
-    const providerItemMap = new Map<string, ProviderItem>();
-    for (const [providerId, items] of allProviderItems) {
-      for (const item of items) {
-        providerItemMap.set(getProviderItemKey(providerId, item.externalId), item);
-      }
-    }
-    return providerItemMap;
-  }
-
-  private compareUrgency(a: WorkItem, b: WorkItem, providerItemMap: Map<string, ProviderItem>): number {
-    const aUrgent = this.isUrgentWorkItem(a, providerItemMap);
-    const bUrgent = this.isUrgentWorkItem(b, providerItemMap);
-    if (aUrgent === bUrgent) {
-      return 0;
-    }
-    return aUrgent ? -1 : 1;
-  }
-
-  private isUrgentWorkItem(item: WorkItem, providerItemMap: Map<string, ProviderItem>): boolean {
-    return this.isUrgentProviderItem(this.getProviderItemForWorkItem(item, providerItemMap));
-  }
-
-  private isUrgentProviderItem(providerItem?: ProviderItem): boolean {
-    return normalizeText(providerItem?.state) === 'changes requested';
-  }
-
-  private getProviderItemForWorkItem(item: WorkItem, providerItemMap: Map<string, ProviderItem>): ProviderItem | undefined {
-    if (!item.providerId || !item.externalId) {
-      return undefined;
-    }
-    return providerItemMap.get(getProviderItemKey(item.providerId, item.externalId));
-  }
-
-  private buildIncomingCardData(
-    providerId: string,
-    providerItem: ProviderItem,
-    relatedItemsIndex: RelatedItemsIndex,
-    existingWorkItem: WorkItem | undefined,
-    ciBadgeLookup: CIBadgeLookup,
-  ): ItemCardData {
-    const key = getProviderItemKey(providerId, providerItem.externalId);
-    return {
-      id: existingWorkItem?.id ?? key,
-      title: providerItem.title,
-      badges: this.buildBadges(providerId, providerItem, ciBadgeLookup.byProviderItemKey.get(key)),
-      url: providerItem.url,
-      repoAnnotation: providerItem.group ?? existingWorkItem?.group,
-      author: toItemAuthorData(providerItem),
-      authored: providerItem.authored,
-      tierType: 'incoming',
-      isUnseen: !this.readStateStore.has(key),
-      isUrgent: this.isUrgentProviderItem(providerItem),
-      hasRelatedItems: this.hasResolvedRelatedItems(providerId, providerItem.externalId, relatedItemsIndex),
-      providerId,
-      externalId: providerItem.externalId,
-    };
-  }
-
-  private buildWorkItemCardData(
-    item: WorkItem,
-    tierType: ItemCardData['tierType'],
-    providerItemMap: Map<string, ProviderItem>,
-    relatedItemsIndex: RelatedItemsIndex,
-    ciBadgeLookup: CIBadgeLookup,
-  ): ItemCardData {
-    const providerItem = this.getProviderItemForWorkItem(item, providerItemMap);
-    return {
-      id: item.id,
-      title: item.title,
-      badges: this.buildBadges(item.providerId, providerItem, ciBadgeLookup.byWorkItemId.get(item.id)),
-      url: providerItem?.url ?? item.url,
-      repoAnnotation: item.group ?? providerItem?.group,
-      author: toItemAuthorData(providerItem),
-      authored: providerItem?.authored,
-      tierType,
-      isUrgent: this.isUrgentWorkItem(item, providerItemMap),
-      hasRelatedItems: item.providerId && item.externalId
-        ? this.hasResolvedRelatedItems(item.providerId, item.externalId, relatedItemsIndex)
-        : false,
-      gitWork: resolveGitWorkData(this.gitWorkResolverRegistry, item),
-      providerId: item.providerId,
-      externalId: item.externalId,
-    };
-  }
-
-  private hasResolvedRelatedItems(
-    providerId: string,
-    externalId: string,
-    relatedItemsIndex: RelatedItemsIndex,
-  ): boolean {
-    return (relatedItemsIndex.get(getRelatedItemsIndexKey(providerId, externalId))?.length ?? 0) > 0;
-  }
-
-  private buildAcceptPayload(providerId: string, providerItem: ProviderItem): Record<string, unknown> {
-    return {
-      kind: 'item',
-      providerId,
-      externalId: providerItem.externalId,
-      title: providerItem.title,
-      description: providerItem.description,
-      url: providerItem.url,
-      ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
-      ...(providerItem.group ? { group: providerItem.group } : {}),
-      ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
-    };
-  }
-
-  private buildBadges(
-    providerId: string | undefined,
-    providerItem: ProviderItem | undefined,
-    ciBadge: BadgeData | undefined,
-  ): BadgeData[] {
-    const badges: BadgeData[] = [];
-    // Pass through the provider's human-readable label so third-party
-    // providers (anything not GitHub/ADO) get a real name on the badge
-    // instead of being mislabeled as "Manual".
-    const providerLabel = providerId ? this.providerRegistry.getProviderLabel(providerId) : undefined;
-    const providerBadge = buildProviderBadge(providerId, providerLabel);
-    if (providerBadge) {
-      badges.push(providerBadge);
-    }
-
-    const typeBadge = buildTypeBadge(providerItem);
-    if (typeBadge) {
-      badges.push(typeBadge);
-    }
-
-    badges.push(...buildProviderBadges(providerItem, 'sidebar'));
-
-    if (ciBadge) {
-      badges.push(ciBadge);
-    }
-
-    return badges;
-  }
-
-  private buildCIBadgeLookup(allProviderItems: ReadonlyMap<string, readonly ProviderItem[]>): CIBadgeLookup {
-    const lookup: CIBadgeLookup = {
-      byWorkItemId: new Map(),
-      byProviderItemKey: new Map(),
-    };
-    const workItemIdsByExternalId = new Map<string, string[]>();
-    const providerItemKeysByExternalId = new Map<string, string[]>();
-
-    for (const item of this.workGraph.getAll()) {
-      if (!isPRWorkItem(item)) {
-        continue;
-      }
-      const itemIds = workItemIdsByExternalId.get(item.externalId) ?? [];
-      itemIds.push(item.id);
-      workItemIdsByExternalId.set(item.externalId, itemIds);
-    }
-
-    for (const [providerId, items] of allProviderItems) {
-      for (const item of items) {
-        if (!isPRProviderItem(providerId, item)) {
-          continue;
-        }
-        const keys = providerItemKeysByExternalId.get(item.externalId) ?? [];
-        keys.push(getProviderItemKey(providerId, item.externalId));
-        providerItemKeysByExternalId.set(item.externalId, keys);
-      }
-    }
-
-    for (const watch of this.watcherService.getActivePRWatches()) {
-      const badge = computeCIBadge(this.watcherService.getChildRuns(this.watcherService.getPRWatchKey(watch.identifier)));
-      if (!badge) {
-        continue;
-      }
-
-      for (const externalId of getPRExternalIds(watch.identifier)) {
-        for (const itemId of workItemIdsByExternalId.get(externalId) ?? []) {
-          lookup.byWorkItemId.set(itemId, badge);
-        }
-        for (const providerItemKey of providerItemKeysByExternalId.get(externalId) ?? []) {
-          lookup.byProviderItemKey.set(providerItemKey, badge);
-        }
-      }
-    }
-
-    return lookup;
-  }
-
-  private async handleMessage(message: WebviewMessage): Promise<void> {
-    switch (message.type) {
-      case 'webviewReady':
-        this.webviewReady = true;
-        if (this.webviewReadyTimer) {
-          clearTimeout(this.webviewReadyTimer);
-          this.webviewReadyTimer = undefined;
-        }
-        this.scheduleRefresh('discovered');
-        break;
-      case 'openItem': {
-        const workItem = this.workGraph.getItem(message.itemId);
-        if (workItem) {
-          await vscode.commands.executeCommand('devdocket.editItem', { id: message.itemId });
-          break;
-        }
-
-        // No backing WorkItem yet — this is an incoming/discovered item key.
-        // Open the editor in preview mode so the user can read details and
-        // decide whether to accept or dismiss without committing yet.
-        //
-        // Prefer the explicit providerId/externalId from the message (the
-        // webview always sends them for incoming cards). Fall back to parsing
-        // the legacy `${providerId}::${externalId}` cache key only if those
-        // aren't present, since '::' could appear inside a provider id and
-        // would mis-split here.
-        let providerId: string | undefined = message.providerId;
-        let externalId: string | undefined = message.externalId;
-        if (!providerId || !externalId) {
-          const discoveredKey = parseProviderItemKey(message.itemId);
-          if (discoveredKey) {
-            providerId = discoveredKey.providerId;
-            externalId = discoveredKey.externalId;
-          }
-        }
-        if (providerId && externalId) {
-          await vscode.commands.executeCommand('devdocket.previewIncomingItem', {
-            providerId,
-            externalId,
-          });
-        }
-        break;
-      }
-      case 'openSourceItem': {
-        // Sources tab clicks: if the item has already been accepted into the
-        // queue, open the regular WorkItem editor; otherwise open the
-        // read-only preview panel so the user can decide whether to accept
-        // or dismiss without committing.
-        const existing = this.workGraph.findItemByProvenance(message.providerId, message.externalId);
-        if (existing) {
-          await vscode.commands.executeCommand('devdocket.editItem', { id: existing.id });
-        } else {
-          await vscode.commands.executeCommand('devdocket.previewIncomingItem', {
-            providerId: message.providerId,
-            externalId: message.externalId,
-          });
-        }
-        break;
-      }
-      case 'showProviderHealth':
-        await vscode.commands.executeCommand('devdocket.showProviderHealthQuickPick');
-        break;
-      case 'acceptItem':
-        await this.handleAcceptItem(message.providerId, message.externalId);
-        break;
-      case 'acceptToFocus':
-        await this.handleAcceptToFocus(message.providerId, message.externalId);
-        break;
-      case 'acceptAll':
-        await this.handleAcceptAll(message.items);
-        break;
-      case 'dismissItem':
-        await this.handleDismissItem(message.providerId, message.externalId);
-        break;
-      case 'transitionState':
-        await this.handleTransitionState(message.itemId, message.targetState);
-        break;
-      case 'bulkTransition':
-        await this.handleBulkTransition(message.itemIds, message.targetState);
-        break;
-      case 'bulkInboxAction':
-        await this.handleBulkInboxAction(message.action, message.items);
-        break;
-      case 'reorderItems':
-        await this.handleReorder(message.itemIds);
-        break;
-      case 'crossTierDrop':
-        await this.handleCrossTierDrop(message.itemId, message.targetTier);
-        break;
-      case 'createItem':
-        await vscode.commands.executeCommand('devdocket.createItem');
-        break;
-      case 'openWalkthrough':
-        await vscode.commands.executeCommand('devdocket.openWalkthrough');
-        break;
-      case 'browseProviderExtensions':
-        await vscode.commands.executeCommand('devdocket.browseProviderExtensions');
-        break;
-      case 'clearHistory':
-        await vscode.commands.executeCommand('devdocket.clearHistory');
-        break;
-      case 'runAction':
-        await vscode.commands.executeCommand('devdocket.runAction', { id: message.itemId });
-        break;
-      case 'openUrl': {
-        // Use the canonical href returned by isSafeUrl, not the raw
-        // message.url. WHATWG URL and vscode.Uri.parse are different
-        // parsers and could disagree on edge-case strings (embedded
-        // NULs, unusual percent-encoding, IDN). All other openExternal
-        // call sites in the codebase route through safeUrl.href; keep
-        // that contract consistent here too.
-        const safe = isSafeUrl(message.url);
-        if (safe) {
-          await vscode.env.openExternal(vscode.Uri.parse(safe.href));
-        }
-        break;
-      }
-      case 'switchTab':
-        break;
-      case 'requestToggleSearch':
-        this.toggleSearch();
-        break;
-      case 'markSeen':
-        await this.handleMarkSeen(message.providerId, message.externalId);
-        break;
-      case 'openWatches': {
-        const target = buildFocusWatchTarget(message);
-        if (target) {
-          await vscode.commands.executeCommand('devdocket.showWatchesQuickPick', target);
-        } else {
-          await vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
-        }
-        break;
-      }
-      case 'openWorktree':
-        if (typeof message.itemId === 'string' && message.itemId.length > 0) {
-          await vscode.commands.executeCommand('devdocket.openWorktreeForItem', { id: message.itemId });
-        }
-        break;
-    }
-  }
-
-  private async handleMarkSeen(providerId: string, externalId: string): Promise<void> {
-    try {
-      await this.readStateStore.add(getProviderItemKey(providerId, externalId));
-    } catch (err) {
-      logger.error('DevDocket: markSeen failed', err);
-    }
-  }
-
-  private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
-    try {
-      const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
-      if (!providerItem) {
-        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
-        return;
-      }
-
-      await vscode.commands.executeCommand('devdocket.acceptFromInbox', this.buildAcceptPayload(providerId, providerItem));
-    } catch (err) {
-      logger.error('DevDocket: accept failed', err);
-      void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  private async handleAcceptAll(requestedItems?: ReadonlyArray<{ providerId: string; externalId: string }>): Promise<void> {
-    const allProviderItems = this.providerRegistry.getAllProviderItems();
-    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
-    const ciBadgeLookup = this.buildCIBadgeLookup(allProviderItems);
-    const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex, ciBadgeLookup).find(tier => tier.id === 'incoming');
-    if (!incomingTier) {
-      return;
-    }
-
-    const requestedByProvider = requestedItems?.reduce((index, item) => {
-      const providerItems = index.get(item.providerId) ?? new Set<string>();
-      providerItems.add(item.externalId);
-      index.set(item.providerId, providerItems);
-      return index;
-    }, new Map<string, Set<string>>());
-    const itemsToAccept = incomingTier.items.filter((item): item is ItemCardData & { providerId: string; externalId: string } => (
-      Boolean(item.providerId)
-      && Boolean(item.externalId)
-      && (!requestedByProvider || requestedByProvider.get(item.providerId)?.has(item.externalId) === true)
-    ));
-    if (itemsToAccept.length === 0) {
-      return;
-    }
-
-    const confirm = await vscode.window.showInformationMessage(
-      `Accept all ${itemsToAccept.length} item${itemsToAccept.length === 1 ? '' : 's'} into Ready to Start? You can still triage them one by one.`,
-      { modal: true },
-      'Accept All',
-    );
-    if (confirm !== 'Accept All') {
-      return;
-    }
-
-    const payloads = itemsToAccept
-      .map(item => {
-        const providerItem = this.providerRegistry.getProviderItems(item.providerId).find(candidate => candidate.externalId === item.externalId);
-        return providerItem ? this.buildAcceptPayload(item.providerId, providerItem) : undefined;
-      })
-      .filter((item): item is ReturnType<MainViewProvider['buildAcceptPayload']> => item !== undefined);
-    if (payloads.length === 0) {
-      return;
-    }
-
-    try {
-      const acceptedItems = await vscode.commands.executeCommand<Array<{ providerId: string; externalId: string }>>('devdocket.acceptAllFromInbox', payloads);
-      await this.readStateStore.addMany((acceptedItems ?? []).map(item => getProviderItemKey(item.providerId, item.externalId)));
-    } catch (err) {
-      logger.error('DevDocket: accept all failed', err);
-      void vscode.window.showErrorMessage(`Failed to accept items: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  private async handleAcceptToFocus(providerId: string, externalId: string): Promise<void> {
-    // Delegate to the existing inbox-side command, which materializes a
-    // WorkItem and transitions it straight to InProgress (skipping the
-    // Ready to Start tier). Lets the user pull an inbox item directly into
-    // active work without opening the editor first.
-    try {
-      const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
-      if (!providerItem) {
-        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for acceptToFocus`);
-        return;
-      }
-
-      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', this.buildAcceptPayload(providerId, providerItem));
-    } catch (err) {
-      logger.error('DevDocket: acceptToFocus failed', err);
-      void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  private async handleDismissItem(providerId: string, externalId: string): Promise<void> {
-    try {
-      await this.stateStore.setState(providerId, externalId, 'dismissed');
-    } catch (err) {
-      logger.error('DevDocket: dismiss failed', err);
-      void vscode.window.showErrorMessage(`Failed to dismiss item: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  /**
-   * Apply the same state transition to many items in sequence. The webview
-   * only ever sends ids that share a tier (and therefore a current state), so
-   * the per-item validation in {@link WorkGraph.transitionState} is just a
-   * defensive check — invalid transitions are logged and skipped rather than
-   * aborting the whole batch.
-   */
-  private async handleBulkTransition(itemIds: readonly string[], targetState: string): Promise<void> {
-    // Validate the target state once up front. Without this, an invalid
-    // targetState would fail per-item inside WorkGraph.transitionState, emitting
-    // N error logs and an aggregated toast for what is really a single
-    // input-validation failure from the webview.
-    if (!isWorkItemState(targetState)) {
-      logger.error(`DevDocket: bulk transition rejected — unsupported targetState ${targetState}`);
-      void vscode.window.showErrorMessage(`Unsupported target state: ${targetState}.`);
-      return;
-    }
-    const targetWorkState: WorkItemState = targetState;
-    let failures = 0;
-    for (const itemId of itemIds) {
-      const item = this.workGraph.getItem(itemId);
-      if (!item) {
-        logger.warn(`DevDocket: bulk transition skipped — item ${itemId} not found`);
-        failures += 1;
-        continue;
-      }
-      try {
-        if (item.state === WorkItemState.Paused && targetWorkState === WorkItemState.InProgress) {
-          // Mirror handleTransitionState: a Paused→InProgress request resumes
-          // the item, which routes through WorkGraph.getResumeTargetState and
-          // may land in Ready *or* InProgress depending on where each item
-          // was paused from. A single bulk gesture can therefore split the
-          // selection across tiers.
-          await this.workGraph.resumeItem(itemId);
-        } else {
-          await this.workGraph.transitionState(itemId, targetWorkState);
-        }
-      } catch (err) {
-        failures += 1;
-        logger.error(`DevDocket: bulk transition of ${itemId} to ${targetState} failed`, err);
-      }
-    }
-    if (failures > 0) {
-      void vscode.window.showErrorMessage(
-        `Failed to transition ${failures} item${failures === 1 ? '' : 's'} to ${formatStateLabel(targetState)}.`,
-      );
-    }
-  }
-
-  /**
-   * Bulk-Accept or bulk-Dismiss a selected subset of Incoming items. Mirrors
-   * the per-item Accept / Dismiss controls but routes through the batched
-   * primitives: `devdocket.acceptAllFromInbox` for Accept (same path used by
-   * the Accept All button — handles canonical peer propagation, WorkItem
-   * creation, and read-state marking) and {@link InboxStateStore.setStates}
-   * for Dismiss (one atomic write rather than N).
-   *
-   * Items whose provider/externalId is no longer present in the live provider
-   * registry (e.g. provider refreshed mid-action) are skipped silently for
-   * Accept (the providerItem lookup returns undefined and that payload is
-   * dropped) and skipped via the inboxState batch for Dismiss (setStates only
-   * writes records that actually changed).
-   *
-   * Unlike Accept All, no modal confirmation is shown — the user has already
-   * expressed intent by selecting a specific subset and clicking the bulk
-   * action button, matching the no-confirm UX of bulkTransition.
-   */
-  private async handleBulkInboxAction(
-    action: 'accept' | 'dismiss',
-    items: ReadonlyArray<{ providerId: string; externalId: string }>,
-  ): Promise<void> {
-    if (items.length === 0) {
-      return;
-    }
-
-    if (action === 'accept') {
-      // Build a per-provider externalId → ProviderItem index once so the
-      // lookup for each selected pair is O(1) instead of O(items in provider).
-      // Bulk Accept across hundreds of incoming items would otherwise be
-      // quadratic in the size of each provider's registry.
-      const providerIndexes = new Map<string, Map<string, ProviderItem>>();
-      const getProviderIndex = (providerId: string): Map<string, ProviderItem> => {
-        let index = providerIndexes.get(providerId);
-        if (!index) {
-          index = new Map();
-          for (const candidate of this.providerRegistry.getProviderItems(providerId)) {
-            index.set(candidate.externalId, candidate);
-          }
-          providerIndexes.set(providerId, index);
-        }
-        return index;
-      };
-      const payloads = items
-        .map(({ providerId, externalId }) => {
-          const providerItem = getProviderIndex(providerId).get(externalId);
-          return providerItem ? this.buildAcceptPayload(providerId, providerItem) : undefined;
-        })
-        .filter((item): item is ReturnType<MainViewProvider['buildAcceptPayload']> => item !== undefined);
-      if (payloads.length === 0) {
-        return;
-      }
-      try {
-        const acceptedItems = await vscode.commands.executeCommand<Array<{ providerId: string; externalId: string }>>('devdocket.acceptAllFromInbox', payloads);
-        await this.readStateStore.addMany((acceptedItems ?? []).map(item => getProviderItemKey(item.providerId, item.externalId)));
-      } catch (err) {
-        logger.error('DevDocket: bulk accept failed', err);
-        void vscode.window.showErrorMessage(`Failed to accept items: ${err instanceof Error ? err.message : String(err)}`);
-      }
-      return;
-    }
-
-    // Dismiss: one atomic setStates write for the whole batch.
-    try {
-      await this.stateStore.setStates(
-        items.map(({ providerId, externalId }) => ({ providerId, externalId, state: 'dismissed' as const })),
-      );
-    } catch (err) {
-      logger.error('DevDocket: bulk dismiss failed', err);
-      void vscode.window.showErrorMessage(`Failed to dismiss items: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  private async handleTransitionState(itemId: string, targetState: string): Promise<void> {
-    try {
-      const item = this.workGraph.getItem(itemId);
-      if (!item) {
-        logger.warn(`DevDocket: item ${itemId} not found for transition`);
-        return;
-      }
-      if (item.state === WorkItemState.Paused && targetState === WorkItemState.InProgress) {
-        await this.workGraph.resumeItem(itemId);
-      } else {
-        await this.workGraph.transitionState(itemId, targetState as WorkItemState);
-      }
-    } catch (err) {
-      logger.error('DevDocket: transition failed', err);
-      void vscode.window.showErrorMessage(`Failed to transition item: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
-  /**
-   * Handle a card dragged from one reorderable tier into another (Ready ↔ In
-   * Progress). The webview only fires this for those two tiers, but we still
-   * validate the source state and target tier here as a defensive guard.
-   */
-  private async handleCrossTierDrop(itemId: string, targetTier: string): Promise<void> {
-    const targetState = targetTier === 'in-progress'
-      ? WorkItemState.InProgress
-      : targetTier === 'ready-to-start'
-        ? WorkItemState.New
-        : undefined;
-    if (!targetState) {
-      logger.warn(`DevDocket: crossTierDrop ignored — unsupported target tier ${targetTier}`);
-      return;
-    }
-    const item = this.workGraph.getItem(itemId);
-    if (!item) {
-      logger.warn(`DevDocket: crossTierDrop ignored — item ${itemId} not found`);
-      return;
-    }
-    if (item.state === targetState) {
-      // Same-state cross-tier drop is a no-op (handleReorder owns reorder).
-      return;
-    }
-    await this.handleTransitionState(itemId, targetState);
-  }
-
-  private async handleReorder(itemIds: string[]): Promise<void> {
-    try {
-      if (itemIds.length < 2) {
-        return;
-      }
-
-      // Determine the state to reorder within from the dragged items themselves.
-      // All items in a reorder must belong to the same lifecycle state (cross-tier
-      // drag is not supported), so derive the state from the first known item and
-      // bail if any others disagree.
-      const firstItem = this.workGraph.getItem(itemIds[0]);
-      if (!firstItem) {
-        logger.warn('DevDocket: reorder ignored because the first item could not be found');
-        return;
-      }
-      const state = firstItem.state;
-      if (state !== WorkItemState.New && state !== WorkItemState.InProgress) {
-        logger.warn(`DevDocket: reorder ignored because state ${state} is not reorderable`);
-        return;
-      }
-      for (const id of itemIds) {
-        const item = this.workGraph.getItem(id);
-        if (!item || item.state !== state) {
-          logger.warn('DevDocket: reorder ignored because items span multiple states');
-          return;
-        }
-      }
-
-      const currentIds = this.workGraph
-        .getItemsByState(state)
-        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
-          || b.updatedAt - a.updatedAt)
-        .map(item => item.id);
-
-      if (currentIds.length !== itemIds.length) {
-        logger.warn(`DevDocket: reorder ignored because ${state} items changed during drag`);
-        return;
-      }
-
-      const currentIdSet = new Set(currentIds);
-      if (new Set(itemIds).size !== itemIds.length || currentIds.some(itemId => !itemIds.includes(itemId)) || itemIds.some(itemId => !currentIdSet.has(itemId))) {
-        logger.warn(`DevDocket: reorder ignored because it included unknown ${state} item ids`);
-        return;
-      }
-
-      if (itemIds.every((itemId, index) => itemId === currentIds[index])) {
-        return;
-      }
-
-      const workingIds = [...currentIds];
-      for (let index = 0; index < itemIds.length; index += 1) {
-        const desiredId = itemIds[index];
-        if (workingIds[index] === desiredId) {
-          continue;
-        }
-
-        const draggedIndex = workingIds.indexOf(desiredId);
-        if (draggedIndex === -1) {
-          logger.warn(`DevDocket: reorder ignored because item ${desiredId} was not in the ${state} tier`);
-          return;
-        }
-
-        if (index === workingIds.length - 1) {
-          await this.workGraph.moveToEnd(desiredId);
-        } else {
-          await this.workGraph.reorderItem(desiredId, workingIds[index]);
-        }
-
-        workingIds.splice(draggedIndex, 1);
-        workingIds.splice(index, 0, desiredId);
-      }
-    } catch (err) {
-      logger.error('DevDocket: reorder failed', err);
-      void vscode.window.showErrorMessage(`Failed to reorder items: ${err instanceof Error ? err.message : String(err)}`);
-    }
-  }
-
   private getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'webview-dist', 'sidebar.js'));
     const nonce = getNonce();
@@ -1666,54 +931,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   <script nonce="${nonce}" type="module" src="${scriptUri}"></script>
 </body>
 </html>`;
-  }
-}
-
-export function computeCIBadge(runs: readonly WatchedRun[]): BadgeData | undefined {
-  if (runs.length === 0) {
-    return undefined;
-  }
-  if (runs.some(isFailedRun)) {
-    return { label: '✗ CI failing', type: 'ci', variant: 'ci-fail' };
-  }
-  if (runs.some(runWatch => runWatch.status.overallState !== 'completed')) {
-    return { label: '⟳ CI running', type: 'ci', variant: 'ci-running' };
-  }
-  if (runs.some(runWatch => runWatch.hasWarning
-    || runWatch.status.conclusion === 'partial_success')) {
-    return { label: '⚠ CI warning', type: 'ci', variant: 'ci-warn' };
-  }
-  if (runs.every(runWatch => runWatch.status.conclusion === 'success')) {
-    return { label: '✓ CI passing', type: 'ci', variant: 'ci-pass' };
-  }
-  return undefined;
-}
-
-function isFailedRun(runWatch: WatchedRun): boolean {
-  if (runWatch.status.overallState !== 'completed') return false;
-  return isFailedConclusion(runWatch.status.conclusion);
-}
-
-const WORK_ITEM_STATES = new Set<string>(Object.values(WorkItemState));
-
-function isWorkItemState(value: string): value is WorkItemState {
-  return WORK_ITEM_STATES.has(value);
-}
-
-/**
- * Human-readable label for a WorkItemState enum value, matching the editor
- * webview's {@link stateLabel} helper. Used in user-facing toasts so messages
- * read "In Progress" rather than the raw "InProgress" identifier.
- */
-function formatStateLabel(state: string): string {
-  return state === WorkItemState.InProgress
-    ? 'In Progress'
-    : state.replace(/([a-z])([A-Z])/g, '$1 $2');
-}
-
-function normalizeText(value?: string): string {
-  return value?.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') ?? '';
-}
+  }}
 
 function getNonce(): string {
   // Cryptographically random nonce (matches editorPanelHtml). Math.random
