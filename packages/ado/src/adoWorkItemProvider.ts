@@ -761,16 +761,27 @@ export class AdoWorkItemProvider extends BaseProvider {
   }
 
   private stripHtml(html: string): string {
-    return html
-      .replace(/<br\s*\/?>/gi, '\n')
-      .replace(/<\/p>/gi, '\n')
-      .replace(/<[^>]+>/g, '')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
+    let current = html;
+    let previous: string;
+    let iterations = 0;
+    const maxIterations = 10;
+
+    do {
+      previous = current;
+      current = current
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&amp;/g, '&');
+      iterations += 1;
+    } while (current !== previous && iterations < maxIterations);
+
+    return current
       .replace(/\n{3,}/g, '\n\n')
       .trim();
   }
