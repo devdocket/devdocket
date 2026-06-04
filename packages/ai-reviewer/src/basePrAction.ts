@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { combineSignals, createAbortError } from '@devdocket/shared';
 import type { WorkItem, DevDocketAction } from './types';
-import { parseAdoPrUrl, parsePullRequestUrl, parsePrUrl } from './prUrl';
+import { parsePullRequestUrl } from './prUrl';
 import { AdoPrClient } from './adoPrClient';
 import { getGitHubSession } from './auth';
 import { confirmAiUsage } from './confirmAiUsage';
@@ -48,13 +48,6 @@ export abstract class BasePrAction implements DevDocketAction {
     return parsePullRequestUrl(url) !== undefined;
   }
 
-  /** Parse a GitHub PR URL, returning repo and PR number or undefined. */
-  parseGitHubPrUrl(url: string): { repo: string; prNumber: string } | undefined {
-    const parts = parsePrUrl(url);
-    if (!parts) return undefined;
-    return { repo: `${parts.org}/${parts.repo}`, prNumber: parts.prNumber };
-  }
-
   async run(item: WorkItem): Promise<void> {
     if (!this.canRun(item)) return;
 
@@ -81,20 +74,19 @@ export abstract class BasePrAction implements DevDocketAction {
 
   async fetchDiff(url: string, token?: vscode.CancellationToken): Promise<string | undefined> {
     try {
-      const github = this.parseGitHubPrUrl(url);
-      if (github) {
-        return await this.fetchGitHubDiff(github.repo, github.prNumber, token);
+      const prUrl = parsePullRequestUrl(url);
+      if (prUrl?.provider === 'github') {
+        return await this.fetchGitHubDiff(`${prUrl.org}/${prUrl.repo}`, prUrl.prNumber, token);
       }
 
-      const ado = parseAdoPrUrl(url);
-      if (ado) {
+      if (prUrl?.provider === 'ado') {
         const abortController = new AbortController();
         const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
         try {
           if (token?.isCancellationRequested) {
             throw createAbortError();
           }
-          return await new AdoPrClient().fetchDiff(ado, { interactive: true, signal: abortController.signal });
+          return await new AdoPrClient().fetchDiff(prUrl, { interactive: true, signal: abortController.signal });
         } finally {
           cancelListener?.dispose();
         }
